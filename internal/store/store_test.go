@@ -496,3 +496,21 @@ func TestVerdictsReturnsErrNotFoundForAnUnknownTask(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestTaskKeepsTheStateBeforeAnEscalation(t *testing.T) {
+	s := store.Files(t.TempDir())
+	in := sample("t1", task.Escalated)
+	in.Before = task.Feedback
+
+	if err := s.Create(in); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Task("t1")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Before != task.Feedback {
+		t.Fatalf("got %+v", got)
+	}
+}

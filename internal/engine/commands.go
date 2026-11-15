@@ -144,11 +144,48 @@ func (e *Engine) taskCancel(req protocol.Request) (string, error) {
 	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Escalated); err != nil {
 		return "", err
 	}
-	t.State = task.Cancelled
+	t.State, t.Before = task.Cancelled, ""
 	if err := e.save(t); err != nil {
 		return "", err
 	}
 	return "", e.cleanup(t)
+}
+
+// resume returns an escalated task to the state it had before, and keeps its round.
+func (e *Engine) resume(req protocol.Request) (string, error) {
+	t, err := e.load(req)
+	if err != nil {
+		return "", err
+	}
+	if err := need(t, task.Escalated); err != nil {
+		return "", err
+	}
+	if t.Before == "" {
+		return "", fmt.Errorf("task %s has no recorded state to return to", t.ID)
+	}
+	t.State, t.Before = t.Before, ""
+	if err := e.save(t); err != nil {
+		return "", err
+	}
+	if !active(t) {
+		return "", nil
+	}
+	note := fmt.Sprintf("Task %s is resumed. Go on, and report as usual.", t.ID)
+	names := []string{"worker-" + t.ID}
+	if t.State == task.Review {
+		names = append(names, reviewerOf(t))
+	}
+	var errs []error
+	for _, name := range names {
+		if err := e.storeMessage(name, "sfy", note); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if e.agent(name).waiting {
+			errs = append(errs, e.ignoreGone(name, e.typeNote(name)))
+		}
+	}
+	return "", errors.Join(errs...)
 }
 
 func (e *Engine) send(req protocol.Request) (string, error) {
@@ -303,15 +340,17 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 		return "", err
 	}
 	reviewer := reviewerOf(t)
-	if t.Round >= e.cfg.ReviewRounds {
-		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round))
-		return "", errors.Join(err, e.stop(reviewer))
-	}
+	note := fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run sfy report done.\n\n%s", t.Round, t.ID, req.Body)
+	// The worker has to fix the result, so an escalated task resumes in feedback and not in a review that no longer runs.
 	t.State = task.Feedback
+	if t.Round >= e.cfg.ReviewRounds {
+		msgErr := e.message("worker-"+t.ID, req.Caller.Agent, note)
+		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round))
+		return "", errors.Join(msgErr, err, e.stop(reviewer))
+	}
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	note := fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run sfy report done.\n\n%s", t.Round, t.ID, req.Body)
 	return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(reviewer))
 }
 
@@ -342,7 +381,7 @@ func (e *Engine) escalate(req protocol.Request) (string, error) {
 
 // escalateTask moves a task to escalated, tells main and draws the operator's attention.
 func (e *Engine) escalateTask(t task.Task, why string) error {
-	t.State = task.Escalated
+	t.Before, t.State = t.State, task.Escalated
 	if err := e.save(t); err != nil {
 		return err
 	}

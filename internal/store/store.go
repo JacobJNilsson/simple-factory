@@ -59,6 +59,7 @@ func Files(dir string) Store { return files{dir: dir} }
 
 type stateFile struct {
 	State    task.State `json:"state"`
+	Before   task.State `json:"before,omitempty"`
 	Round    int        `json:"round"`
 	Source   string     `json:"source"`
 	Progress string     `json:"progress,omitempty"`
@@ -230,7 +231,7 @@ func writeTask(dir string, t task.Task) error {
 	if err := writeFile(filepath.Join(dir, "task.md"), []byte(t.Markdown())); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(stateFile{t.State, t.Round, t.Source, t.Progress, t.Dir, t.Updated}, "", "  ")
+	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Source, t.Progress, t.Dir, t.Updated}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -258,7 +259,7 @@ func (f files) Task(id string) (task.Task, error) {
 	if err := json.Unmarshal(raw, &st); err != nil {
 		return task.Task{}, fmt.Errorf("store: task %s state: %w", id, err)
 	}
-	t.ID, t.State, t.Round, t.Source, t.Progress, t.Dir, t.Updated = id, st.State, st.Round, st.Source, st.Progress, st.Dir, st.Updated
+	t.ID, t.State, t.Before, t.Round, t.Source, t.Progress, t.Dir, t.Updated = id, st.State, st.Before, st.Round, st.Source, st.Progress, st.Dir, st.Updated
 	return t, nil
 }
 

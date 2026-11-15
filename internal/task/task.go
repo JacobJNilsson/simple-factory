@@ -35,7 +35,9 @@ type Task struct {
 	Extra string
 
 	State State
-	Round int
+	// Before is the state that an escalated task had before it escalated, and is empty in every other state.
+	Before State
+	Round  int
 	// Source is "main" for the main agent, otherwise the creator's name.
 	Source string
 	// Progress is the worker's latest progress report.
