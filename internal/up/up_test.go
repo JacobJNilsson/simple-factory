@@ -109,7 +109,8 @@ func TestUpStartsServeAndMain(t *testing.T) {
 	}
 	m := r.l.specs[0]
 	if m.Name != "main" || m.Kind != "main" || m.Dir != r.o.home || m.Model != "opus" ||
-		!strings.Contains(m.Prompt, "notes.md") || !strings.Contains(m.Prompt, "status.md") {
+		!strings.Contains(m.Prompt, "notes.md") || !strings.Contains(m.Prompt, "status.md") ||
+		!strings.Contains(m.Prompt, r.o.home) {
 		t.Errorf("main spec: %+v", m)
 	}
 	info, err := os.Stat(filepath.Join(r.o.home, "notes.md"))

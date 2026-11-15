@@ -34,7 +34,10 @@ func (e *mainFailedError) Unwrap() error { return e.err }
 // serveSession is the multiplexer session that runs the sfy process.
 const serveSession = "sfy"
 
-const mainPrompt = "Read notes.md and status.md in your folder. Then wait for the operator."
+// mainPrompt names the folder, so the main agent needs no command to find it.
+func mainPrompt(home string) string {
+	return "Your state folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
+}
 
 // options holds what run needs, so tests can replace each part.
 type options struct {
@@ -82,7 +85,7 @@ func run(o options) error {
 			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
 		}
 		spec := engine.SessionSpec{
-			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt,
+			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
 		}
 		if err := o.launcher.Start(spec); err != nil {
 			if serveStarted {
