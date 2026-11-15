@@ -30,6 +30,8 @@ type Config struct {
 	// DenyRead and AllowWrite are the sandbox paths for workers and reviewers. An empty list stays empty.
 	DenyRead   []string `toml:"deny_read"`
 	AllowWrite []string `toml:"allow_write"`
+	// PassEnv names the variables that workers and reviewers keep from sfy's own environment.
+	PassEnv []string `toml:"pass_env"`
 	// Multiplexers holds the raw template sets by name. A later package validates and fills them.
 	Multiplexers map[string]map[string]string `toml:"multiplexers"`
 }

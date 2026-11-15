@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -94,8 +95,12 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		"SFY_HOME="+a.home,
 		"PATH="+filepath.Dir(a.sfyBin)+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
+	clean := spec.Kind != "main"
+	if clean {
+		env = append(env, a.inherited()...)
+	}
 	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.
-	return envrun.Wrap(filepath.Dir(path), env, false, a.sfyBin, []string{
+	return envrun.Wrap(filepath.Dir(path), env, clean, a.sfyBin, []string{
 		"claude",
 		"--name", spec.Name,
 		"--model", spec.Model,
@@ -104,6 +109,28 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		"--append-system-prompt", role,
 		spec.Prompt,
 	})
+}
+
+// inherited returns the variables that a clean worker or reviewer keeps from sfy's environment.
+// CLAUDE_CONFIG_DIR is the only variable that a subscription login needs, and only when it is set.
+// SSH_AUTH_SOCK stays because git push runs outside the sandbox and may use SSH.
+func (a adapter) inherited() []string {
+	names := append([]string{
+		"HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG", "TMPDIR", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK",
+	}, a.cfg.PassEnv...)
+	var out []string
+	seen := map[string]bool{}
+	for _, e := range os.Environ() {
+		k, _, _ := strings.Cut(e, "=")
+		if seen[k] || k == "PATH" || strings.HasPrefix(k, "SFY_") {
+			continue
+		}
+		if slices.Contains(names, k) || strings.HasPrefix(k, "LC_") {
+			seen[k] = true
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
