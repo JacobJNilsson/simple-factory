@@ -16,15 +16,13 @@ type launcher struct {
 	mux.Mux
 	p   provider.Provider
 	log io.Writer
-	// showAgents makes worker and reviewer sessions visible. The main agent is always visible.
-	showAgents bool
 }
 
 // New returns a Launcher that starts the provider's command in a multiplexer session.
-// Workers and reviewers get a show only when showAgents is true. A failed show goes to log, which may be nil.
+// A failed show goes to log, which may be nil.
 // CONTRACT: the engine takes a Launcher, so New returns the interface.
-func New(m mux.Mux, p provider.Provider, log io.Writer, showAgents bool) engine.Launcher {
-	return launcher{Mux: m, p: p, log: log, showAgents: showAgents}
+func New(m mux.Mux, p provider.Provider, log io.Writer) engine.Launcher {
+	return launcher{Mux: m, p: p, log: log}
 }
 
 // Start asks the provider for the session's command, runs it in a new session, and shows the session.
@@ -36,9 +34,6 @@ func (l launcher) Start(spec engine.SessionSpec) error {
 	}
 	if err := l.Mux.Start(spec.Name, spec.Dir, argv); err != nil {
 		return err
-	}
-	if spec.Kind != "main" && !l.showAgents {
-		return nil
 	}
 	if err := l.Show(spec.Name); err != nil && l.log != nil {
 		_, _ = fmt.Fprintf(l.log, "%s show of %s failed: %v\n", time.Now().Format(time.RFC3339), spec.Name, err)

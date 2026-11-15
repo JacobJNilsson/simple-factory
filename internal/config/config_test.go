@@ -156,17 +156,6 @@ func TestLoadFailsNamingResendMinutesBelowOne(t *testing.T) {
 	assertSetting(t, err, "resend_minutes")
 }
 
-func TestLoadShowsNoAgentsByDefaultAndReadsShowAgents(t *testing.T) {
-	got, err := config.Load(writeConfig(t, ""))
-	if err != nil || got.ShowAgents {
-		t.Fatalf("default show_agents = %v, err %v", got.ShowAgents, err)
-	}
-	got, err = config.Load(writeConfig(t, "show_agents = true\n"))
-	if err != nil || !got.ShowAgents {
-		t.Fatalf("show_agents = %v, err %v", got.ShowAgents, err)
-	}
-}
-
 func TestLoadReadsSandboxPathLists(t *testing.T) {
 	home := writeConfig(t, "deny_read = [\"~/.secrets\"]\nallow_write = [\"~/.cache/x\"]\n")
 
