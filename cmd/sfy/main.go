@@ -44,7 +44,11 @@ func run(args []string) int {
 		return report(up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr))
 	}
 	if len(args) > 0 && args[0] == "restart" {
-		return report(up.Restart(os.Environ(), os.Getenv, os.Stdout, os.Stderr))
+		update := len(args) == 2 && args[1] == "--update"
+		if len(args) > 1 && !update {
+			return report(fmt.Errorf("usage: sfy restart [--update]"))
+		}
+		return report(up.Restart(os.Environ(), os.Getenv, os.Stdout, os.Stderr, update))
 	}
 	return cli.Run(args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
 }
