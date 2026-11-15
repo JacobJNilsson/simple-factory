@@ -48,6 +48,7 @@ func TestParse(t *testing.T) {
 		{"task complete", []string{"task", "complete", "t1"}, protocol.Request{Command: "task complete", Args: []string{"t1"}}},
 		{"send", []string{"send", "worker-t1", "hello", "there"}, protocol.Request{Command: "send", Args: []string{"worker-t1", "hello", "there"}}},
 		{"report done", []string{"report", "done", "all", "done"}, protocol.Request{Command: "report done", Args: []string{"all", "done"}}},
+		{"report pushed", []string{"report", "pushed", "ok"}, protocol.Request{Command: "report pushed", Args: []string{"ok"}}},
 		{"report blocked", []string{"report", "blocked", "stuck"}, protocol.Request{Command: "report blocked", Args: []string{"stuck"}}},
 		{"report progress", []string{"report", "progress", "half"}, protocol.Request{Command: "report progress", Args: []string{"half"}}},
 		{"verdict stores a path as text", []string{"verdict", "pass", file}, protocol.Request{Command: "verdict pass", Body: file}},

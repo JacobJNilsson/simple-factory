@@ -112,6 +112,9 @@ func workerPrompt(t task.Task) string {
 	for _, f := range t.Pending {
 		prompt += "\nFeedback:\n\n" + f + "\n"
 	}
+	if t.PushAfterReview {
+		prompt += "\n" + holdPush + "\n"
+	}
 	if t.Reopened {
 		prompt += "\nThis workspace and its branch hold the earlier work. The branch may already have an open pull request, which may be merged or closed by now. Address the feedback on top of that work.\n"
 	}
