@@ -98,12 +98,8 @@ func (e *Engine) stop(name string) error {
 	return err
 }
 
-// cleanup ends the sessions of a task that ran, then removes its workspace unless the workspace holds work, and clears Dir.
-// Tick retries it for done and cancelled tasks that still have a Dir.
-func (e *Engine) cleanup(t task.Task) error {
-	if t.Dir == "" {
-		return nil
-	}
+// endSessions stops the worker and every reviewer of a task, and forgets their state.
+func (e *Engine) endSessions(t task.Task) error {
 	if err := e.stop("worker-" + t.ID); err != nil {
 		return err
 	}
@@ -114,6 +110,18 @@ func (e *Engine) cleanup(t task.Task) error {
 			return err
 		}
 		delete(e.agents, name)
+	}
+	return nil
+}
+
+// cleanup ends the sessions of a task that ran, then removes its workspace unless the workspace holds work, and clears Dir.
+// Tick retries it for done and cancelled tasks that still have a Dir.
+func (e *Engine) cleanup(t task.Task) error {
+	if t.Dir == "" {
+		return nil
+	}
+	if err := e.endSessions(t); err != nil {
+		return err
 	}
 	holds, err := e.w.HoldsWork(t)
 	if err != nil {

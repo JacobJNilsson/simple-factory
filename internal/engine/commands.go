@@ -11,6 +11,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 var errEmptyVerdict = errors.New("a verdict needs the file body, and the body is empty")
@@ -178,10 +179,26 @@ func (e *Engine) taskCancel(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Escalated); err != nil {
+	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Approved, task.Escalated); err != nil {
 		return "", err
 	}
 	t.State, t.Before = task.Cancelled, ""
+	if err := e.save(t); err != nil {
+		return "", err
+	}
+	return "", e.cleanup(t)
+}
+
+// taskComplete ends an approved task, once main has merged its result.
+func (e *Engine) taskComplete(req protocol.Request) (string, error) {
+	t, err := e.load(req)
+	if err != nil {
+		return "", err
+	}
+	if err := need(t, task.Approved); err != nil {
+		return "", err
+	}
+	t.State = task.Done
 	if err := e.save(t); err != nil {
 		return "", err
 	}
@@ -362,14 +379,19 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 	if err := e.st.AddVerdict(t.ID, t.Round, true, req.Body); err != nil {
 		return "", err
 	}
-	t.State = task.Done
+	t.State = task.Approved
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	if err := e.message("main", req.Caller.Agent, fmt.Sprintf("Task %s is done.", t.ID)); err != nil {
+	note := fmt.Sprintf("Task %s is approved. It has no pull request. Check its result, then run: sfy task complete %s", t.ID, t.ID)
+	if t.Repo != "" {
+		note = fmt.Sprintf("Task %s is approved. Merge the pull request of branch %s, then run: sfy task complete %s", t.ID, workspace.Branch(t.ID), t.ID)
+	}
+	if err := e.message("main", req.Caller.Agent, note); err != nil {
 		return "", err
 	}
-	return "", e.cleanup(t)
+	// The work is finished, so both sessions end. The workspace stays until main completes the task.
+	return "", e.endSessions(t)
 }
 
 func (e *Engine) verdictFail(req protocol.Request) (string, error) {

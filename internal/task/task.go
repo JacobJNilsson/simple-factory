@@ -17,6 +17,7 @@ const (
 	Working   State = "working"
 	Review    State = "review"
 	Feedback  State = "feedback"
+	Approved  State = "approved"
 	Done      State = "done"
 	Escalated State = "escalated"
 	Cancelled State = "cancelled"

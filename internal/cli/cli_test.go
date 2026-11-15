@@ -42,6 +42,7 @@ func TestParse(t *testing.T) {
 		{"task queue", []string{"task", "queue", "t1"}, protocol.Request{Command: "task queue", Args: []string{"t1"}}},
 		{"task cancel", []string{"task", "cancel", "t1"}, protocol.Request{Command: "task cancel", Args: []string{"t1"}}},
 		{"task resume", []string{"task", "resume", "t1"}, protocol.Request{Command: "task resume", Args: []string{"t1"}}},
+		{"task complete", []string{"task", "complete", "t1"}, protocol.Request{Command: "task complete", Args: []string{"t1"}}},
 		{"send", []string{"send", "worker-t1", "hello", "there"}, protocol.Request{Command: "send", Args: []string{"worker-t1", "hello", "there"}}},
 		{"report done", []string{"report", "done", "all", "done"}, protocol.Request{Command: "report done", Args: []string{"all", "done"}}},
 		{"report blocked", []string{"report", "blocked", "stuck"}, protocol.Request{Command: "report blocked", Args: []string{"stuck"}}},
