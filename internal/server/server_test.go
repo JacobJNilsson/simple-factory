@@ -46,6 +46,7 @@ type workspaces struct{}
 
 func (workspaces) Create(t task.Task) (string, error) { return "/work/" + t.ID, nil }
 func (workspaces) Remove(task.Task) error             { return nil }
+func (workspaces) HoldsWork(task.Task) (bool, error)  { return false, nil }
 
 type clock struct{}
 

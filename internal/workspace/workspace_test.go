@@ -451,3 +451,71 @@ func TestCreateKeepsABrokenCloneThatATaskFolderUses(t *testing.T) {
 		t.Fatalf("the clone was removed: %v", err)
 	}
 }
+
+// newWorktree creates a worktree for a task and returns its workspaces, task and dir.
+func newWorktree(t *testing.T, id string) (*workspace.Workspaces, task.Task, string) {
+	t.Helper()
+	gitEnv(t)
+	ws := workspace.New(t.TempDir())
+	tk := task.Task{ID: id, Repo: newRepo(t)}
+	dir, err := ws.Create(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ws, tk, dir
+}
+
+func TestHoldsWorkIsFalseForACleanWorktree(t *testing.T) {
+	ws, tk, _ := newWorktree(t, "t7")
+	if held, err := ws.HoldsWork(tk); err != nil || held {
+		t.Fatalf("held %v, err %v", held, err)
+	}
+}
+
+func TestHoldsWorkSeesAModifiedFile(t *testing.T) {
+	ws, tk, dir := newWorktree(t, "t7")
+	if err := os.WriteFile(filepath.Join(dir, "hello.txt"), []byte("changed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if held, err := ws.HoldsWork(tk); err != nil || !held {
+		t.Fatalf("held %v, err %v", held, err)
+	}
+}
+
+func TestHoldsWorkSeesAnUntrackedFile(t *testing.T) {
+	ws, tk, dir := newWorktree(t, "t7")
+	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if held, err := ws.HoldsWork(tk); err != nil || !held {
+		t.Fatalf("held %v, err %v", held, err)
+	}
+}
+
+func TestHoldsWorkIsFalseForAnEmptyPlainFolder(t *testing.T) {
+	gitEnv(t)
+	ws := workspace.New(t.TempDir())
+	tk := task.Task{ID: "t8"}
+	if _, err := ws.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+	if held, err := ws.HoldsWork(tk); err != nil || held {
+		t.Fatalf("held %v, err %v", held, err)
+	}
+}
+
+func TestHoldsWorkIsTrueForAPlainFolderWithAFile(t *testing.T) {
+	gitEnv(t)
+	ws := workspace.New(t.TempDir())
+	tk := task.Task{ID: "t8"}
+	dir, err := ws.Create(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "answer.md"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if held, err := ws.HoldsWork(tk); err != nil || !held {
+		t.Fatalf("held %v, err %v", held, err)
+	}
+}

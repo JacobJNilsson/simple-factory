@@ -15,6 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 type fakeLauncher struct {
@@ -56,9 +57,11 @@ func (f *fakeLauncher) Notify(name, text string) error {
 }
 
 type fakeWorkspaces struct {
-	removed   []string
-	removeErr error
-	createErr error
+	removed     []string
+	removeErr   error
+	dirty       map[string]bool
+	beforeCheck func()
+	createErr   error
 }
 
 func (f *fakeWorkspaces) Create(t task.Task) (string, error) {
@@ -67,6 +70,13 @@ func (f *fakeWorkspaces) Create(t task.Task) (string, error) {
 	}
 	return "/work/" + t.ID, nil
 }
+func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
+	if f.beforeCheck != nil {
+		f.beforeCheck()
+	}
+	return f.dirty[t.ID], nil
+}
+
 func (f *fakeWorkspaces) Remove(t task.Task) error {
 	if f.removeErr != nil {
 		return f.removeErr
@@ -1054,6 +1064,131 @@ func TestResumeFailsForATaskThatIsNotEscalated(t *testing.T) {
 	}
 	if v.state(t, "t1").State != task.Working {
 		t.Fatal("the task changed state")
+	}
+}
+
+func TestPassKeepsAWorkspaceThatHoldsWork(t *testing.T) {
+	v := newEnv(t)
+	v.ws.dirty = map[string]bool{"t1": true}
+	v.seed(t, task.Review, 1)
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+
+	if len(v.ws.removed) != 0 {
+		t.Fatalf("removed %v", v.ws.removed)
+	}
+}
+
+func TestPassTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
+	v := newEnv(t)
+	v.ws.dirty = map[string]bool{"t1": true}
+	v.seed(t, task.Review, 1)
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+
+	want := "Task t1 is done, but its workspace /work/t1 still holds work, so sfy kept it."
+	var found bool
+	for _, m := range v.inbox(t, "main") {
+		found = found || m.Body == want
+	}
+	if !found {
+		t.Fatalf("main got no %q", want)
+	}
+}
+
+func TestCancelKeepsAWorkspaceThatHoldsWork(t *testing.T) {
+	v := newEnv(t)
+	v.ws.dirty = map[string]bool{"t1": true}
+	v.seed(t, task.Working, 0)
+
+	mustOK(t, v.run("", "", "task cancel", "", "t1"))
+
+	if len(v.ws.removed) != 0 {
+		t.Fatalf("removed %v", v.ws.removed)
+	}
+}
+
+func TestCancelTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
+	v := newEnv(t)
+	v.ws.dirty = map[string]bool{"t1": true}
+	v.seed(t, task.Working, 0)
+
+	mustOK(t, v.run("", "", "task cancel", "", "t1"))
+
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || msgs[0].Body != "Task t1 is cancelled, but its workspace /work/t1 still holds work, so sfy kept it." {
+		t.Fatalf("main got %+v", msgs)
+	}
+}
+
+func TestPassKeepsAPlainFolderThatHoldsAFile(t *testing.T) {
+	v := newEnv(t)
+	ws := workspace.New(t.TempDir())
+	v.e = engine.New(v.st, v.l, ws, config.Config{ReviewRounds: 3, MaxWorkers: 2}, v.clock)
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Review, Round: 1, Source: "main"}
+	dir, err := ws.Create(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tk.Dir = dir
+	if err := v.st.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+	answer := filepath.Join(dir, "answer.md")
+	if err := os.WriteFile(answer, []byte("42"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+
+	if _, err := os.Stat(answer); err != nil {
+		t.Fatalf("the deliverable is gone: %v", err)
+	}
+}
+
+func TestTickAfterAFailedSaveTellsMainOnceThatTheWorkspaceWasKept(t *testing.T) {
+	v := newEnv(t)
+	v.ws.dirty = map[string]bool{"t1": true}
+	v.seed(t, task.Review, 1)
+	taskDir := filepath.Join(v.home, "tasks", "t1")
+	// The save in cleanup fails because its folder cannot take new files.
+	v.ws.beforeCheck = func() { _ = os.Chmod(taskDir, 0o500) }
+
+	if ans := v.run("review-t1-1", "t1", "verdict pass", "Good."); ans.OK {
+		t.Fatal("the failed save went unreported")
+	}
+	if err := os.Chmod(taskDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	v.ws.beforeCheck = nil
+	if err := v.e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+
+	var kept int
+	for _, m := range v.inbox(t, "main") {
+		if strings.Contains(m.Body, "still holds work") {
+			kept++
+		}
+	}
+	if kept != 1 {
+		t.Fatalf("main heard %d times", kept)
+	}
+}
+
+func TestTickAfterAKeptWorktreeSendsMainNothing(t *testing.T) {
+	v := newEnv(t)
+	v.ws.dirty = map[string]bool{"t1": true}
+	v.seed(t, task.Review, 1)
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	before := len(v.inbox(t, "main"))
+
+	if err := v.e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+
+	if after := len(v.inbox(t, "main")); after != before {
+		t.Fatalf("main got %d messages before and %d after the tick", before, after)
 	}
 }
 
