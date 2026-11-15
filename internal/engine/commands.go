@@ -222,7 +222,7 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	prompt := fmt.Sprintf("Review this task.\n\n%s\nThe worker reports:\n\n%s\n", t.Markdown(), text(req, req.Args))
 	err = e.l.Start(SessionSpec{
 		Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir,
-		Model: e.cfg.Models.Reviewer, Prompt: prompt,
+		Model: e.cfg.Models.Reviewer, Prompt: prompt, Protected: t.Protected,
 	})
 	if err != nil {
 		// The worker can retry only if the task is back in its old state.

@@ -73,7 +73,7 @@ func (e *Engine) startWorker(t task.Task) error {
 	name := "worker-" + t.ID
 	err := e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
-		Model: e.cfg.Models.Worker, Prompt: "Do this task.\n\n" + t.Markdown(),
+		Model: e.cfg.Models.Worker, Prompt: "Do this task.\n\n" + t.Markdown(), Protected: t.Protected,
 	})
 	if err != nil {
 		rmErr := e.w.Remove(t)

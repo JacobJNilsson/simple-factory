@@ -19,6 +19,8 @@ import (
 // SessionSpec describes an agent session to start. Kind is "main", "worker" or "reviewer".
 type SessionSpec struct {
 	Name, Kind, Task, Dir, Model, Prompt string
+	// Protected lists the paths that a worker or reviewer must not edit. It is empty for the main agent.
+	Protected []string
 }
 
 // Launcher controls agent sessions in terminal panes.
