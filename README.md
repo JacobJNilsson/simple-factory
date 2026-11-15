@@ -4,6 +4,8 @@ sfy runs coding agents as interactive sessions in terminal panes. A main agent h
 
 SPEC.md holds the requirements.
 
+docs/known-issues.md lists open problems that sfy does not fix in its core, and the options it rejected.
+
 ## Install with Homebrew
 
 Install sfy from the tap with `brew install jacobjnilsson/tap/sfy`. Upgrade it with `brew upgrade sfy`. Run `sfy --version` to see the installed version. A build from source prints `dev`.
