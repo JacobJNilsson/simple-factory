@@ -221,6 +221,52 @@ func TestHerdrShowPassesTheAddressToHerdrApp(t *testing.T) {
 	}
 }
 
+// herdrStubs puts an hc that knows the terminal and a herdr-app with the given body on PATH.
+func herdrStubs(t *testing.T, herdrApp string) {
+	t.Helper()
+	bin := t.TempDir()
+	stub := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stub("hc", `echo '{"address":"t6z","name":"main","state":"live"}'`)
+	stub("herdr-app", herdrApp)
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	t.Setenv("SFY_SHOW_WAIT", "0.01")
+}
+
+func TestHerdrShowRetriesUntilTheTerminalIsKnown(t *testing.T) {
+	set, _ := Builtin("herdr")
+	count := filepath.Join(t.TempDir(), "count")
+	herdrStubs(t, `echo x >> `+shellQuote(count)+`
+if [ $(wc -l < `+shellQuote(count)+`) -le 2 ]; then echo '{"error":"no running terminal"}'; exit 1; fi
+echo '{"pending": true}'`)
+	if err := Runner(set).Show("main"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(count)
+	if n := strings.Count(string(got), "x"); n != 3 {
+		t.Fatalf("herdr-app ran %d times, want 3", n)
+	}
+}
+
+func TestHerdrShowFailureCarriesHerdrAppOutput(t *testing.T) {
+	set, _ := Builtin("herdr")
+	count := filepath.Join(t.TempDir(), "count")
+	herdrStubs(t, `echo x >> `+shellQuote(count)+`
+echo '{"error":"no running terminal \"main\""}'; exit 1`)
+	err := Runner(set).Show("main")
+	var ce *commandError
+	if !errors.As(err, &ce) || !strings.Contains(ce.stderr, "no running terminal") {
+		t.Fatalf("want herdr-app's message in the error, got %v", err)
+	}
+	got, _ := os.ReadFile(count)
+	if n := strings.Count(string(got), "x"); n != 10 {
+		t.Fatalf("herdr-app ran %d times, want 10", n)
+	}
+}
+
 func TestHerdrShowFailsWithoutAnAddress(t *testing.T) {
 	set, _ := Builtin("herdr")
 	bin := t.TempDir()

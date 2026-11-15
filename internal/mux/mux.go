@@ -81,7 +81,16 @@ exit 1`,
 	Show: `out=$(hc get {name} --json) || exit 1
 addr=$(printf '%s' "$out" | sed -n 's/.*"address":"\([^"]*\)".*/\1/p')
 [ -n "$addr" ] || { echo "no address for {name}" >&2; exit 1; }
-herdr-app do terminal.keep --terminal "$addr"`,
+# The Herdr app learns a new terminal a moment after hc run returns, so keep retries until it knows it.
+i=0
+while :; do
+  res=$(herdr-app do terminal.keep --terminal "$addr" 2>&1) && exit 0
+  i=$((i+1))
+  [ $i -lt 10 ] || break
+  sleep "${SFY_SHOW_WAIT:-0.5}"
+done
+printf '%s\n' "$res" >&2
+exit 1`,
 }
 
 // A template that runs longer than this is killed and reported as an error.
