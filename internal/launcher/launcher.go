@@ -3,6 +3,8 @@ package launcher
 
 import (
 	"fmt"
+	"io"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
@@ -12,22 +14,31 @@ import (
 
 type launcher struct {
 	mux.Mux
-	p provider.Provider
+	p   provider.Provider
+	log io.Writer
 }
 
 // New returns a Launcher that starts the provider's command in a multiplexer session.
+// A failed show goes to log, which may be nil.
 // CONTRACT: the engine takes a Launcher, so New returns the interface.
-func New(m mux.Mux, p provider.Provider) engine.Launcher {
-	return launcher{Mux: m, p: p}
+func New(m mux.Mux, p provider.Provider, log io.Writer) engine.Launcher {
+	return launcher{Mux: m, p: p, log: log}
 }
 
-// Start asks the provider for the session's command and runs it in a new session.
+// Start asks the provider for the session's command, runs it in a new session, and shows the session.
+// A failed show leaves the start successful, because the agent runs either way.
 func (l launcher) Start(spec engine.SessionSpec) error {
 	argv, err := l.p.Command(spec)
 	if err != nil {
 		return err
 	}
-	return l.Mux.Start(spec.Name, spec.Dir, argv)
+	if err := l.Mux.Start(spec.Name, spec.Dir, argv); err != nil {
+		return err
+	}
+	if err := l.Show(spec.Name); err != nil && l.log != nil {
+		_, _ = fmt.Fprintf(l.log, "%s show of %s failed: %v\n", time.Now().Format(time.RFC3339), spec.Name, err)
+	}
+	return nil
 }
 
 // TrustWarning asks the provider whether it would stop at a trust prompt for dir.

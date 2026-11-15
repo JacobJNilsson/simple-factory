@@ -13,7 +13,7 @@ import (
 
 // Templates holds one shell command line for each multiplexer action.
 type Templates struct {
-	Start, Send, Alive, Stop, Notify string
+	Start, Send, Alive, Stop, Notify, Show string
 }
 
 // Mux controls named sessions in a terminal multiplexer.
@@ -23,13 +23,14 @@ type Mux interface {
 	Alive(name string) (bool, error)
 	Stop(name string) error
 	Notify(name, text string) error
+	Show(name string) error
 }
 
 // FromMap builds a template set from a config table and rejects unknown keys.
 func FromMap(m map[string]string) (Templates, error) {
 	var t Templates
 	fields := map[string]*string{
-		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify,
+		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show,
 	}
 	for key, value := range m {
 		field, ok := fields[key]
@@ -76,6 +77,11 @@ if [ $rc -ne 0 ]; then printf '%s\n' "$out" >&2; exit 2; fi
 case $out in *'"state":"live"'*) exit 0;; esac
 exit 1`,
 	Stop: "hc kill {name}",
+	// A background terminal has no pane. herdr-app needs its address, which hc get prints in the JSON.
+	Show: `out=$(hc get {name} --json) || exit 1
+addr=$(printf '%s' "$out" | sed -n 's/.*"address":"\([^"]*\)".*/\1/p')
+[ -n "$addr" ] || { echo "no address for {name}" >&2; exit 1; }
+herdr-app do terminal.keep --terminal "$addr"`,
 }
 
 // A template that runs longer than this is killed and reported as an error.
@@ -133,6 +139,15 @@ func (r runner) Notify(name, text string) error {
 		return nil
 	}
 	_, err := run(r.timeout, r.t.Notify, "notify", name, "", "", text)
+	return err
+}
+
+// Show makes the session visible to the operator. A set without a show template does nothing.
+func (r runner) Show(name string) error {
+	if r.t.Show == "" {
+		return nil
+	}
+	_, err := run(r.timeout, r.t.Show, "show", name, "", "", "")
 	return err
 }
 

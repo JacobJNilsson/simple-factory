@@ -40,6 +40,16 @@ func TestFromMapAcceptsOptionalNotify(t *testing.T) {
 	}
 }
 
+func TestFromMapAcceptsOptionalShow(t *testing.T) {
+	got, err := FromMap(map[string]string{"start": "a", "send": "b", "alive": "c", "stop": "d", "show": "e"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Show != "e" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestBuiltinRejectsUnknownName(t *testing.T) {
 	if _, ok := Builtin("nope"); ok {
 		t.Error("unknown builtin must not exist")
@@ -154,6 +164,72 @@ func TestNotifyWithoutTemplateDoesNothing(t *testing.T) {
 	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true"})
 	if err := m.Notify("n", "hi"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestShowFillsTemplateAfterStart(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(Templates{Start: "echo start >> " + shellQuote(out), Send: "true", Alive: "true", Stop: "true",
+		Show: "printf 'show %s\\n' {name} >> " + shellQuote(out)})
+	if err := m.Start("n 1", t.TempDir(), []string{"true"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Show("n 1"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "start\nshow n 1\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestShowFailureIsAnError(t *testing.T) {
+	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Show: "echo boom >&2; exit 1"})
+	if err := m.Show("n"); err == nil {
+		t.Fatal("want an error")
+	}
+}
+
+func TestShowWithoutTemplateDoesNothing(t *testing.T) {
+	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true"})
+	if err := m.Show("n"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHerdrShowPassesTheAddressToHerdrApp(t *testing.T) {
+	set, _ := Builtin("herdr")
+	bin := t.TempDir()
+	out := filepath.Join(t.TempDir(), "out")
+	stub := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stub("hc", `echo '{"address":"t6z","agent":"sleep","name":"main","state":"live","turn":0}'`)
+	stub("herdr-app", `echo "$@" > `+shellQuote(out))
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	if err := Runner(set).Show("main"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	if strings.TrimSpace(string(got)) != "do terminal.keep --terminal t6z" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestHerdrShowFailsWithoutAnAddress(t *testing.T) {
+	set, _ := Builtin("herdr")
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "hc"), []byte("#!/bin/sh\necho '{\"name\":\"main\"}'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	if err := Runner(set).Show("main"); err == nil {
+		t.Fatal("want an error")
 	}
 }
 

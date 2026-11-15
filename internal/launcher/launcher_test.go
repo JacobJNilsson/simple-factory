@@ -1,8 +1,10 @@
 package launcher
 
 import (
+	"bytes"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -15,6 +17,8 @@ type fakeMux struct {
 	sent      string
 	stopped   string
 	notified  string
+	shown     []string
+	showErr   error
 }
 
 func (f *fakeMux) Start(name, dir string, command []string) error {
@@ -27,6 +31,10 @@ func (f *fakeMux) Alive(name string) (bool, error) {
 }
 func (f *fakeMux) Stop(name string) error         { f.stopped = name; return nil }
 func (f *fakeMux) Notify(name, text string) error { f.notified = name + ":" + text; return nil }
+func (f *fakeMux) Show(name string) error {
+	f.shown = append(f.shown, name)
+	return f.showErr
+}
 
 type fakeProvider struct{ spec engine.SessionSpec }
 
@@ -39,7 +47,7 @@ func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
 
 func TestStartPassesArgvNameAndDir(t *testing.T) {
 	m, p := &fakeMux{}, &fakeProvider{}
-	l := New(m, p)
+	l := New(m, p, nil)
 	spec := engine.SessionSpec{Name: "worker-t1", Dir: "/work/t1", Kind: "worker"}
 	if err := l.Start(spec); err != nil {
 		t.Fatal(err)
@@ -54,7 +62,7 @@ func TestStartPassesArgvNameAndDir(t *testing.T) {
 
 func TestOtherCallsPassThrough(t *testing.T) {
 	m := &fakeMux{}
-	l := New(m, &fakeProvider{})
+	l := New(m, &fakeProvider{}, nil)
 	_ = l.Send("a", "hi")
 	_ = l.Stop("a")
 	_ = l.Notify("a", "n")
@@ -86,5 +94,26 @@ func TestMuxBuiltinAndUnknown(t *testing.T) {
 	var ue *unknownError
 	if !errors.As(err, &ue) || ue.Name != "screenx" {
 		t.Fatalf("error %v does not name the set", err)
+	}
+}
+
+func TestStartShowsTheSessionAfterStart(t *testing.T) {
+	m := &fakeMux{}
+	if err := New(m, &fakeProvider{}, nil).Start(engine.SessionSpec{Name: "worker-t1", Dir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.shown, []string{"worker-t1"}) {
+		t.Errorf("shown %v", m.shown)
+	}
+}
+
+func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
+	m := &fakeMux{showErr: errors.New("no pane")}
+	var log bytes.Buffer
+	if err := New(m, &fakeProvider{}, &log).Start(engine.SessionSpec{Name: "main", Dir: "/w"}); err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+	if !strings.Contains(log.String(), "show of main failed: no pane") {
+		t.Errorf("log %q", log.String())
 	}
 }

@@ -46,6 +46,7 @@ func (m *fakeMux) Send(string, string) error    { return nil }
 func (m *fakeMux) Alive(n string) (bool, error) { return m.alive[n], nil }
 func (m *fakeMux) Stop(string) error            { return nil }
 func (m *fakeMux) Notify(string, string) error  { return nil }
+func (m *fakeMux) Show(string) error            { return nil }
 
 // fakeLauncher records the main agent's spec and marks its session alive.
 type fakeLauncher struct {
