@@ -16,7 +16,7 @@ This spec covers version 0.
 
 ## Agents
 
-sfy runs three kinds of agent session. Each session runs in its own terminal. By default the main agent opens a pane or tab, and workers and reviewers run in the background without one. The operator opens one in Herdr with `hc attach <name>` or the `hc` picker. A worker that stops at the provider's trust dialog needs that attach.
+sfy runs three kinds of agent session. Each session runs in its own terminal. sfy runs the multiplexer's `show` template for each session. A worker that stops at the provider's trust dialog needs the operator to attach to its session.
 
 - **The main agent** is the one the operator talks to. It creates tasks, prepares the tasks that others create, answers workers, and cancels tasks. It escalates to the operator when it cannot decide. sfy sets no limit on what it may decide.
 - **A worker** does one task. It runs in the task's workspace and stays alive through the task's review rounds.
