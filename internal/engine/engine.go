@@ -52,11 +52,33 @@ type Engine struct {
 
 	mu      sync.Mutex
 	counter int
+	// agents holds what factory knows of each session, in memory only.
+	agents map[string]*agentState
+}
+
+// agentState tracks when a session may take a note.
+type agentState struct {
+	// waiting is true after a turn ended and until factory types into the pane.
+	waiting bool
+	// reported is true when the agent ran report or verdict in its current turn.
+	reported bool
+	// hookSince is true when a hook event came after the last note.
+	hookSince bool
+	// reminders counts the turns in a row that ended without a report.
+	reminders int
+	lastNote  time.Time
+}
+
+func (e *Engine) agent(name string) *agentState {
+	if e.agents[name] == nil {
+		e.agents[name] = &agentState{}
+	}
+	return e.agents[name]
 }
 
 // New returns an Engine that works through the given store and interfaces.
 func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
-	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c}
+	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}}
 }
 
 type kind string
@@ -122,6 +144,8 @@ var commands = map[string]command{
 	"inbox":           {(*Engine).inbox, agents},
 	"escalate":        {(*Engine).escalate, []kind{main}},
 	"status":          {(*Engine).status, anyone},
+	"hook turn-ended": {(*Engine).hookTurnEnded, agents},
+	"hook permission": {(*Engine).hookPermission, agents},
 }
 
 // Handle runs one command and returns its answer.
@@ -143,6 +167,7 @@ func (e *Engine) Handle(req protocol.Request) protocol.Answer {
 	if err != nil {
 		return protocol.Answer{Error: err.Error()}
 	}
+	e.noteCommand(req)
 	return protocol.Answer{OK: true, Text: text}
 }
 
@@ -159,10 +184,24 @@ func allowed(kinds []kind, k kind) bool {
 func allowedBy(k kind) string {
 	var names []string
 	for name, c := range commands {
-		if allowed(c.kind, k) {
+		// The hook commands are internal, so no error names them.
+		if allowed(c.kind, k) && !strings.HasPrefix(name, "hook ") {
 			names = append(names, name)
 		}
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// noteCommand records what a successful command means for the caller's session.
+// A verdict ends its reviewer's session, so its state goes. Only a worker or a reviewer has a report to track.
+func (e *Engine) noteCommand(req protocol.Request) {
+	name := req.Caller.Agent
+	switch {
+	case strings.HasPrefix(req.Command, "verdict "):
+		delete(e.agents, name)
+	case strings.HasPrefix(req.Command, "report "):
+		s := e.agent(name)
+		s.reported, s.reminders = true, 0
+	}
 }

@@ -28,9 +28,28 @@ func (e *Engine) refreshStatus() error {
 func (e *Engine) message(to, from, body string) error {
 	e.counter++
 	now := e.c.Now()
-	return e.st.Send(store.Message{
+	err := e.st.Send(store.Message{
 		ID: fmt.Sprintf("%019d-%06d", now.UnixNano(), e.counter), From: from, To: to, Body: body, Created: now,
 	})
+	if err != nil {
+		return err
+	}
+	if e.agent(to).waiting {
+		return e.typeNote(to)
+	}
+	return nil
+}
+
+const (
+	newMessageNote = "New message. Run: factory inbox"
+	noReportNote   = "Your turn ended without a report. If you need an answer, run factory report blocked <question>."
+)
+
+// typeNote types the new-message note into a pane. The agent is busy until its next turn ends.
+func (e *Engine) typeNote(name string) error {
+	s := e.agent(name)
+	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
+	return e.l.Send(name, newMessageNote)
 }
 
 // stop ends a session. A failure counts only while the session still runs, because a session may already be gone.
@@ -54,10 +73,13 @@ func (e *Engine) cleanup(t task.Task) error {
 	if err := e.stop("worker-" + t.ID); err != nil {
 		return err
 	}
+	delete(e.agents, "worker-"+t.ID)
 	for r := 1; r <= t.Round; r++ {
-		if err := e.stop(fmt.Sprintf("review-%s-%d", t.ID, r)); err != nil {
+		name := fmt.Sprintf("review-%s-%d", t.ID, r)
+		if err := e.stop(name); err != nil {
 			return err
 		}
+		delete(e.agents, name)
 	}
 	if err := e.w.Remove(t); err != nil {
 		return err
