@@ -10,6 +10,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 )
@@ -216,28 +217,77 @@ func TestMainSettingsKeepQuestionsAndEdits(t *testing.T) {
 	}
 }
 
-func TestArgvStartsWithEnvAndTheAgentIdentity(t *testing.T) {
-	p, home := setup(t, bin)
+func TestArgvIsASfyRunCommandWithoutTheCleanFlag(t *testing.T) {
+	p, _ := setup(t, bin)
 
-	argv := command(t, p, worker())
+	c := envruntest.Parse(t, command(t, p, worker()))
 
-	want := []string{"env", "SFY_AGENT=worker-t1", "SFY_TASK=t1", "SFY_HOME=" + home}
-	if !slices.Equal(argv[:len(want)], want) {
-		t.Fatalf("argv starts %v", argv[:len(want)])
-	}
-	if !slices.Contains(argv, "claude") {
-		t.Errorf("argv lacks claude: %v", argv)
+	if c.Bin != bin || c.Clean {
+		t.Errorf("bin %q, clean %v", c.Bin, c.Clean)
 	}
 }
 
-func TestArgvPutsTheSfyBinaryFolderFirstOnThePath(t *testing.T) {
+func TestArgvRunsClaude(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	c := envruntest.Parse(t, command(t, p, worker()))
+
+	if c.Cmd[0] != "claude" {
+		t.Errorf("command %q", c.Cmd[0])
+	}
+}
+
+func TestArgvHoldsNoEnvironmentValue(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	for _, a := range command(t, p, worker()) {
+		if strings.HasPrefix(a, "SFY_") || strings.HasPrefix(a, "PATH=") {
+			t.Errorf("argv holds a value: %s", a)
+		}
+	}
+}
+
+func TestEnvHoldsTheAgentIdentity(t *testing.T) {
+	p, home := setup(t, bin)
+
+	c := envruntest.Parse(t, command(t, p, worker()))
+
+	for _, want := range []string{"SFY_AGENT=worker-t1", "SFY_TASK=t1", "SFY_HOME=" + home} {
+		if !slices.Contains(c.Env, want) {
+			t.Errorf("env lacks %s: %v", want, c.Env)
+		}
+	}
+}
+
+func TestEnvFileIsPrivate(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	c := envruntest.Parse(t, command(t, p, worker()))
+
+	info, err := os.Stat(c.File)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("env file %v, %v", info, err)
+	}
+}
+
+func TestEnvFileIsInsideTheSessionFolder(t *testing.T) {
+	p, home := setup(t, bin)
+
+	c := envruntest.Parse(t, command(t, p, worker()))
+
+	if filepath.Dir(c.File) != filepath.Join(home, "sessions", "worker-t1") {
+		t.Errorf("env file %s", c.File)
+	}
+}
+
+func TestEnvPutsTheSfyBinaryFolderFirstOnThePath(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	p, _ := setup(t, bin)
 
-	argv := command(t, p, worker())
+	c := envruntest.Parse(t, command(t, p, worker()))
 
-	if !slices.Contains(argv, "PATH=/opt/sfy:/usr/bin:/bin") {
-		t.Errorf("argv %v", argv)
+	if !slices.Contains(c.Env, "PATH=/opt/sfy:/usr/bin:/bin") {
+		t.Errorf("env %v", c.Env)
 	}
 }
 
@@ -290,11 +340,11 @@ func TestArgvEndsWithThePrompt(t *testing.T) {
 func TestMainArgvOmitsTheTask(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	argv := command(t, p, mainSpec())
+	c := envruntest.Parse(t, command(t, p, mainSpec()))
 
-	for _, a := range argv {
+	for _, a := range c.Env {
 		if strings.HasPrefix(a, "SFY_TASK=") {
-			t.Errorf("argv has %s", a)
+			t.Errorf("env has %s", a)
 		}
 	}
 }

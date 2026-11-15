@@ -109,9 +109,10 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy escalate <id> <text>` | main agent | Moves a task to `escalated` and tells the operator. |
 | `sfy status` | anyone | Prints `status.md`. |
 
-Two internal commands do not appear in prompts:
+Three internal commands do not appear in prompts:
 
 - `sfy serve` runs the sfy process. `sfy up` starts it.
+- `sfy run [-i] <envfile> -- <command...>` starts every agent session and the sfy process. It reads the environment from the file, deletes the file, and replaces itself with the command. With `-i` the command sees only the file's variables. Without it, they overlay the current environment. This keeps variable values, such as tokens, out of the process's argv.
 - `sfy hook <event>` is the command that an agent CLI's hooks run, for example when a turn ends or a permission prompt opens.
 
 A command that an agent kind may not run fails with an error that names the command it may run instead.
