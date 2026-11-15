@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -453,9 +455,42 @@ func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	e.agent(name).hookSince = true
+	request := permissionRequest(req.Body)
 	if name == "main" {
-		return "", e.l.Notify("main", "Main waits at a permission prompt: "+req.Body)
+		return "", e.l.Notify("main", "Main waits at a permission prompt. "+request)
 	}
-	note := fmt.Sprintf("%s waits at a permission prompt for task %s: %s", name, req.Caller.Task, req.Body)
+	note := fmt.Sprintf("%s waits at a permission prompt for task %s. %s", name, req.Caller.Task, request)
 	return "", e.message("main", name, note)
+}
+
+// permissionRequest names the tool and its main input from a permission hook payload.
+// A body that is not a payload with a tool name stays as it is.
+func permissionRequest(body string) string {
+	var p struct {
+		Tool  string          `json:"tool_name"`
+		Input json.RawMessage `json:"tool_input"`
+	}
+	if json.Unmarshal([]byte(body), &p) != nil || p.Tool == "" {
+		return body
+	}
+	var in map[string]any
+	_ = json.Unmarshal(p.Input, &in)
+	label, key := "Input", ""
+	switch p.Tool {
+	case "Bash":
+		label, key = "Command", "command"
+	case "Edit", "Write", "Read":
+		label, key = "File", "file_path"
+	}
+	if v, ok := in[key].(string); ok && v != "" {
+		return fmt.Sprintf("Tool: %s. %s: %s", p.Tool, label, v)
+	}
+	if len(p.Input) == 0 {
+		return fmt.Sprintf("Tool: %s", p.Tool)
+	}
+	compact := &bytes.Buffer{}
+	if json.Compact(compact, p.Input) != nil {
+		return fmt.Sprintf("Tool: %s", p.Tool)
+	}
+	return fmt.Sprintf("Tool: %s. Input: %s", p.Tool, compact)
 }
