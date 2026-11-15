@@ -6,4 +6,4 @@ SPEC.md holds the requirements.
 
 ## Install a new build
 
-Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The running sfy process and the main agent keep the old code until you restart them. Run `sfy restart` from a terminal outside the agent sessions. It stops the sfy process and the main agent, then starts both from the installed binary. Workers and reviewers keep running, and their tasks stay on disk. `sfy restart` does not build or install sfy.
+Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The running sfy process keeps the old code until you restart it. Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.

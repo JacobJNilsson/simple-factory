@@ -143,10 +143,10 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 	return run(o)
 }
 
-// Restart runs sfy restart for the sfy home that env names. Only the operator may run it.
+// Restart runs sfy restart for the sfy home that env names. The operator and the main agent may run it.
 func Restart(environ []string, env func(string) string, stdout, stderr io.Writer) error {
-	if env("SFY_AGENT") != "" {
-		return ErrNotOperator
+	if !mayRestart(env("SFY_AGENT")) {
+		return ErrNotAllowed
 	}
 	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {

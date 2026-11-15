@@ -14,6 +14,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 )
 
 // ErrNotAnswering reports that the sfy process did not answer in time after it started.
@@ -37,6 +38,27 @@ const serveSession = "sfy"
 // mainPrompt names the folder, so the main agent needs no command to find it.
 func mainPrompt(home string) string {
 	return "Your state folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
+}
+
+// mainPromptPath is the file that holds the prompt of the running main agent.
+func mainPromptPath(home string) string { return filepath.Join(home, "main-prompt.md") }
+
+// recordMainPrompt saves the main prompt that a build uses now, and reports whether it differs from the saved one.
+// A missing file counts as a change, because the main agent may predate the file.
+func recordMainPrompt(home string) (changed bool, err error) {
+	text, err := prompts.For("main", home)
+	if err != nil {
+		return false, err
+	}
+	path := mainPromptPath(home)
+	old, err := os.ReadFile(path)
+	if err == nil && string(old) == text {
+		return false, nil
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return true, os.WriteFile(path, []byte(text), 0o600)
 }
 
 // options holds what run needs, so tests can replace each part.
@@ -83,6 +105,9 @@ func run(o options) error {
 	if !alive {
 		if w := o.launcher.TrustWarning(o.home); w != "" {
 			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
+		}
+		if _, err := recordMainPrompt(o.home); err != nil {
+			return err
 		}
 		spec := engine.SessionSpec{
 			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt(o.home),

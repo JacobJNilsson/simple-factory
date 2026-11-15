@@ -27,6 +27,8 @@ type fakeMux struct {
 	// answerAfter makes the socket answer after that many checks, when it is above zero.
 	answerAfter int
 	starts      [][]string
+	// sends lists each Send as a name and its text.
+	sends [][2]string
 	// stops lists the sessions that Stop ended. stubborn makes the socket answer after the sfy session stops.
 	stops    []string
 	stubborn bool
@@ -45,7 +47,10 @@ func (m *fakeMux) Start(name, dir string, command []string) error {
 	}
 	return nil
 }
-func (m *fakeMux) Send(string, string) error    { return nil }
+func (m *fakeMux) Send(name, text string) error {
+	m.sends = append(m.sends, [2]string{name, text})
+	return nil
+}
 func (m *fakeMux) Alive(n string) (bool, error) { return m.alive[n], nil }
 func (m *fakeMux) Stop(name string) error {
 	m.stops = append(m.stops, name)
