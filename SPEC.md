@@ -163,7 +163,6 @@ A command that an agent kind may not run fails with an error that names the comm
 | `review_rounds` | 3 | Failed reviews before a task moves to `escalated`. |
 | `max_workers` | 2 | Workers that run at once. |
 | `resend_minutes` | 5 | Minutes between notes for an unread message. |
-| `show_agents` | `false` | When `true`, sfy runs the multiplexer's `show` template for each worker and reviewer, which opens a tab in Herdr. The main agent always gets it. |
 | `provider` | `claude` | The agent provider adapter. |
 | `multiplexer` | `tmux` | The name of the template set to use. |
 | `models.main` | `opus` | The main agent's model. |
@@ -185,7 +184,7 @@ A template set lives under `[multiplexers.<name>]` in `config.toml`. Each templa
 | `alive` | yes | Exits 0 if session `{name}` still runs. |
 | `stop` | yes | Ends session `{name}`. |
 | `notify` | no | Draws the operator's attention to session `{name}`, with `{text}` as the message. |
-| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of the main agent, and of a worker or reviewer only when `show_agents` is `true`. A failure goes to `sfy.log` and does not fail the start. |
+| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of every agent. A failure goes to `sfy.log` and does not fail the start. |
 
 sfy does not ask the multiplexer whether an agent waits for input. The provider adapter tells it.
 
