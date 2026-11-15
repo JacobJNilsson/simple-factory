@@ -58,7 +58,12 @@ const maxStartFailures = 3
 
 // startWorker saves the task as working before it starts the session, so a crash leaves a record of the workspace.
 // A failure puts the task back in queued. A workspace that Remove could not delete stays in Dir, and the next try reuses it.
+// A task with a round has earlier work in its workspace, so a failed start keeps the workspace.
 func (e *Engine) startWorker(t task.Task) error {
+	prompt, err := e.workerPrompt(t)
+	if err != nil {
+		return err
+	}
 	dir := t.Dir
 	if dir == "" {
 		var err error
@@ -68,17 +73,17 @@ func (e *Engine) startWorker(t task.Task) error {
 	}
 	t.State, t.Dir = task.Working, dir
 	if err := e.save(t); err != nil {
-		return errors.Join(err, e.w.Remove(t))
+		return errors.Join(err, e.discard(t))
 	}
 	name := "worker-" + t.ID
-	err := e.l.Start(SessionSpec{
+	err = e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
-		Model: e.cfg.Models.Worker, Prompt: "Do this task.\n\n" + t.Markdown(), Protected: t.Protected,
+		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected,
 	})
 	if err != nil {
-		rmErr := e.w.Remove(t)
+		rmErr := e.discard(t)
 		t.State = task.Queued
-		if rmErr == nil {
+		if rmErr == nil && t.Round == 0 {
 			t.Dir = ""
 		}
 		return e.startFailed(t, errors.Join(fmt.Errorf("task %s: start worker: %w", t.ID, err), rmErr, e.save(t)))
@@ -86,6 +91,34 @@ func (e *Engine) startWorker(t task.Task) error {
 	delete(e.startFails, t.ID)
 	e.agents[name] = &agentState{}
 	return nil
+}
+
+// discard removes the workspace of a task whose start failed, unless it holds the earlier work of a task that feedback sent back.
+func (e *Engine) discard(t task.Task) error {
+	if t.Round > 0 {
+		return nil
+	}
+	return e.w.Remove(t)
+}
+
+// workerPrompt returns the first message of a worker. A task that feedback sent back gets the feedback and a note about the earlier work.
+func (e *Engine) workerPrompt(t task.Task) (string, error) {
+	if t.Round == 0 {
+		return "Do this task.\n\n" + t.Markdown(), nil
+	}
+	verdicts, err := e.st.Verdicts(t.ID)
+	if err != nil {
+		return "", err
+	}
+	feedback := ""
+	for _, v := range verdicts {
+		if v.Feedback && v.Round == t.Round {
+			feedback = v.Body
+		}
+	}
+	return fmt.Sprintf("Do this task again. A reviewer approved it, then feedback came in.\n\n%s\nFeedback:\n\n%s\n\n"+
+		"This workspace and its branch hold the earlier work. The branch may already have an open pull request. Address the feedback on top of that work.\n",
+		t.Markdown(), feedback), nil
 }
 
 // startFailed counts a failed start. After maxStartFailures in a row the task moves to escalated and main hears of it.
