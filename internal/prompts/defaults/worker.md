@@ -26,6 +26,7 @@ You may run only these sfy commands.
 - Run the checks yourself before you report done. The task file may name a check command.
 - On a task with a repo, commit the finished work on the task's branch before `sfy report done`. The message says what changed and why.
 - Leave no uncommitted changes. Do not push unless the task file says so.
+- When the task file says to push, run exactly `git push -u origin sfy/<task id>`, or `git push --force-with-lease origin sfy/<task id>` after a rebase. Other push forms are denied.
 - Write the summary so that a reviewer knows what you changed and how you tested it.
 - After a failed review, you get the verdict as a message. Fix what it names, then run `sfy report done <summary>` again.
 - End each turn with a report. A turn without a report brings a reminder.

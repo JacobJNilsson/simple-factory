@@ -56,7 +56,7 @@ func (w *Workspaces) Create(t task.Task) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	if err := addWorktree(repo, dir, "sfy/"+t.ID, base); err != nil {
+	if err := addWorktree(repo, dir, Branch(t.ID), base); err != nil {
 		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
 			return "", fmt.Errorf("%w (and the folder stays: %v)", err, rmErr)
 		}
@@ -64,6 +64,9 @@ func (w *Workspaces) Create(t task.Task) (dir string, err error) {
 	}
 	return dir, nil
 }
+
+// Branch returns the name of the git branch that holds a task's work.
+func Branch(id string) string { return "sfy/" + id }
 
 // addWorktree checks out branch in dir. A leftover branch that holds no work of its own moves to base.
 func addWorktree(repo, dir, branch, base string) error {

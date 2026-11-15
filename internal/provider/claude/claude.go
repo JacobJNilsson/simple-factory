@@ -15,6 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
+	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 type adapter struct {
@@ -53,6 +54,7 @@ type sandbox struct {
 	AutoAllowBashIfSandboxed bool       `json:"autoAllowBashIfSandboxed"`
 	AllowUnsandboxedCommands bool       `json:"allowUnsandboxedCommands"`
 	Filesystem               filesystem `json:"filesystem"`
+	ExcludedCommands         []string   `json:"excludedCommands"`
 }
 
 type permissions struct {
@@ -181,6 +183,8 @@ func (a adapter) sandboxFor(s *settings) error {
 			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
 		},
 	}
+	// gh and git push fail inside the macOS sandbox. The allow rules keep the excluded calls narrow.
+	s.Sandbox.ExcludedCommands = []string{"gh *", "git push *"}
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
 	return nil
@@ -214,8 +218,21 @@ func shellWord(s string) string {
 
 func (a adapter) allow(spec engine.SessionSpec) []string {
 	rules := []string{}
-	for _, c := range a.cfg.Allow {
-		rules = append(rules, "Bash("+c+" *)")
+	switch spec.Kind {
+	case "main":
+		for _, c := range a.cfg.Allow {
+			rules = append(rules, "Bash("+c+" *)")
+		}
+	case "worker":
+		// gh posts as the operator, so only read and create commands pass. Merge, close, edit, comment and review do not.
+		rules = append(rules,
+			"Bash(gh pr create *)", "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)",
+			"Bash(gh issue create *)", "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)")
+		// A rule with no wildcard matches that command only, so no second branch, force flag or refspec passes.
+		branch := workspace.Branch(spec.Task)
+		rules = append(rules, "Bash(git push -u origin "+branch+")", "Bash(git push --force-with-lease origin "+branch+")")
+	case "reviewer":
+		rules = append(rules, "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)")
 	}
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
 	rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
@@ -230,14 +247,19 @@ func (a adapter) mainReads() []string {
 	return []string{"Read(" + rulePath(a.home) + "/**)", "Bash(ls *)"}
 }
 
+// pushWithGitOptions denies a push that starts with a git option, as in git -C . push or git -c a=b push.
+// Such a call does not match the excluded git push entry, so it would stay sandboxed and auto-approved.
+// A deny rule beats the auto-approval. It cannot match the allowed exact pushes, which have no option before push.
+const pushWithGitOptions = "Bash(git -* push*)"
+
 // deny returns the deny rules of a session. The main agent talks to the operator, so it denies nothing.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
 	switch spec.Kind {
 	case "reviewer":
-		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit"}
+		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":
-		rules = append(rules, "AskUserQuestion")
+		rules = append(rules, "AskUserQuestion", pushWithGitOptions)
 		for _, p := range spec.Protected {
 			p = rulePath(p)
 			// Claude Code applies an Edit rule to Write and NotebookEdit too. The second rule covers a folder's files.
