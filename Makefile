@@ -1,9 +1,9 @@
 # The anti-slop-go package patterns. The default covers the whole module.
 ANTISLOP_PKGS ?= ./...
 
-.PHONY: check fmt-check vet lint antislop test hooks
+.PHONY: check fmt-check neutral neutral-test vet lint antislop test hooks
 
-check: fmt-check vet lint antislop test
+check: fmt-check neutral-test neutral vet lint antislop test
 
 # The hook runs after staging, so this target reports unformatted files and never rewrites them.
 fmt-check:
@@ -13,6 +13,13 @@ fmt-check:
 		echo "$$out" >&2; \
 		exit 1; \
 	fi
+
+# The neutrality check fails on a private project name in a file name, staged text, or a commit message.
+neutral:
+	sh scripts/check-neutral.sh
+
+neutral-test:
+	sh scripts/check-neutral-test.sh
 
 vet:
 	go vet ./...
