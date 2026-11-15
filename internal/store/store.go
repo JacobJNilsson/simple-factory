@@ -27,6 +27,13 @@ type Message struct {
 	Created            time.Time
 }
 
+// Verdict is a reviewer's judgment of one round.
+type Verdict struct {
+	Round int
+	Pass  bool
+	Body  string
+}
+
 // Store holds tasks, verdicts and messages. The factory process is its only writer.
 type Store interface {
 	NextID() (string, error)
@@ -39,6 +46,8 @@ type Store interface {
 	Send(Message) error
 	Unread(agent string) ([]Message, error)
 	MarkRead(agent string, ids []string) error
+	// Verdicts returns the task's verdicts ordered by round.
+	Verdicts(id string) ([]Verdict, error)
 	WriteStatus(text string) error
 }
 
@@ -405,4 +414,33 @@ func (f files) MarkRead(agent string, ids []string) error {
 
 func (f files) WriteStatus(text string) error {
 	return writeFile(filepath.Join(f.dir, "status.md"), []byte(text))
+}
+
+func (f files) Verdicts(id string) ([]Verdict, error) {
+	d, err := f.existingTaskDir(id)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(d, "verdicts"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var out []Verdict
+	for _, e := range entries {
+		var v Verdict
+		var result string
+		if _, err := fmt.Sscanf(strings.TrimSuffix(e.Name(), ".md"), "%d-%s", &v.Round, &result); err != nil || (result != "pass" && result != "fail") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(d, "verdicts", e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		v.Pass, v.Body = result == "pass", string(body)
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Round < out[j].Round })
+	return out, nil
 }
