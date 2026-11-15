@@ -11,6 +11,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
@@ -68,13 +69,16 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	argv := []string{"env", "SFY_AGENT=" + spec.Name}
+	env := []string{"SFY_AGENT=" + spec.Name}
 	if spec.Task != "" {
-		argv = append(argv, "SFY_TASK="+spec.Task)
+		env = append(env, "SFY_TASK="+spec.Task)
 	}
-	return append(argv,
+	env = append(env,
 		"SFY_HOME="+a.home,
 		"PATH="+filepath.Dir(a.sfyBin)+string(os.PathListSeparator)+os.Getenv("PATH"),
+	)
+	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.
+	return envrun.Wrap(filepath.Dir(path), env, false, a.sfyBin, []string{
 		"claude",
 		"--name", spec.Name,
 		"--model", spec.Model,
@@ -82,7 +86,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		"--settings", path,
 		"--append-system-prompt", role,
 		spec.Prompt,
-	), nil
+	})
 }
 
 func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {

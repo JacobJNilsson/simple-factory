@@ -12,6 +12,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
 )
 
 // fakeMux is one multiplexer for both the sfy process and the agent sessions.
@@ -90,7 +91,7 @@ func TestUpStartsServeAndMain(t *testing.T) {
 	if len(r.m.starts) != 1 || r.m.starts[0][0] != "sfy" || r.m.starts[0][1] != r.o.home {
 		t.Fatalf("serve starts: %v", r.m.starts)
 	}
-	if got := strings.Join(r.m.starts[0][2:], " "); !strings.HasSuffix(got, "/bin/sfy serve") || !strings.HasPrefix(got, "env -i ") {
+	if got := strings.Join(r.m.starts[0][2:], " "); !strings.HasPrefix(got, "/bin/sfy run -i ") || !strings.HasSuffix(got, " -- /bin/sfy serve") {
 		t.Errorf("serve command: %q", got)
 	}
 	if len(r.l.specs) != 1 {
@@ -237,3 +238,60 @@ func TestServeEnvNeverPassesAnEmptyPath(t *testing.T) {
 		}
 	}
 }
+
+// startedServe runs up with a token in the environment and returns the parsed serve command.
+func startedServe(t *testing.T) (envruntest.Command, []string, string) {
+	t.Helper()
+	r := newRig(t)
+	r.o.environ = []string{"PATH=/usr/bin", "GITHUB_TOKEN=s3cret-token"}
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	command := r.m.starts[0][2:]
+	return envruntest.Parse(t, command), command, r.o.home
+}
+
+func TestServeCommandHoldsNoEnvironmentValue(t *testing.T) {
+	_, command, _ := startedServe(t)
+
+	if strings.Contains(strings.Join(command, " "), "s3cret-token") {
+		t.Errorf("command holds the token: %v", command)
+	}
+}
+
+func TestServeEnvFileHasMode0600(t *testing.T) {
+	c, _, _ := startedServe(t)
+
+	info, err := os.Stat(c.File)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("env file %v, %v", info, err)
+	}
+}
+
+func TestServeEnvFileHoldsTheServeEnvironment(t *testing.T) {
+	c, _, home := startedServe(t)
+
+	if want := []string{"SFY_HOME=" + home, "PATH=/usr/bin", "GITHUB_TOKEN=s3cret-token"}; !reflect.DeepEqual(c.Env, want) {
+		t.Errorf("env file holds %q", c.Env)
+	}
+}
+
+func TestFailedServeStartLeavesNoEnvFile(t *testing.T) {
+	r := newRig(t)
+	r.o.environ = []string{"PATH=/usr/bin", "GITHUB_TOKEN=s3cret-token"}
+	r.o.mux = failingMux{r.m}
+
+	if err := run(r.o); err == nil {
+		t.Fatal("run succeeded")
+	}
+
+	left, _ := os.ReadDir(filepath.Join(r.o.home, "sessions", "sfy"))
+	if len(left) != 0 {
+		t.Errorf("env files stay: %v", left)
+	}
+}
+
+// failingMux fails every start.
+type failingMux struct{ *fakeMux }
+
+func (failingMux) Start(string, string, []string) error { return errors.New("no pane") }

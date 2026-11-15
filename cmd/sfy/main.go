@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/JacobJNilsson/simple-factory/internal/cli"
+	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
 
@@ -27,6 +28,10 @@ func run(args []string) int {
 			stop()
 		}()
 		return report(up.Serve(ctx, os.Getenv, os.Stderr))
+	}
+	if len(args) > 0 && args[0] == "run" {
+		// On success the process becomes the command, so run returns only on an error.
+		return report(envrun.Run(args[1:]))
 	}
 	if len(args) > 0 && args[0] == "up" {
 		return report(up.Command(os.Environ(), os.Getenv, os.Stdout))

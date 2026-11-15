@@ -12,6 +12,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 )
 
@@ -121,10 +122,17 @@ func (o options) startServe() error {
 		return err
 	}
 	if !alive {
-		command := append([]string{"env", "-i"}, serveEnv(o.environ, o.home)...)
-		command = append(command, o.bin, "serve")
-		if err := o.mux.Start(serveSession, o.home, command); err != nil {
+		dir := filepath.Join(o.home, "sessions", serveSession)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
+		}
+		command, err := envrun.Wrap(dir, serveEnv(o.environ, o.home), true, o.bin, []string{o.bin, "serve"})
+		if err != nil {
+			return err
+		}
+		if err := o.mux.Start(serveSession, o.home, command); err != nil {
+			// The env file holds secrets, and nothing will run it now.
+			return errors.Join(err, envrun.Clean(dir))
 		}
 	}
 	deadline := time.Now().Add(o.wait)
