@@ -27,6 +27,9 @@ type fakeMux struct {
 	// answerAfter makes the socket answer after that many checks, when it is above zero.
 	answerAfter int
 	starts      [][]string
+	// stops lists the sessions that Stop ended. stubborn makes the socket answer after the sfy session stops.
+	stops    []string
+	stubborn bool
 }
 
 func (m *fakeMux) probe() bool {
@@ -44,9 +47,16 @@ func (m *fakeMux) Start(name, dir string, command []string) error {
 }
 func (m *fakeMux) Send(string, string) error    { return nil }
 func (m *fakeMux) Alive(n string) (bool, error) { return m.alive[n], nil }
-func (m *fakeMux) Stop(string) error            { return nil }
-func (m *fakeMux) Notify(string, string) error  { return nil }
-func (m *fakeMux) Show(string) error            { return nil }
+func (m *fakeMux) Stop(name string) error {
+	m.stops = append(m.stops, name)
+	if name == "sfy" && !m.stubborn {
+		m.answering = false
+	}
+	m.alive[name] = false
+	return nil
+}
+func (m *fakeMux) Notify(string, string) error { return nil }
+func (m *fakeMux) Show(string) error           { return nil }
 
 // fakeLauncher records the main agent's spec and marks its session alive.
 type fakeLauncher struct {
