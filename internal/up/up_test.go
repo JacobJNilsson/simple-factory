@@ -251,8 +251,15 @@ func TestServeEnvNeverPassesAnEmptyPath(t *testing.T) {
 	}
 }
 
+// serveRun holds what startedServe observed: the parsed command, its raw arguments, and the sfy home.
+type serveRun struct {
+	parsed  envruntest.Command
+	command []string
+	home    string
+}
+
 // startedServe runs up with a token in the environment and returns the parsed serve command.
-func startedServe(t *testing.T) (envruntest.Command, []string, string) {
+func startedServe(t *testing.T) serveRun {
 	t.Helper()
 	r := newRig(t)
 	r.o.environ = []string{"PATH=/usr/bin", "GITHUB_TOKEN=s3cret-token"}
@@ -260,31 +267,31 @@ func startedServe(t *testing.T) (envruntest.Command, []string, string) {
 		t.Fatal(err)
 	}
 	command := r.m.starts[0][2:]
-	return envruntest.Parse(t, command), command, r.o.home
+	return serveRun{parsed: envruntest.Parse(t, command), command: command, home: r.o.home}
 }
 
 func TestServeCommandHoldsNoEnvironmentValue(t *testing.T) {
-	_, command, _ := startedServe(t)
+	s := startedServe(t)
 
-	if strings.Contains(strings.Join(command, " "), "s3cret-token") {
-		t.Errorf("command holds the token: %v", command)
+	if strings.Contains(strings.Join(s.command, " "), "s3cret-token") {
+		t.Errorf("command holds the token: %v", s.command)
 	}
 }
 
 func TestServeEnvFileHasMode0600(t *testing.T) {
-	c, _, _ := startedServe(t)
+	s := startedServe(t)
 
-	info, err := os.Stat(c.File)
+	info, err := os.Stat(s.parsed.File)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Errorf("env file %v, %v", info, err)
 	}
 }
 
 func TestServeEnvFileHoldsTheServeEnvironment(t *testing.T) {
-	c, _, home := startedServe(t)
+	s := startedServe(t)
 
-	if want := []string{"SFY_HOME=" + home, "PATH=/usr/bin", "GITHUB_TOKEN=s3cret-token"}; !reflect.DeepEqual(c.Env, want) {
-		t.Errorf("env file holds %q", c.Env)
+	if want := []string{"SFY_HOME=" + s.home, "PATH=/usr/bin", "GITHUB_TOKEN=s3cret-token"}; !reflect.DeepEqual(s.parsed.Env, want) {
+		t.Errorf("env file holds %q", s.parsed.Env)
 	}
 }
 
