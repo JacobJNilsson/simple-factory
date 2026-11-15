@@ -46,6 +46,19 @@ func newRig(t *testing.T) (home string, sfy runSfy) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux is not on PATH")
 	}
+	// macOS limits a socket path to 104 bytes, so use TMPDIR only when it leaves room for the tmux socket name.
+	base := os.TempDir()
+	if len(base) > 40 {
+		base = "/tmp"
+	}
+	sockDir, err := os.MkdirTemp(base, "fx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	// A private socket folder keeps tmux off the shared /tmp, which a sandbox may forbid writing.
+	t.Setenv("TMUX_TMPDIR", sockDir)
+	skipIfTmuxCannotStartPane(t)
 	tmp, err := os.MkdirTemp("", "fe")
 	if err != nil {
 		t.Fatal(err)
@@ -137,4 +150,40 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	}
 	status, _ := sfy("", "", "status")
 	t.Fatalf("task t1 did not finish in 30 seconds.\ntask show:\n%s\nstatus:\n%s", shown, status)
+}
+
+// skipIfTmuxCannotStartPane starts a throwaway tmux session and skips the test when tmux cannot fork a pane.
+// Any other start failure fails the test.
+func skipIfTmuxCannotStartPane(t *testing.T) {
+	t.Helper()
+	sock := fmt.Sprintf("sfy-probe-%d", rand.Uint32())
+	out, err := exec.CommandContext(context.Background(), "tmux", "-f", "/dev/null", "-L", sock, "new-session", "-d", "-s", "probe", "--", "sleep", "5").CombinedOutput()
+	_ = exec.CommandContext(context.Background(), "tmux", "-L", sock, "kill-server").Run()
+	if err == nil {
+		return
+	}
+	msg := strings.TrimSpace(string(out))
+	if tmuxForkBlocked(msg) {
+		t.Skipf("tmux cannot start a pane here, for example inside a sandbox: %s", msg)
+	}
+	t.Fatalf("tmux probe session failed: %v: %s", err, msg)
+}
+
+// tmuxForkBlocked reports whether a tmux start error says the system refused to fork a pane.
+func tmuxForkBlocked(msg string) bool {
+	return strings.Contains(msg, "fork failed") && strings.Contains(msg, "Operation not permitted")
+}
+
+func TestTmuxForkBlocked(t *testing.T) {
+	cases := map[string]bool{
+		"create window failed: fork failed: Operation not permitted": true,
+		"create window failed: fork failed: Resource busy":           false,
+		"error connecting: Operation not permitted":                  false,
+		"": false,
+	}
+	for msg, want := range cases {
+		if got := tmuxForkBlocked(msg); got != want {
+			t.Errorf("tmuxForkBlocked(%q) = %v, want %v", msg, got, want)
+		}
+	}
 }
