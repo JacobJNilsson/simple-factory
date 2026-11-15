@@ -17,6 +17,8 @@ import (
 )
 
 type fakeLauncher struct {
+	sent     []string
+	dead     map[string]bool
 	startErr error
 	stopErr  error
 	started  []engine.SessionSpec
@@ -31,8 +33,11 @@ func (f *fakeLauncher) Start(s engine.SessionSpec) error {
 	f.started = append(f.started, s)
 	return nil
 }
-func (f *fakeLauncher) Send(string, string) error  { return nil }
-func (f *fakeLauncher) Alive(string) (bool, error) { return true, nil }
+func (f *fakeLauncher) Send(name, text string) error {
+	f.sent = append(f.sent, name+": "+text)
+	return nil
+}
+func (f *fakeLauncher) Alive(name string) (bool, error) { return !f.dead[name], nil }
 func (f *fakeLauncher) Stop(name string) error {
 	if f.stopErr != nil {
 		return f.stopErr
@@ -45,21 +50,31 @@ func (f *fakeLauncher) Notify(name, text string) error {
 	return nil
 }
 
-type fakeWorkspaces struct{ removed []string }
+type fakeWorkspaces struct {
+	removed   []string
+	removeErr error
+}
 
 func (f *fakeWorkspaces) Create(t task.Task) (string, error) { return "/work/" + t.ID, nil }
-func (f *fakeWorkspaces) Remove(t task.Task) error           { f.removed = append(f.removed, t.ID); return nil }
+func (f *fakeWorkspaces) Remove(t task.Task) error {
+	if f.removeErr != nil {
+		return f.removeErr
+	}
+	f.removed = append(f.removed, t.ID)
+	return nil
+}
 
 type fakeClock struct{ now time.Time }
 
 func (c *fakeClock) Now() time.Time { return c.now }
 
 type env struct {
-	home string
-	st   store.Store
-	l    *fakeLauncher
-	ws   *fakeWorkspaces
-	e    *engine.Engine
+	home  string
+	st    store.Store
+	l     *fakeLauncher
+	ws    *fakeWorkspaces
+	clock *fakeClock
+	e     *engine.Engine
 }
 
 func newEnv(t *testing.T) env {
@@ -67,9 +82,9 @@ func newEnv(t *testing.T) env {
 	home := t.TempDir()
 	st := store.Files(home)
 	l, ws := &fakeLauncher{}, &fakeWorkspaces{}
-	cfg := config.Config{ReviewRounds: 3, Models: config.Models{Reviewer: "rev-model"}}
+	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, Models: config.Models{Reviewer: "rev-model"}}
 	clock := &fakeClock{now: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	return env{home, st, l, ws, engine.New(st, l, ws, cfg, clock)}
+	return env{home, st, l, ws, clock, engine.New(st, l, ws, cfg, clock)}
 }
 
 const taskFile = "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n"
@@ -535,4 +550,144 @@ func TestTaskEditOfAQueuedTaskNamesTheStateItNeeds(t *testing.T) {
 	a := v.run("main", "", "task edit", taskFile, "t1")
 
 	mustFail(t, a, "needs new")
+}
+
+const (
+	reminder = "Your turn ended without a report. If you need an answer, run factory report blocked <question>."
+	note     = "New message. Run: factory inbox"
+)
+
+func TestTurnEndedFromAWorkerThatDidNotReportTypesTheReminder(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	if !slices.Equal(v.l.sent, []string{"worker-t1: " + reminder}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTurnEndedFromAWorkerThatReportedTypesNoReminder(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTurnEndedTypesTheNoteForUnreadMessages(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
+
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	if !slices.Equal(v.l.sent, []string{"worker-t1: " + note}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestAMessageToAnAgentThatWaitsTypesTheNoteOnce(t *testing.T) {
+	v := newEnv(t)
+	mustOK(t, v.run("main", "", "hook turn-ended", ""))
+
+	mustOK(t, v.run("", "", "task new", taskFile))
+	mustOK(t, v.run("", "", "task new", taskFile))
+
+	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestAMessageToABusyAgentTypesNothing(t *testing.T) {
+	v := newEnv(t)
+
+	mustOK(t, v.run("", "", "task new", taskFile))
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTheReminderStopsAfterTwoAndMainGetsOneMessage(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	for range 4 {
+		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	}
+
+	if !slices.Equal(v.l.sent, []string{"worker-t1: " + reminder, "worker-t1: " + reminder}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "worker-t1 ended 2 turns without a report.") {
+		t.Fatalf("got %+v", msgs)
+	}
+}
+
+func TestAReportResetsTheCountOfReminders(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	if len(v.l.sent) != 3 || len(v.inbox(t, "main")) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTurnEndedFromAReviewerAfterItsVerdictTypesNothing(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Review, 1)
+	mustOK(t, v.run("review-t1-1", "t1", "verdict fail", "Tests fail."))
+
+	mustOK(t, v.run("review-t1-1", "t1", "hook turn-ended", ""))
+	mustOK(t, v.run("review-t1-1", "t1", "hook turn-ended", ""))
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTheErrorForAForbiddenCommandListsNoHookCommand(t *testing.T) {
+	v := newEnv(t)
+
+	a := v.run("worker-t1", "t1", "task new", taskFile)
+
+	if strings.Contains(a.Error, "hook") {
+		t.Fatalf("got %q", a.Error)
+	}
+}
+
+func TestPermissionFromAWorkerGivesMainAMessageNamingTheTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Run rm -rf build?"))
+
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "worker-t1") || !strings.Contains(msgs[0].Body, "t1") || !strings.Contains(msgs[0].Body, "rm -rf build") {
+		t.Fatalf("got %+v", msgs)
+	}
+}
+
+func TestPermissionFromMainNotifiesTheOperator(t *testing.T) {
+	v := newEnv(t)
+
+	mustOK(t, v.run("main", "", "hook permission", "Run make?"))
+
+	if len(v.l.notified) != 1 || !strings.Contains(v.l.notified[0], "Run make?") {
+		t.Fatalf("notified %v", v.l.notified)
+	}
 }

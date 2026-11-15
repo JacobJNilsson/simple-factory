@@ -231,6 +231,7 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 		}
 		return "", err
 	}
+	e.agents[reviewerOf(t)] = &agentState{}
 	return "", nil
 }
 
@@ -357,4 +358,62 @@ func (e *Engine) status(protocol.Request) (string, error) {
 		return "", err
 	}
 	return store.RenderStatus(tasks), nil
+}
+
+// maxReminders is how many turns in a row without a report get a reminder before main hears of it.
+const maxReminders = 2
+
+// runs reports whether a hook comes from a session that factory still counts as running.
+func (e *Engine) runs(name string) bool {
+	return name == "main" || e.live(name) == nil
+}
+
+// hookTurnEnded runs when an agent's turn ends and its session waits for input.
+func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
+	name := req.Caller.Agent
+	if !e.runs(name) {
+		return "", nil
+	}
+	s := e.agent(name)
+	s.waiting, s.hookSince = true, true
+	var errs []error
+	if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
+		errs = append(errs, e.remind(name, s))
+	}
+	s.reported = false
+	unread, err := e.st.Unread(name)
+	if err != nil {
+		return "", errors.Join(append(errs, err)...)
+	}
+	if len(unread) > 0 {
+		errs = append(errs, e.typeNote(name))
+	}
+	return "", errors.Join(errs...)
+}
+
+// remind types the reminder for a missing report. After maxReminders it tells main once and types nothing.
+func (e *Engine) remind(name string, s *agentState) error {
+	s.reminders++
+	if s.reminders > maxReminders {
+		if s.reminders > maxReminders+1 {
+			return nil
+		}
+		return e.message("main", "factory", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
+	}
+	s.waiting, s.hookSince = false, false
+	return e.l.Send(name, noReportNote)
+}
+
+// hookPermission runs when an agent's permission prompt opens.
+func (e *Engine) hookPermission(req protocol.Request) (string, error) {
+	name := req.Caller.Agent
+	if !e.runs(name) {
+		return "", nil
+	}
+	e.agent(name).hookSince = true
+	if name == "main" {
+		return "", e.l.Notify("main", "Main waits at a permission prompt: "+req.Body)
+	}
+	note := fmt.Sprintf("%s waits at a permission prompt for task %s: %s", name, req.Caller.Task, req.Body)
+	return "", e.message("main", name, note)
 }
