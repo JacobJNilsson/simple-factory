@@ -1,11 +1,15 @@
 package config_test
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -20,14 +24,15 @@ func writeConfig(t *testing.T, body string) string {
 	return home
 }
 
+func failingLookup() (string, error) { return "", errors.New("no getconf") }
+
 func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 	home := t.TempDir()
 	wantCache := "~/.cache"
 	if runtime.GOOS == "darwin" {
 		wantCache = "~/Library/Caches"
 	}
-
-	got, err := config.Load(home)
+	got, err := config.LoadWithTempLookup(home, failingLookup)
 
 	if err != nil {
 		t.Fatal(err)
@@ -191,5 +196,41 @@ func TestLoadReadsPassEnvAndDefaultsToNone(t *testing.T) {
 	}
 	if len(def.PassEnv) != 0 {
 		t.Fatalf("default pass_env = %v", def.PassEnv)
+	}
+}
+
+func TestLoadAllowsTheMacOSUserTempFolder(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the user temp folder default applies to macOS only")
+	}
+	out, err := exec.CommandContext(context.Background(), "getconf", "DARWIN_USER_TEMP_DIR").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.TrimRight(strings.TrimSpace(string(out)), "/")
+
+	got, err := config.Load(t.TempDir())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(got.AllowWrite, want) {
+		t.Fatalf("allow_write %v lacks %q", got.AllowWrite, want)
+	}
+}
+
+func TestLoadLeavesOutTheUserTempFolderWhenTheLookupFails(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the user temp folder default applies to macOS only")
+	}
+
+	got, err := config.LoadWithTempLookup(t.TempDir(), failingLookup)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"~/Library/Caches", "~/go/pkg/mod"}
+	if !slices.Equal(got.AllowWrite, want) {
+		t.Fatalf("allow_write %v, want %v", got.AllowWrite, want)
 	}
 }
