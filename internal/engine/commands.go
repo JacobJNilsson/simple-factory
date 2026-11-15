@@ -120,6 +120,10 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	}
 	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n\n%s", t.Round, t.Progress, t.Markdown())
 	for _, v := range verdicts {
+		if v.Feedback {
+			fmt.Fprintf(&b, "\n## Feedback, after round %d\n\n%s\n", v.Round, v.Body)
+			continue
+		}
 		result := "fail"
 		if v.Pass {
 			result = "pass"
@@ -211,6 +215,29 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 		return "", err
 	}
 	return "", e.cleanup(t)
+}
+
+// taskFeedback sends an approved task back to a worker in the same workspace. The round stays as it is.
+func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
+	t, err := e.load(req)
+	if err != nil {
+		return "", err
+	}
+	if err := need(t, task.Approved); err != nil {
+		return "", err
+	}
+	if t.Dir == "" {
+		return "", fmt.Errorf("task %s has no workspace left, so a worker cannot go on in it", t.ID)
+	}
+	body := strings.TrimSpace(text(req, req.Args[1:]))
+	if body == "" {
+		return "", errors.New("feedback needs a text")
+	}
+	if err := e.st.AddFeedback(t.ID, t.Round, body); err != nil {
+		return "", err
+	}
+	t.State = task.Queued
+	return "", e.save(t)
 }
 
 // taskArchive hides a done or cancelled task from the default views. The task keeps its state, files and id.
@@ -328,13 +355,23 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	verdicts, err := e.st.Verdicts(t.ID)
+	if err != nil {
+		return "", err
+	}
 	before := t
 	t.State = task.Review
 	t.Round++
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	prompt := fmt.Sprintf("Review this task.\n\n%s\nThe worker reports:\n\n%s\n", t.Markdown(), text(req, req.Args))
+	prompt := fmt.Sprintf("Review this task.\n\n%s\n", t.Markdown())
+	for _, v := range verdicts {
+		if v.Feedback {
+			prompt += fmt.Sprintf("Feedback that was sent after round %d. Check that the worker addressed it:\n\n%s\n\n", v.Round, v.Body)
+		}
+	}
+	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", text(req, req.Args))
 	err = e.l.Start(SessionSpec{
 		Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir,
 		Model: e.cfg.Models.Reviewer, Prompt: prompt, Protected: t.Protected,

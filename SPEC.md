@@ -54,7 +54,7 @@ A task moves through these states:
 | `working` | A worker is doing the task. |
 | `review` | A reviewer checks the worker's result. |
 | `feedback` | The worker fixes the result after a failed review. The round shows how many reviews have run, for example `feedback 1` after the first failed review. |
-| `approved` | A reviewer passed the result. The task waits for the main agent to complete it. |
+| `approved` | A reviewer passed the result. The task waits for the main agent to complete it, or to send it back with `sfy task feedback`. |
 | `done` | The main agent completed the task. |
 | `escalated` | The task waits for the operator. |
 | `cancelled` | The main agent or the operator stopped the task. |
@@ -64,6 +64,7 @@ A task moves through these states:
 - sfy starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
 - When the reviewer's verdict is `pass`, the task moves to `approved`. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent: "Task <id> is approved. Merge the pull request of branch <branch>, then run: sfy task complete <id>". A task with no repo gets a note that says it has no pull request.. A task without a pull request, for example a report, is completed the same way. The main agent checks the result and runs the command.
+- When the main agent or the operator runs `sfy task feedback`, an `approved` task with a workspace moves to `queued`. The round and the `review_rounds` limit stay as they are, and the feedback does not count as a failed review. When a worker slot is free, sfy starts a new worker in the kept workspace. Its first message holds the task file and the feedback text. It says that the workspace and branch hold the earlier work, and that the branch may already have an open pull request. The worker pushes to that branch and opens no second pull request. The worker then reports `done`, and the next reviewer gets the feedback text too and checks that the worker addressed it.
 - When the main agent runs `sfy task complete`, the task moves to `done`. The main agent merges, and a merge completes a task.
 - When the verdict is `fail`, sfy sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. sfy first sends the verdict to the worker. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
@@ -104,6 +105,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task list [--archived]` | anyone | Lists the tasks and their states, without archived tasks. With `--archived`, lists only the archived tasks. |
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
 | `sfy task complete <id>` | main agent, operator | Moves an `approved` task to `done` and cleans up. Fails for a task in any other state. |
+| `sfy task feedback <id> <text>` | main agent, operator | Sends an `approved` task back to a worker in the same workspace, with the feedback text. Fails for a task in any other state, and for a task with no workspace left. `sfy task show` lists the feedback with the verdicts. |
 | `sfy task archive <id>` | main agent, operator | Archives a `done` or `cancelled` task. The task keeps its state, files, verdicts and id, and its workspace and branch stay. Fails for any other state and for an archived task. `sfy task show` still prints it and says that it is archived. |
 | `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. Works in any state except `done` and `cancelled`. |
 | `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |

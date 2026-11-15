@@ -170,6 +170,7 @@ var commands = map[string]command{
 	"task queue":      {(*Engine).taskQueue, []kind{main}},
 	"task cancel":     {(*Engine).taskCancel, []kind{operator, main}},
 	"task resume":     {(*Engine).resume, []kind{operator, main}},
+	"task feedback":   {(*Engine).taskFeedback, []kind{operator, main}},
 	"task complete":   {(*Engine).taskComplete, []kind{operator, main}},
 	"task archive":    {(*Engine).taskArchive, []kind{operator, main}},
 	"send":            {(*Engine).send, []kind{main}},

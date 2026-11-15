@@ -27,11 +27,13 @@ type Message struct {
 	Created            time.Time
 }
 
-// Verdict is a reviewer's judgment of one round.
+// Verdict is a reviewer's judgment of one round, or feedback that the operator or main sent after the task was approved.
 type Verdict struct {
 	Round int
 	Pass  bool
-	Body  string
+	// Feedback is true for feedback on an approved task. Round is the round that the task had when the feedback came.
+	Feedback bool
+	Body     string
 }
 
 // Store holds tasks, verdicts and messages. The sfy process is its only writer.
@@ -43,10 +45,12 @@ type Store interface {
 	// Save writes task.md and the state file, so it also replaces the file of a new task.
 	Save(task.Task) error
 	AddVerdict(id string, round int, pass bool, body string) error
+	// AddFeedback records feedback on an approved task. Verdicts returns it with the verdicts.
+	AddFeedback(id string, round int, body string) error
 	Send(Message) error
 	Unread(agent string) ([]Message, error)
 	MarkRead(agent string, ids []string) error
-	// Verdicts returns the task's verdicts ordered by round.
+	// Verdicts returns the task's verdicts and feedback ordered by round. Feedback follows the verdict of its round.
 	Verdicts(id string) ([]Verdict, error)
 	WriteStatus(text string) error
 }
@@ -307,6 +311,14 @@ func (f files) AddVerdict(id string, round int, pass bool, body string) error {
 	return writeFile(filepath.Join(d, "verdicts", fmt.Sprintf("%d-%s.md", round, result)), []byte(body))
 }
 
+func (f files) AddFeedback(id string, round int, body string) error {
+	d, err := f.existingTaskDir(id)
+	if err != nil {
+		return err
+	}
+	return writeFile(filepath.Join(d, "verdicts", fmt.Sprintf("%d-feedback.md", round)), []byte(body))
+}
+
 func (f files) inbox(agent string) (string, error) {
 	if !safeName.MatchString(agent) {
 		return "", fmt.Errorf("store: invalid agent name %q", agent)
@@ -433,16 +445,21 @@ func (f files) Verdicts(id string) ([]Verdict, error) {
 	for _, e := range entries {
 		var v Verdict
 		var result string
-		if _, err := fmt.Sscanf(strings.TrimSuffix(e.Name(), ".md"), "%d-%s", &v.Round, &result); err != nil || (result != "pass" && result != "fail") {
+		if _, err := fmt.Sscanf(strings.TrimSuffix(e.Name(), ".md"), "%d-%s", &v.Round, &result); err != nil || (result != "pass" && result != "fail" && result != "feedback") {
 			continue
 		}
 		body, err := os.ReadFile(filepath.Join(d, "verdicts", e.Name()))
 		if err != nil {
 			return nil, err
 		}
-		v.Pass, v.Body = result == "pass", string(body)
+		v.Pass, v.Feedback, v.Body = result == "pass", result == "feedback", string(body)
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Round < out[j].Round })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Round != out[j].Round {
+			return out[i].Round < out[j].Round
+		}
+		return !out[i].Feedback && out[j].Feedback
+	})
 	return out, nil
 }

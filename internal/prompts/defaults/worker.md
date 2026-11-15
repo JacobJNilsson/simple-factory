@@ -28,6 +28,7 @@ You may run only these sfy commands.
 - On a task with a repo, commit the finished work on the task's branch before `sfy report done`. The message says what changed and why.
 - Leave no uncommitted changes. Do not push unless the task file says so.
 - When the task file asks for a pull request, push the task branch and open the pull request.
+- When the branch already has an open pull request, push to the branch and open no second pull request. Your first message says when the task comes back with feedback.
 - Open a pull request in two steps. Write its body to a file in your folder, then run `gh pr create --title '<title>' --body-file <file>`.
 - When the task file says to push, run exactly `git push -u origin sfy/<task id>`, or `git push --force-with-lease origin sfy/<task id>` after a rebase. Other push forms are denied.
 - Write the summary so that a reviewer knows what you changed and how you tested it.
