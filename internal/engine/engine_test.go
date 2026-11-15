@@ -1280,3 +1280,29 @@ func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
 		t.Fatalf("notified %v", v.l.notified)
 	}
 }
+func TestPermissionMessageNamesTheToolAndItsMainInput(t *testing.T) {
+	const ids = `"session_id":"s1","transcript_path":"/x/y.jsonl"`
+	cases := map[string]struct{ body, want string }{
+		"bash":                 {`{` + ids + `,"tool_name":"Bash","tool_input":{"command":"ls -la","description":"d"}}`, "Tool: Bash. Command: ls -la"},
+		"edit":                 {`{` + ids + `,"tool_name":"Edit","tool_input":{"file_path":"/w/a.go","old_string":"x"}}`, "Tool: Edit. File: /w/a.go"},
+		"read":                 {`{` + ids + `,"tool_name":"Read","tool_input":{"file_path":"/w/c.go"}}`, "Tool: Read. File: /w/c.go"},
+		"unknown tool":         {`{` + ids + `,"tool_name":"Grep","tool_input":{ "pattern": "x" }}`, `Tool: Grep. Input: {"pattern":"x"}`},
+		"missing tool input":   {`{"tool_name":"Task"}`, "Tool: Task"},
+		"non-string command":   {`{"tool_name":"Bash","tool_input":{"command":5}}`, `Tool: Bash. Input: {"command":5}`},
+		"body that is no JSON": {"Run rm -rf build?", "Run rm -rf build?"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			v := newEnv(t)
+			v.seed(t, task.Working, 0)
+
+			mustOK(t, v.run("worker-t1", "t1", "hook permission", c.body))
+
+			msgs := v.inbox(t, "main")
+			want := "worker-t1 waits at a permission prompt for task t1. " + c.want
+			if len(msgs) != 1 || msgs[0].Body != want {
+				t.Fatalf("got %+v, want %q", msgs, want)
+			}
+		})
+	}
+}
