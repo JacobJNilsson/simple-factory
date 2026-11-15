@@ -2,9 +2,11 @@ package up
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -59,21 +61,62 @@ func newParts(env func(string) string) (parts, error) {
 }
 
 // Serve runs the sfy process until ctx ends. It logs to stderr and to sfy.log in the sfy home.
+// A fatal error also goes to sfy.log, because the multiplexer pane may close before anyone reads stderr.
 func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error {
-	p, err := newParts(env)
-	if err != nil {
+	home := config.Home(env)
+	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(p.home, 0o700); err != nil {
-		return err
-	}
-	logFile, err := os.OpenFile(filepath.Join(p.home, logName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	logFile, err := os.OpenFile(filepath.Join(home, logName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = logFile.Close() }()
+	err = serve(ctx, env, io.MultiWriter(stderr, logFile))
+	if err != nil {
+		_, _ = fmt.Fprintf(logFile, "%s fatal: %v\n", time.Now().Format(time.RFC3339), err)
+	}
+	return err
+}
+
+func serve(ctx context.Context, env func(string) string, log io.Writer) error {
+	p, err := newParts(env)
+	if err != nil {
+		return err
+	}
+	if err := checkSocketPath(socket(p.home)); err != nil {
+		return err
+	}
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.New(p.home), p.cfg, systemClock{})
-	return server.Serve(ctx, socket(p.home), eng, tickEvery, io.MultiWriter(stderr, logFile))
+	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
+}
+
+// socketPathLimit is the longest Unix socket path in bytes, with the terminating zero byte.
+// macOS allows 104 bytes and Linux 108.
+func socketPathLimit() int {
+	if runtime.GOOS == "darwin" {
+		return 104
+	}
+	return 108
+}
+
+// socketPathError reports a socket path that is too long to bind.
+type socketPathError struct {
+	path string
+	max  int
+}
+
+func (e *socketPathError) Error() string {
+	return fmt.Sprintf("the socket path %s has %d bytes, and this system allows %d at most. Set SFY_HOME to a shorter path", e.path, len(e.path), e.max)
+}
+
+// checkSocketPath fails when the socket path is too long to bind.
+func checkSocketPath(path string) error {
+	limit := socketPathLimit()
+	if len(path) >= limit {
+		return &socketPathError{path: path, max: limit - 1}
+	}
+	return nil
 }
 
 // Command runs sfy up for the sfy home that env names.
@@ -83,6 +126,9 @@ func Command(environ []string, env func(string) string, stdout io.Writer) error 
 		return err
 	}
 	sock := socket(p.home)
+	if err := checkSocketPath(sock); err != nil {
+		return err
+	}
 	return run(options{
 		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
 		mux: p.mux, launcher: p.launcher,
