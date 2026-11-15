@@ -136,18 +136,38 @@ func checkSocketPath(path string) error {
 
 // Command runs sfy up for the sfy home that env names.
 func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
-	p, err := newParts(env)
+	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {
 		return err
 	}
-	sock := socket(p.home)
-	if err := checkSocketPath(sock); err != nil {
+	return run(o)
+}
+
+// Restart runs sfy restart for the sfy home that env names. Only the operator may run it.
+func Restart(environ []string, env func(string) string, stdout, stderr io.Writer) error {
+	if env("SFY_AGENT") != "" {
+		return ErrNotOperator
+	}
+	o, err := newOptions(environ, env, stdout, stderr)
+	if err != nil {
 		return err
 	}
-	return run(options{
+	return restart(o)
+}
+
+func newOptions(environ []string, env func(string) string, stdout, stderr io.Writer) (options, error) {
+	p, err := newParts(env)
+	if err != nil {
+		return options{}, err
+	}
+	sock := socket(p.home)
+	if err := checkSocketPath(sock); err != nil {
+		return options{}, err
+	}
+	return options{
 		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
 		mux: p.mux, launcher: p.launcher, warn: stderr,
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
-	})
+	}, nil
 }

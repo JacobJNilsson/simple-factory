@@ -76,7 +76,7 @@ func run(o options) error {
 		serveStarted = true
 		started = append(started, "the sfy process")
 	}
-	alive, err := o.launcher.Alive("main")
+	alive, err := o.launcher.Alive(mainSession)
 	if err != nil {
 		return err
 	}
@@ -99,16 +99,11 @@ func run(o options) error {
 }
 
 func report(out io.Writer, started []string) error {
-	var err error
-	switch len(started) {
-	case 0:
-		_, err = fmt.Fprintln(out, "Everything already runs.")
-	case 1:
-		_, err = fmt.Fprintf(out, "Started %s.\n", started[0])
-	default:
-		_, err = fmt.Fprintf(out, "Started %s and %s.\n", started[0], started[1])
+	if len(started) == 0 {
+		_, err := fmt.Fprintln(out, "Everything already runs.")
+		return err
 	}
-	return err
+	return reportList(out, "Started", started)
 }
 
 // ensureNotes creates an empty notes.md that only the operator's user can read.

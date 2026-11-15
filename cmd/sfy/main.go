@@ -36,6 +36,9 @@ func run(args []string) int {
 	if len(args) > 0 && args[0] == "up" {
 		return report(up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr))
 	}
+	if len(args) > 0 && args[0] == "restart" {
+		return report(up.Restart(os.Environ(), os.Getenv, os.Stdout, os.Stderr))
+	}
 	return cli.Run(args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
 }
 
