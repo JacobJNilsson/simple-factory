@@ -455,3 +455,44 @@ func TestSaveKeepsATasksWorkspaceForTheNextRead(t *testing.T) {
 		t.Fatalf("got dir %q", got.Dir)
 	}
 }
+
+func TestVerdictsReturnsTheVerdictsOrderedByRound(t *testing.T) {
+	s := store.Files(t.TempDir())
+	if err := s.Create(sample("t1", task.Review)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddVerdict("t1", 2, true, "good"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddVerdict("t1", 1, false, "bad"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Verdicts("t1")
+
+	want := []store.Verdict{{Round: 1, Pass: false, Body: "bad"}, {Round: 2, Pass: true, Body: "good"}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestVerdictsIsEmptyForATaskWithoutVerdicts(t *testing.T) {
+	s := store.Files(t.TempDir())
+	if err := s.Create(sample("t1", task.Review)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Verdicts("t1")
+
+	if err != nil || len(got) != 0 {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestVerdictsReturnsErrNotFoundForAnUnknownTask(t *testing.T) {
+	_, err := store.Files(t.TempDir()).Verdicts("t9")
+
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("got %v", err)
+	}
+}
