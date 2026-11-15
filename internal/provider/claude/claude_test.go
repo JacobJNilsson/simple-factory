@@ -494,10 +494,20 @@ func TestMainBashRulesAreTheConfigSfyAndLsRules(t *testing.T) {
 	}
 }
 
-func TestMainKeepsAcceptEdits(t *testing.T) {
+func TestMainHasNoPermissionModeFlag(t *testing.T) {
 	p, _ := setup(t, bin)
 
 	argv := command(t, p, mainSpec())
+
+	if slices.Contains(argv, "--permission-mode") {
+		t.Errorf("main argv has --permission-mode: %v", argv)
+	}
+}
+
+func TestReviewerKeepsAcceptEditsFlag(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	argv := command(t, p, reviewerSpec())
 
 	if got := flagValue(t, argv, "--permission-mode"); got != "acceptEdits" {
 		t.Errorf("--permission-mode %q", got)
