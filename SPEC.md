@@ -34,7 +34,7 @@ factory enforces the rule for workers and reviewers:
 
 - Their settings deny the provider's tool for questions to the user.
 - A hook reports a permission prompt to factory, and the task's worker counts as blocked.
-- When a turn ends without a `factory report`, factory sends the agent a note: "Your turn ended without a report. If you need an answer, run factory report blocked <question>."
+- When a turn ends without a `factory report`, factory sends the agent a note: "Your turn ended without a report. If you need an answer, run factory report blocked <question>." After two such turns in a row, factory stops the note and tells the main agent instead.
 
 Each kind of agent has a prompt file in the repo: `prompts/main.md`, `prompts/worker.md` and `prompts/reviewer.md`. The prompt tells the agent which `factory` commands it uses.
 
@@ -60,12 +60,13 @@ A task moves through these states:
 
 - A task that a program or the operator creates starts in `new`, and factory tells the main agent. The main agent adds context, for example from its notes, and replaces the task file. It then queues the task, cancels it, or escalates it.
 - A task that the main agent creates starts in `queued`.
-- factory starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2.
+- factory starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and factory starts a reviewer.
 - When the reviewer's verdict is `pass`, the task moves to `done`, and factory tells the main agent.
 - When the verdict is `fail`, factory sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
 - When a task is `done` or `cancelled`, factory ends its worker and reviewer sessions and removes the worktree. The branch stays.
+- factory does not restart a worker that ended on its own. It tells the main agent, which decides what happens to the task.
 
 ## State
 
