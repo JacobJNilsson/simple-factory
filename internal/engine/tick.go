@@ -96,7 +96,7 @@ func (e *Engine) startFailed(t task.Task, err error) error {
 	}
 	delete(e.startFails, t.ID)
 	why := fmt.Sprintf("Its worker failed to start %d times. Last error: %v", maxStartFailures, err)
-	return errors.Join(err, e.escalateTask(t, why))
+	return errors.Join(err, e.escalateTask(t, why, true))
 }
 
 // resendNotes types the note again for an agent whose messages stay unread.
