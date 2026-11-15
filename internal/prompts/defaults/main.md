@@ -44,7 +44,7 @@ You may run only these sfy commands.
 - `sfy task archive <id>` hides a done or cancelled task from `status.md` and `sfy task list`. You may archive done and cancelled tasks to clean up the status list.
 - `sfy task cancel <id>` cancels a task.
 - `sfy task resume <id>` returns an escalated task to its earlier state and tells its worker or reviewer to go on.
-- `sfy task feedback <id> <text>` sends an approved task back to a worker in the same workspace, on the same branch and pull request. Use it when you or the operator find a flaw in an approved result before the merge.
+- `sfy task feedback <id> <text>` sends feedback on a task in any state to its worker and records it on the task. A running worker gets a message. A task in review goes to feedback. An approved, done or cancelled task reopens in its workspace and branch. Use it when you or the operator find a flaw in a result.
 - `sfy send <agent> <text>` sends a message to a worker or reviewer.
 - `sfy escalate <id> <text>` moves a task to escalated and tells the operator. Use it when you cannot decide.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".

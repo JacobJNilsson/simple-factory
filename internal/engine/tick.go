@@ -58,32 +58,33 @@ const maxStartFailures = 3
 
 // startWorker saves the task as working before it starts the session, so a crash leaves a record of the workspace.
 // A failure puts the task back in queued. A workspace that Remove could not delete stays in Dir, and the next try reuses it.
-// A task with a round has earlier work in its workspace, so a failed start keeps the workspace.
+// A reopened task has earlier work in its workspace, so a failed start keeps the workspace.
 func (e *Engine) startWorker(t task.Task) error {
-	prompt, err := e.workerPrompt(t)
-	if err != nil {
-		return err
-	}
+	prompt, pending := workerPrompt(t), t.Pending
 	dir := t.Dir
 	if dir == "" {
+		create := e.w.Create
+		if t.Reopened {
+			create = e.w.Restore
+		}
 		var err error
-		if dir, err = e.w.Create(t); err != nil {
+		if dir, err = create(t); err != nil {
 			return e.startFailed(t, fmt.Errorf("task %s: create workspace: %w", t.ID, err))
 		}
 	}
-	t.State, t.Dir = task.Working, dir
+	t.State, t.Dir, t.Pending = task.Working, dir, nil
 	if err := e.save(t); err != nil {
 		return errors.Join(err, e.discard(t))
 	}
 	name := "worker-" + t.ID
-	err = e.l.Start(SessionSpec{
+	err := e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
 		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected,
 	})
 	if err != nil {
 		rmErr := e.discard(t)
-		t.State = task.Queued
-		if rmErr == nil && t.Round == 0 {
+		t.State, t.Pending = task.Queued, pending
+		if rmErr == nil && !t.Reopened {
 			t.Dir = ""
 		}
 		return e.startFailed(t, errors.Join(fmt.Errorf("task %s: start worker: %w", t.ID, err), rmErr, e.save(t)))
@@ -93,32 +94,28 @@ func (e *Engine) startWorker(t task.Task) error {
 	return nil
 }
 
-// discard removes the workspace of a task whose start failed, unless it holds the earlier work of a task that feedback sent back.
+// discard removes the workspace of a task whose start failed, unless it holds the earlier work of a reopened task.
 func (e *Engine) discard(t task.Task) error {
-	if t.Round > 0 {
+	if t.Reopened {
 		return nil
 	}
 	return e.w.Remove(t)
 }
 
-// workerPrompt returns the first message of a worker. A task that feedback sent back gets the feedback and a note about the earlier work.
-func (e *Engine) workerPrompt(t task.Task) (string, error) {
-	if t.Round == 0 {
-		return "Do this task.\n\n" + t.Markdown(), nil
+// workerPrompt returns the first message of a worker: the task file, then the feedback that no worker has read.
+// A reopened task also gets a note about its earlier work.
+func workerPrompt(t task.Task) string {
+	prompt := "Do this task.\n\n" + t.Markdown()
+	if t.Reopened {
+		prompt = "Do this task again. It was finished, then feedback came in.\n\n" + t.Markdown()
 	}
-	verdicts, err := e.st.Verdicts(t.ID)
-	if err != nil {
-		return "", err
+	for _, f := range t.Pending {
+		prompt += "\nFeedback:\n\n" + f + "\n"
 	}
-	feedback := ""
-	for _, v := range verdicts {
-		if v.Feedback && v.Round == t.Round {
-			feedback = v.Body
-		}
+	if t.Reopened {
+		prompt += "\nThis workspace and its branch hold the earlier work. The branch may already have an open pull request, which may be merged or closed by now. Address the feedback on top of that work.\n"
 	}
-	return fmt.Sprintf("Do this task again. A reviewer approved it, then feedback came in.\n\n%s\nFeedback:\n\n%s\n\n"+
-		"This workspace and its branch hold the earlier work. The branch may already have an open pull request. Address the feedback on top of that work.\n",
-		t.Markdown(), feedback), nil
+	return prompt
 }
 
 // startFailed counts a failed start. After maxStartFailures in a row the task moves to escalated and main hears of it.

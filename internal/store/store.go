@@ -27,11 +27,11 @@ type Message struct {
 	Created            time.Time
 }
 
-// Verdict is a reviewer's judgment of one round, or feedback that the operator or main sent after the task was approved.
+// Verdict is a reviewer's judgment of one round, or feedback that the operator or main sent.
 type Verdict struct {
 	Round int
 	Pass  bool
-	// Feedback is true for feedback on an approved task. Round is the round that the task had when the feedback came.
+	// Feedback is true for feedback from sfy task feedback. Round is the round that the task had when the feedback came.
 	Feedback bool
 	Body     string
 }
@@ -45,7 +45,7 @@ type Store interface {
 	// Save writes task.md and the state file, so it also replaces the file of a new task.
 	Save(task.Task) error
 	AddVerdict(id string, round int, pass bool, body string) error
-	// AddFeedback records feedback on an approved task. Verdicts returns it with the verdicts.
+	// AddFeedback records feedback that a task got in the given round. Verdicts returns it with the verdicts.
 	AddFeedback(id string, round int, body string) error
 	Send(Message) error
 	Unread(agent string) ([]Message, error)
@@ -69,6 +69,8 @@ type stateFile struct {
 	Source   string     `json:"source"`
 	Progress string     `json:"progress,omitempty"`
 	Dir      string     `json:"dir,omitempty"`
+	Pending  []string   `json:"pending,omitempty"`
+	Reopened bool       `json:"reopened,omitempty"`
 	Updated  time.Time  `json:"updated"`
 }
 
@@ -236,7 +238,7 @@ func writeTask(dir string, t task.Task) error {
 	if err := writeFile(filepath.Join(dir, "task.md"), []byte(t.Markdown())); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Updated}, "", "  ")
+	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Pending, t.Reopened, t.Updated}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -265,6 +267,7 @@ func (f files) Task(id string) (task.Task, error) {
 		return task.Task{}, fmt.Errorf("store: task %s state: %w", id, err)
 	}
 	t.ID, t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Updated = id, st.State, st.Before, st.Round, st.Archived, st.Source, st.Progress, st.Dir, st.Updated
+	t.Pending, t.Reopened = st.Pending, st.Reopened
 	return t, nil
 }
 
@@ -316,7 +319,16 @@ func (f files) AddFeedback(id string, round int, body string) error {
 	if err != nil {
 		return err
 	}
-	return writeFile(filepath.Join(d, "verdicts", fmt.Sprintf("%d-feedback.md", round)), []byte(body))
+	// A task takes any number of feedbacks in one round, so a number keeps their order.
+	n := 1
+	if entries, err := os.ReadDir(filepath.Join(d, "verdicts")); err == nil {
+		for _, e := range entries {
+			if strings.Contains(e.Name(), "-feedback-") {
+				n++
+			}
+		}
+	}
+	return writeFile(filepath.Join(d, "verdicts", fmt.Sprintf("%d-feedback-%04d.md", round, n)), []byte(body))
 }
 
 func (f files) inbox(agent string) (string, error) {
@@ -445,17 +457,17 @@ func (f files) Verdicts(id string) ([]Verdict, error) {
 	for _, e := range entries {
 		var v Verdict
 		var result string
-		if _, err := fmt.Sscanf(strings.TrimSuffix(e.Name(), ".md"), "%d-%s", &v.Round, &result); err != nil || (result != "pass" && result != "fail" && result != "feedback") {
+		if _, err := fmt.Sscanf(strings.TrimSuffix(e.Name(), ".md"), "%d-%s", &v.Round, &result); err != nil || (result != "pass" && result != "fail" && !strings.HasPrefix(result, "feedback-")) {
 			continue
 		}
 		body, err := os.ReadFile(filepath.Join(d, "verdicts", e.Name()))
 		if err != nil {
 			return nil, err
 		}
-		v.Pass, v.Feedback, v.Body = result == "pass", result == "feedback", string(body)
+		v.Pass, v.Feedback, v.Body = result == "pass", strings.HasPrefix(result, "feedback-"), string(body)
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool {
+	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Round != out[j].Round {
 			return out[i].Round < out[j].Round
 		}

@@ -74,6 +74,7 @@ func (f *fakeLauncher) TrustWarning(dir string) string {
 
 type fakeWorkspaces struct {
 	removed     []string
+	restored    []string
 	removeErr   error
 	dirty       map[string]bool
 	beforeCheck func()
@@ -85,6 +86,10 @@ func (f *fakeWorkspaces) Create(t task.Task) (string, error) {
 		return "", f.createErr
 	}
 	return "/work/" + t.ID, nil
+}
+func (f *fakeWorkspaces) Restore(t task.Task) (string, error) {
+	f.restored = append(f.restored, t.ID)
+	return f.Create(t)
 }
 func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 	if f.beforeCheck != nil {
