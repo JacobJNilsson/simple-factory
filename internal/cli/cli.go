@@ -101,6 +101,10 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 		req.Body = string(body)
 		return req, nil
 	case f.file:
+		// A worker or reviewer runs sfy outside the sandbox. A path would let it send any file it can read, so it passes text on stdin.
+		if path := rest[need-1]; path != "-" && req.Caller.Agent != "" && req.Caller.Agent != "main" {
+			return req, &usageError{"workers and reviewers pass the text on standard input as -, not as a file path"}
+		}
 		body, err := readFile(rest[need-1], stdin)
 		if err != nil {
 			return req, err

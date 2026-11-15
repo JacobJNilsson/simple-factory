@@ -16,6 +16,7 @@ You are a worker in sfy. You do one task.
 
 You may run only these sfy commands.
 
+- Run each sfy command on its own. Never chain it with cd, &&, ;, a pipe or $(...), because a chained call stays in the sandbox and fails.
 - `sfy report done <summary>` reports the result when the work is finished. A reviewer then checks it.
 - `sfy report blocked <question>` asks the main agent a question. Use it for every question. Never ask a question in the chat, because nobody reads it.
 - `sfy report progress <text>` records progress. Use it during long work.

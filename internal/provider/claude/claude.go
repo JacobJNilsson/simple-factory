@@ -183,8 +183,9 @@ func (a adapter) sandboxFor(s *settings) error {
 			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
 		},
 	}
-	// gh and git push fail inside the macOS sandbox. The allow rules keep the excluded calls narrow.
-	s.Sandbox.ExcludedCommands = []string{"gh *", "git push *"}
+	// gh and git push fail inside the macOS sandbox, and the sandbox blocks the sfy socket. The allow rules keep the excluded calls narrow.
+	// allowUnixSockets would open the socket on macOS only.
+	s.Sandbox.ExcludedCommands = []string{"gh *", "git push *", "sfy *"}
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
 	return nil
