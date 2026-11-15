@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -297,7 +298,23 @@ func readLine(r io.Reader) ([]byte, error) {
 
 // Call sends one request to the server on socket and returns its answer.
 func Call(socket string, req protocol.Request) (protocol.Answer, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	return call(socket, req, callTimeout)
+}
+
+// Ping sends a status request and fails when no answer comes within timeout.
+func Ping(socket string, timeout time.Duration) error {
+	ans, err := call(socket, protocol.Request{Command: "status"}, timeout)
+	if err != nil {
+		return err
+	}
+	if !ans.OK {
+		return errors.New(strings.TrimSpace(ans.Error))
+	}
+	return nil
+}
+
+func call(socket string, req protocol.Request, timeout time.Duration) (protocol.Answer, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var d net.Dialer
 	conn, err := d.DialContext(ctx, "unix", socket)
@@ -308,7 +325,7 @@ func Call(socket string, req protocol.Request) (protocol.Answer, error) {
 		return protocol.Answer{}, err
 	}
 	defer func() { _ = conn.Close() }()
-	_ = conn.SetDeadline(time.Now().Add(callTimeout))
+	_ = conn.SetDeadline(time.Now().Add(timeout))
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return protocol.Answer{}, err
 	}
