@@ -193,6 +193,74 @@ func TestRenderStatusListsAnEscalatedTaskBeforeALowerNumberedQueuedTask(t *testi
 	}
 }
 
+// statusOrder returns the task ids in the order that RenderStatus lists them.
+func statusOrder(tasks []task.Task) []string {
+	var ids []string
+	for _, line := range strings.Split(store.RenderStatus(tasks), "\n")[4:] {
+		if f := strings.Split(line, "|"); len(f) > 2 {
+			ids = append(ids, strings.TrimSpace(f[1]))
+		}
+	}
+	return ids
+}
+
+func updatedAt(id string, state task.State, at time.Time) task.Task {
+	tk := sample(id, state)
+	tk.Updated = at
+	return tk
+}
+
+func TestRenderStatusListsTheNewestChangeFirst(t *testing.T) {
+	got := statusOrder([]task.Task{
+		updatedAt("t1", task.Queued, noon.Add(time.Hour)),
+		updatedAt("t2", task.Queued, noon),
+		updatedAt("t3", task.Queued, noon.Add(2*time.Hour)),
+	})
+
+	if want := []string{"t3", "t1", "t2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestRenderStatusListsEscalatedTasksAboveNewerTasksAndSortsEachGroupByChange(t *testing.T) {
+	got := statusOrder([]task.Task{
+		updatedAt("t1", task.Queued, noon.Add(5*time.Hour)),
+		updatedAt("t2", task.Escalated, noon),
+		updatedAt("t3", task.Queued, noon.Add(4*time.Hour)),
+		updatedAt("t4", task.Escalated, noon.Add(time.Hour)),
+	})
+
+	if want := []string{"t4", "t2", "t1", "t3"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestRenderStatusListsATaskWithAZeroTimeLast(t *testing.T) {
+	got := statusOrder([]task.Task{
+		updatedAt("t9", task.Queued, time.Time{}),
+		updatedAt("t1", task.Queued, noon),
+		updatedAt("t8", task.Escalated, time.Time{}),
+		updatedAt("t2", task.Escalated, noon),
+	})
+
+	if want := []string{"t2", "t8", "t1", "t9"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestRenderStatusListsTheHigherIdFirstWhenTimesAreEqual(t *testing.T) {
+	got := statusOrder([]task.Task{
+		updatedAt("t2", task.Queued, noon),
+		updatedAt("t10", task.Queued, noon),
+		updatedAt("t1", task.Queued, time.Time{}),
+		updatedAt("t3", task.Queued, time.Time{}),
+	})
+
+	if want := []string{"t10", "t2", "t3", "t1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
 func TestRenderStatusNamesTheWorkerAndReviewerOfATaskInReview(t *testing.T) {
 	tk := sample("t3", task.Review)
 	tk.Round = 2
