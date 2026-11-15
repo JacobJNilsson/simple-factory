@@ -295,8 +295,12 @@ func TestTmuxSet(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux is not on PATH")
 	}
-	// A short path under /tmp keeps the socket path below the OS limit.
-	dir, err := os.MkdirTemp("/tmp", "fmx")
+	// macOS limits a socket path to 104 bytes, so use TMPDIR only when it leaves room for the tmux socket name.
+	base := os.TempDir()
+	if len(base) > 40 {
+		base = "/tmp"
+	}
+	dir, err := os.MkdirTemp(base, "fmx")
 	if err != nil {
 		t.Fatal(err)
 	}
