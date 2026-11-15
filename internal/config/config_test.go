@@ -34,7 +34,7 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		Provider:      "claude",
 		Multiplexer:   "tmux",
 		Models:        config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
-		Allow:         []string{"git", "gh", "make", "go"},
+		Allow:         []string{"git", "gh", "make", "go", "gofmt"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)

@@ -121,7 +121,7 @@ A command that an agent kind may not run fails with an error that names the comm
 
 ## Permissions
 
-- Workers run in the provider's mode that accepts edits without prompts. One default allow list lets them run git, gh and the repo's build and test commands.
+- Workers run in the provider's mode that accepts edits without prompts. One default allow list lets them run git, gh, gofmt and the repo's build and test commands.
 - The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
 - Deny rules protect the paths that the task file names, in every mode.
 - Reviewers may run the allowed commands, but their edit tools are off. An allowed command such as a build can still write files, so the edit deny is not a sandbox.
@@ -140,7 +140,7 @@ A command that an agent kind may not run fails with an error that names the comm
 | `models.main` | `opus` | The main agent's model. |
 | `models.worker` | `sonnet` | The workers' model. |
 | `models.reviewer` | `sonnet` | The reviewers' model. |
-| `allow` | git, gh, build, test | The workers' allow list. |
+| `allow` | git, gh, gofmt, build, test | The workers' allow list. |
 
 ## Multiplexer templates
 

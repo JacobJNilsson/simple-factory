@@ -52,7 +52,7 @@ func defaults() Config {
 		Provider:      "claude",
 		Multiplexer:   "tmux",
 		Models:        Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
-		Allow:         []string{"git", "gh", "make", "go"},
+		Allow:         []string{"git", "gh", "make", "go", "gofmt"},
 	}
 }
 
