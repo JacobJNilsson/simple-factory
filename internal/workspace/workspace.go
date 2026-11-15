@@ -274,6 +274,21 @@ func cloneName(repo string) string {
 	return last + "-" + hex.EncodeToString(sum[:])[:8]
 }
 
+// HoldsWork reports whether a task's workspace holds work that Remove would delete.
+// A worktree holds work when git status shows changes or untracked files. A plain folder holds work when it is not empty.
+func (w *Workspaces) HoldsWork(t task.Task) (bool, error) {
+	dir := w.dir(t.ID)
+	if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+		out, err := git(dir, "status", "--porcelain")
+		return out != "", err
+	}
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return len(entries) > 0, err
+}
+
 // Remove deletes the folder of a task. A worktree's branch stays.
 func (w *Workspaces) Remove(t task.Task) error {
 	dir := w.dir(t.ID)

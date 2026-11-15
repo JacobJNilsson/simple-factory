@@ -79,7 +79,7 @@ func (e *Engine) stop(name string) error {
 	return err
 }
 
-// cleanup ends the sessions of a task that ran and removes its workspace, then clears Dir.
+// cleanup ends the sessions of a task that ran, then removes its workspace unless the workspace holds work, and clears Dir.
 // Tick retries it for done and cancelled tasks that still have a Dir.
 func (e *Engine) cleanup(t task.Task) error {
 	if t.Dir == "" {
@@ -96,9 +96,23 @@ func (e *Engine) cleanup(t task.Task) error {
 		}
 		delete(e.agents, name)
 	}
-	if err := e.w.Remove(t); err != nil {
+	holds, err := e.w.HoldsWork(t)
+	if err != nil {
 		return err
 	}
+	if !holds {
+		if err := e.w.Remove(t); err != nil {
+			return err
+		}
+	}
+	dir := t.Dir
 	t.Dir = ""
-	return e.save(t)
+	// The save comes first, so a failed save retries the whole cleanup and main hears of a kept workspace once.
+	if err := e.save(t); err != nil {
+		return err
+	}
+	if holds {
+		return e.message("main", "sfy", fmt.Sprintf("Task %s is %s, but its workspace %s still holds work, so sfy kept it.", t.ID, t.State, dir))
+	}
+	return nil
 }
