@@ -98,15 +98,18 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 	}
 }
 
-func TestReviewerPromptGivesTheVerdictOnStandardInput(t *testing.T) {
+func TestReviewerPromptGivesTheVerdictAsAnArgument(t *testing.T) {
 	text, err := prompts.For("reviewer", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"`sfy verdict pass -", "`sfy verdict fail -"} {
+	for _, want := range []string{"`sfy verdict pass '", "`sfy verdict fail '"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("reviewer prompt lacks %s", want)
 		}
+	}
+	if strings.Contains(text, "<<") {
+		t.Error("reviewer prompt names a here-document")
 	}
 	if strings.Contains(text, "/tmp") {
 		t.Error("reviewer prompt names /tmp")

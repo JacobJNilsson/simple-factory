@@ -32,7 +32,7 @@ const usage = `usage:
   sfy task resume <id>
   sfy send <agent> <text...>
   sfy report done|blocked|progress <text...>
-  sfy verdict pass|fail <file>
+  sfy verdict pass|fail <text...|->
   sfy inbox
   sfy escalate <id> <text...>
   sfy status
@@ -56,6 +56,8 @@ type form struct {
 	text bool
 	// stdin is true when the Body comes from standard input.
 	stdin bool
+	// verdict is true when the rest of the line is the Body text and "-" reads it from standard input.
+	verdict bool
 }
 
 var forms = map[string]form{
@@ -70,8 +72,8 @@ var forms = map[string]form{
 	"report done":     {words: 2, text: true},
 	"report blocked":  {words: 2, text: true},
 	"report progress": {words: 2, text: true},
-	"verdict pass":    {words: 2, ids: 1, file: true},
-	"verdict fail":    {words: 2, ids: 1, file: true},
+	"verdict pass":    {words: 2, verdict: true},
+	"verdict fail":    {words: 2, verdict: true},
 	"inbox":           {words: 1},
 	"escalate":        {words: 1, ids: 1, text: true},
 	"status":          {words: 1},
@@ -87,6 +89,9 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 	}
 	rest := args[f.words:]
 	need := f.ids
+	if f.verdict {
+		return parseVerdict(req, name, rest, stdin)
+	}
 	if len(rest) < need || (!f.text && len(rest) != need) || (f.text && len(rest) < need+1) {
 		return req, &usageError{fmt.Sprintf("wrong arguments for %q", name)}
 	}
@@ -115,6 +120,24 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 	if len(rest) > 0 {
 		req.Args = rest
 	}
+	return req, nil
+}
+
+// parseVerdict reads the verdict from the words, or from standard input for "-". It never opens a path, so a reviewer cannot probe the file system.
+func parseVerdict(req protocol.Request, name string, rest []string, stdin io.Reader) (protocol.Request, error) {
+	if len(rest) == 0 {
+		return req, &usageError{fmt.Sprintf("wrong arguments for %q", name)}
+	}
+	req.Command = name
+	if len(rest) == 1 && rest[0] == "-" {
+		body, err := io.ReadAll(stdin)
+		if err != nil {
+			return req, err
+		}
+		req.Body = string(body)
+		return req, nil
+	}
+	req.Body = strings.Join(rest, " ")
 	return req, nil
 }
 

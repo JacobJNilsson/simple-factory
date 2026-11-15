@@ -29,9 +29,7 @@ worker-*)
 	stop_hook
 	;;
 review-*)
-	sfy verdict pass - <<'VERDICT'
-The result meets the goal.
-VERDICT
+	sfy verdict pass 'The result meets the goal.'
 	stop_hook
 	;;
 esac

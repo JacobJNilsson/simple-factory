@@ -46,8 +46,10 @@ func TestParse(t *testing.T) {
 		{"report done", []string{"report", "done", "all", "done"}, protocol.Request{Command: "report done", Args: []string{"all", "done"}}},
 		{"report blocked", []string{"report", "blocked", "stuck"}, protocol.Request{Command: "report blocked", Args: []string{"stuck"}}},
 		{"report progress", []string{"report", "progress", "half"}, protocol.Request{Command: "report progress", Args: []string{"half"}}},
-		{"verdict pass", []string{"verdict", "pass", file}, protocol.Request{Command: "verdict pass", Body: "FILE"}},
-		{"verdict fail", []string{"verdict", "fail", file}, protocol.Request{Command: "verdict fail", Body: "FILE"}},
+		{"verdict stores a path as text", []string{"verdict", "pass", file}, protocol.Request{Command: "verdict pass", Body: file}},
+		{"verdict pass words", []string{"verdict", "pass", "looks", "good"}, protocol.Request{Command: "verdict pass", Body: "looks good"}},
+		{"verdict fail multi-line", []string{"verdict", "fail", "fix a\n\nfix b"}, protocol.Request{Command: "verdict fail", Body: "fix a\n\nfix b"}},
+		{"verdict stdin", []string{"verdict", "pass", "-"}, protocol.Request{Command: "verdict pass", Body: "IN"}},
 		{"inbox", []string{"inbox"}, protocol.Request{Command: "inbox"}},
 		{"escalate", []string{"escalate", "t1", "needs", "you"}, protocol.Request{Command: "escalate", Args: []string{"t1", "needs", "you"}}},
 		{"status", []string{"status"}, protocol.Request{Command: "status"}},
@@ -77,11 +79,11 @@ func TestParseCaller(t *testing.T) {
 	}
 }
 
-// The path does not exist. A refusal that comes before any read is a usage error, and a read would fail with another error.
+// The verdict forms are not here. They take text and open no path.
 func TestParseRefusesAFilePathFromAWorkerOrReviewer(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "secret")
 	for _, agent := range []string{"worker-t1", "review-t1-1"} {
-		for _, args := range [][]string{{"verdict", "pass", missing}, {"verdict", "fail", missing}, {"task", "new", missing}, {"task", "edit", "t1", missing}} {
+		for _, args := range [][]string{{"task", "new", missing}, {"task", "edit", "t1", missing}} {
 			_, err := parse(args, envOf(map[string]string{"SFY_AGENT": agent}), strings.NewReader(""))
 			var ue *usageError
 			if !errors.As(err, &ue) || !strings.Contains(ue.msg, "standard input") {
@@ -107,7 +109,7 @@ func TestParseReadsStdinForAWorkerAndAFileForMain(t *testing.T) {
 }
 
 func TestRunBadForm(t *testing.T) {
-	for _, args := range [][]string{nil, {"bogus"}, {"task"}, {"task", "show"}, {"task", "list", "x"}, {"report", "done"}, {"verdict", "maybe", "f"}, {"inbox", "x"}} {
+	for _, args := range [][]string{nil, {"bogus"}, {"task"}, {"task", "show"}, {"task", "list", "x"}, {"report", "done"}, {"verdict", "maybe", "f"}, {"verdict", "pass"}, {"inbox", "x"}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			var out, errb bytes.Buffer
 			code := Run(args, envOf(nil), strings.NewReader(""), &out, &errb)
