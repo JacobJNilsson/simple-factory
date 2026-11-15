@@ -31,7 +31,10 @@ type settings struct {
 		AllowUnsandboxedCommands bool     `json:"allowUnsandboxedCommands"`
 		ExcludedCommands         []string `json:"excludedCommands"`
 		WeakerNetworkIsolation   bool     `json:"enableWeakerNetworkIsolation"`
-		Filesystem               struct {
+		Network                  struct {
+			AllowUnixSockets []string `json:"allowUnixSockets"`
+		} `json:"network"`
+		Filesystem struct {
 			DenyRead   []string `json:"denyRead"`
 			AllowWrite []string `json:"allowWrite"`
 		} `json:"filesystem"`
@@ -562,11 +565,30 @@ func TestSandboxReachesTLSTrustServiceOnMacOnly(t *testing.T) {
 		for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
 			t.Setenv("HOME", t.TempDir())
 			home := t.TempDir()
-			p := claude.NewForOS(config.Config{}, home, bin, goos)
+			p := claude.NewForOS(config.Config{}, home, bin, goos, 501)
 			command(t, p, spec)
 			s := readSettings(t, home, spec.Name)
 			if s.Sandbox.WeakerNetworkIsolation != want {
 				t.Errorf("%s on %s: enableWeakerNetworkIsolation = %v, want %v", spec.Name, goos, s.Sandbox.WeakerNetworkIsolation, want)
+			}
+		}
+	}
+}
+
+func TestSandboxAllowsUnixSocketsInItsTempFolderOnMacOnly(t *testing.T) {
+	want := map[string][]string{
+		"darwin": {"/tmp/claude-501", "/private/tmp/claude-501"},
+		"linux":  nil,
+	}
+	for goos, sockets := range want {
+		for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+			t.Setenv("HOME", t.TempDir())
+			home := t.TempDir()
+			p := claude.NewForOS(config.Config{}, home, bin, goos, 501)
+			command(t, p, spec)
+			s := readSettings(t, home, spec.Name)
+			if !slices.Equal(s.Sandbox.Network.AllowUnixSockets, sockets) {
+				t.Errorf("%s on %s: allowUnixSockets = %v, want %v", spec.Name, goos, s.Sandbox.Network.AllowUnixSockets, sockets)
 			}
 		}
 	}
