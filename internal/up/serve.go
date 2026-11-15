@@ -58,7 +58,7 @@ func newParts(env func(string) string) (parts, error) {
 	if err != nil {
 		return parts{}, err
 	}
-	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
+	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)}, cfg.ShowAgents)}, nil
 }
 
 // logAppender appends to sfy.log on each write, so sfy up and sfy serve both log without holding the file open.

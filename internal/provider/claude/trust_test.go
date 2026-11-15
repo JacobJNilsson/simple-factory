@@ -87,8 +87,12 @@ func TestTrustedFolderGivesNoWarning(t *testing.T) {
 func TestUntrustedFolderWarnsAndNamesIt(t *testing.T) {
 	dir := realDir(t)
 	trustHome(t)
-	if w := warning(t, dir); !strings.Contains(w, dir) {
+	w := warning(t, dir)
+	if !strings.Contains(w, dir) {
 		t.Fatalf("warning: %q", w)
+	}
+	if !strings.Contains(w, "hc attach <name>") {
+		t.Fatalf("warning does not name hc attach: %q", w)
 	}
 }
 

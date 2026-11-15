@@ -47,7 +47,7 @@ func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
 
 func TestStartPassesArgvNameAndDir(t *testing.T) {
 	m, p := &fakeMux{}, &fakeProvider{}
-	l := New(m, p, nil)
+	l := New(m, p, nil, false)
 	spec := engine.SessionSpec{Name: "worker-t1", Dir: "/work/t1", Kind: "worker"}
 	if err := l.Start(spec); err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestStartPassesArgvNameAndDir(t *testing.T) {
 
 func TestOtherCallsPassThrough(t *testing.T) {
 	m := &fakeMux{}
-	l := New(m, &fakeProvider{}, nil)
+	l := New(m, &fakeProvider{}, nil, false)
 	_ = l.Send("a", "hi")
 	_ = l.Stop("a")
 	_ = l.Notify("a", "n")
@@ -97,9 +97,9 @@ func TestMuxBuiltinAndUnknown(t *testing.T) {
 	}
 }
 
-func TestStartShowsTheSessionAfterStart(t *testing.T) {
+func TestStartShowsTheSessionAfterStartWhenAgentsAreShown(t *testing.T) {
 	m := &fakeMux{}
-	if err := New(m, &fakeProvider{}, nil).Start(engine.SessionSpec{Name: "worker-t1", Dir: "/w"}); err != nil {
+	if err := New(m, &fakeProvider{}, nil, true).Start(engine.SessionSpec{Name: "worker-t1", Kind: "worker", Dir: "/w"}); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(m.shown, []string{"worker-t1"}) {
@@ -107,10 +107,32 @@ func TestStartShowsTheSessionAfterStart(t *testing.T) {
 	}
 }
 
+func TestStartShowsNoWorkerOrReviewerByDefault(t *testing.T) {
+	for _, kind := range []string{"worker", "reviewer"} {
+		m := &fakeMux{}
+		if err := New(m, &fakeProvider{}, nil, false).Start(engine.SessionSpec{Name: kind + "-t1", Kind: kind, Dir: "/w"}); err != nil {
+			t.Fatal(err)
+		}
+		if len(m.shown) != 0 {
+			t.Errorf("%s shown %v", kind, m.shown)
+		}
+	}
+}
+
+func TestStartAlwaysShowsTheMainAgent(t *testing.T) {
+	m := &fakeMux{}
+	if err := New(m, &fakeProvider{}, nil, false).Start(engine.SessionSpec{Name: "main", Kind: "main", Dir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.shown, []string{"main"}) {
+		t.Errorf("shown %v", m.shown)
+	}
+}
+
 func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
 	m := &fakeMux{showErr: errors.New("no pane")}
 	var log bytes.Buffer
-	if err := New(m, &fakeProvider{}, &log).Start(engine.SessionSpec{Name: "main", Dir: "/w"}); err != nil {
+	if err := New(m, &fakeProvider{}, &log, false).Start(engine.SessionSpec{Name: "main", Kind: "main", Dir: "/w"}); err != nil {
 		t.Fatalf("start failed: %v", err)
 	}
 	if !strings.Contains(log.String(), "show of main failed: no pane") {

@@ -23,13 +23,15 @@ type Models struct {
 
 // Config holds the settings from the spec's configuration table.
 type Config struct {
-	ReviewRounds  int      `toml:"review_rounds"`
-	MaxWorkers    int      `toml:"max_workers"`
-	ResendMinutes int      `toml:"resend_minutes"`
-	Provider      string   `toml:"provider"`
-	Multiplexer   string   `toml:"multiplexer"`
-	Models        Models   `toml:"models"`
-	Allow         []string `toml:"allow"`
+	ReviewRounds  int    `toml:"review_rounds"`
+	MaxWorkers    int    `toml:"max_workers"`
+	ResendMinutes int    `toml:"resend_minutes"`
+	Provider      string `toml:"provider"`
+	Multiplexer   string `toml:"multiplexer"`
+	// ShowAgents opens a tab or pane for each worker and reviewer. The main agent always gets one.
+	ShowAgents bool     `toml:"show_agents"`
+	Models     Models   `toml:"models"`
+	Allow      []string `toml:"allow"`
 	// DenyRead and AllowWrite are the sandbox paths for workers and reviewers. An empty list stays empty.
 	DenyRead   []string `toml:"deny_read"`
 	AllowWrite []string `toml:"allow_write"`

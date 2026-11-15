@@ -19,13 +19,13 @@ func (a adapter) TrustWarning(dir string) string {
 	trusted, err := trusts(dir)
 	switch {
 	case err != nil:
-		return fmt.Sprintf("sfy cannot tell whether Claude Code trusts %s (%v). If an agent stops at a trust dialog, accept it in its pane.", dir, err)
+		return fmt.Sprintf("sfy cannot tell whether Claude Code trusts %s (%v). If an agent stops at a trust dialog, run hc attach <name> for that agent and accept it.", dir, err)
 	case trusted:
 		return ""
 	case !exists(dir):
-		return fmt.Sprintf("Claude Code does not trust %s, which sfy creates later, so an agent will stop at the trust dialog there. Accept it in the agent's pane.", dir)
+		return fmt.Sprintf("Claude Code does not trust %s, which sfy creates later, so an agent will stop at the trust dialog there. Run hc attach <name> for that agent and accept it.", dir)
 	}
-	return fmt.Sprintf("Claude Code does not trust %s yet, so an agent there will stop at its trust dialog. Run claude in %s once and accept, or accept it in the agent's pane.", dir, dir)
+	return fmt.Sprintf("Claude Code does not trust %s yet, so an agent there will stop at its trust dialog. Run claude in %s once and accept, or run hc attach <name> for that agent and accept it.", dir, dir)
 }
 
 func exists(dir string) bool {
