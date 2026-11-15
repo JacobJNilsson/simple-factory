@@ -121,10 +121,15 @@ A command that an agent kind may not run fails with an error that names the comm
 
 ## Permissions
 
-- Workers run in the provider's mode that accepts edits without prompts. One default allow list lets them run git, gh, gofmt and the repo's build and test commands.
+- Workers and reviewers run in the provider's sandbox. Writes reach only the workspace and the paths in `allow_write`. Reads skip the paths in `deny_read`.
+- The sandbox leaves the network open. It runs no command outside the sandbox. sfy refuses to start a worker or a reviewer where the sandbox is unavailable.
+- A worker or a reviewer never waits on a permission prompt. sfy's permission hook denies the call, gives the agent a reason, and records the denial in `sfy.log`.
+- Workers and reviewers get a clean environment. It holds the `SFY_*` variables, the basic shell variables, the provider's own variables and the names in `pass_env`.
+- Workers and reviewers run their sandboxed commands without an allow list. The `allow` setting is the main agent's allow list.
 - The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
 - Deny rules protect the paths that the task file names, in every mode.
-- Reviewers may run the allowed commands, but their edit tools are off. An allowed command such as a build can still write files, so the edit deny is not a sandbox.
+- Reviewers may run commands in the sandbox, but their edit tools are off. The sandbox limits what a build can write.
+- The sandbox covers shell commands. The provider's edit tools follow the permission rules.
 
 ## Configuration
 
@@ -140,7 +145,10 @@ A command that an agent kind may not run fails with an error that names the comm
 | `models.main` | `opus` | The main agent's model. |
 | `models.worker` | `sonnet` | The workers' model. |
 | `models.reviewer` | `sonnet` | The reviewers' model. |
-| `allow` | git, gh, gofmt, build, test | The workers' allow list. |
+| `allow` | git, gh, gofmt, build, test | The main agent's allow list. |
+| `deny_read` | `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
+| `allow_write` | The user cache folder and `~/go/pkg/mod` | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
+| `pass_env` | none | Names of environment variables that workers and reviewers keep. |
 
 ## Multiplexer templates
 
@@ -165,7 +173,8 @@ A use of sfy extends it at these points, without changes to the core:
 - **Programs.** Any program can create, list and cancel tasks through the CLI.
 - **Providers.** A new provider is a new adapter that implements the Go interface.
 - **Multiplexers.** A new multiplexer is a new template set in `config.toml`.
-- **Configuration.** `config.toml` sets the models, the limits and the allow list.
+- **Configuration.** `config.toml` sets the models, the limits, the allow list and the sandbox paths.
+- **Isolation.** A VM or a container for each task can replace the sandbox and its two path lists.
 
 ## Platforms
 
