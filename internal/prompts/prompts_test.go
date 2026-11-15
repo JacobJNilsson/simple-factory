@@ -46,7 +46,7 @@ func TestForRejectsAnUnknownKind(t *testing.T) {
 var allowed = map[string][]string{
 	"worker":   {"report done", "report blocked", "report progress", "inbox", "task list", "task show", "status"},
 	"reviewer": {"verdict pass", "verdict fail", "inbox", "task list", "task show", "status"},
-	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel",
+	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume",
 		"send", "escalate", "inbox", "status"},
 }
 
@@ -83,7 +83,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 	required := map[string][]string{
 		"worker":   {"report done", "report blocked", "report progress", "inbox"},
 		"reviewer": {"verdict pass", "verdict fail", "inbox"},
-		"main":     {"task new", "task edit", "task queue", "send", "escalate", "inbox"},
+		"main":     {"task new", "task edit", "task queue", "task resume", "send", "escalate", "inbox"},
 	}
 	for kind, cmds := range required {
 		text, err := prompts.For(kind, t.TempDir())
