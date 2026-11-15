@@ -472,7 +472,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", errors.Join(append(errs, err)...)
 	}
-	if len(unread) > 0 {
+	if len(unread) > 0 && e.noteDue(name, unread) {
 		errs = append(errs, e.typeNote(name, "turn ended"))
 	}
 	return "", errors.Join(errs...)
@@ -488,7 +488,7 @@ func (e *Engine) hookIdle(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	unread, err := e.st.Unread(name)
-	if err != nil || len(unread) == 0 {
+	if err != nil || len(unread) == 0 || !e.noteDue(name, unread) {
 		return "", err
 	}
 	return "", e.typeNote(name, "idle")

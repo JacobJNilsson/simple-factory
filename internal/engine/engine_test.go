@@ -1764,3 +1764,76 @@ func TestIdleOfAnEscalatedWorkerTypesNothingButRecordsTheWait(t *testing.T) {
 		t.Fatalf("sent %v", got)
 	}
 }
+
+// An agent that cannot read its inbox ends each turn with the same unread message.
+// Each turn end must not type the note again.
+func TestTurnEndsWithTheSameUnreadMessageTypeOneNote(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
+
+	for range 5 {
+		mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+		mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
+	}
+
+	if got := v.l.sent; !slices.Equal(got, []string{"worker-t1: " + note}) {
+		t.Fatalf("sent %v", got)
+	}
+}
+
+func TestASecondMessageAfterTheNoteBringsOneMoreNote(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "one"))
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "two"))
+	for range 3 {
+		mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	}
+
+	if got := v.l.sent; len(got) != 2 {
+		t.Fatalf("sent %v", got)
+	}
+}
+
+func TestTheResendStillFiresForAMessageThatStaysUnreadAfterTurnEnds(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+	v.tick(t)
+
+	if got := v.l.sent; len(got) != 2 {
+		t.Fatalf("sent %v", got)
+	}
+}
+
+func TestAMessageMidTurnTypesOneNoteAtTheTurnEnd(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+
+	for range 3 {
+		mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	}
+
+	if !slices.Equal(v.l.sent, []string{"worker-t1: " + note}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}

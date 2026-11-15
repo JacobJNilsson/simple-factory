@@ -79,6 +79,8 @@ type agentState struct {
 	// reminders counts the turns in a row that ended without a report.
 	reminders int
 	lastNote  time.Time
+	// notedID is the id of the newest unread message that the last note covered.
+	notedID string
 	// gone is true after sfy told main that the session no longer runs.
 	gone bool
 	// skipLogged is true after the log named this agent as not alive, until it lives again.

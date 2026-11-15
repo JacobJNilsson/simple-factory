@@ -54,7 +54,25 @@ func (e *Engine) typeNote(name, why string) error {
 	e.logf("note typed to %s: %s", name, why)
 	s := e.agent(name)
 	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
+	if unread, err := e.st.Unread(name); err == nil {
+		s.notedID = newestID(unread)
+	}
 	return e.l.Send(name, newMessageNote)
+}
+
+// newestID returns the highest message id. Ids sort in send order.
+func newestID(msgs []store.Message) string {
+	id := ""
+	for _, m := range msgs {
+		id = max(id, m.ID)
+	}
+	return id
+}
+
+// noteDue reports whether a message arrived after the last note. An agent that ignores a note must not get it at every turn end.
+// The resend after resend_minutes covers the messages that stay unread.
+func (e *Engine) noteDue(name string, unread []store.Message) bool {
+	return newestID(unread) > e.agent(name).notedID
 }
 
 // ignoreGone drops a note error from a session that no longer runs, because the note cannot arrive.
