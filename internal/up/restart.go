@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// ErrNotOperator reports that an agent ran sfy restart. The command would end the main agent's own session.
-var ErrNotOperator = errors.New("only the operator runs sfy restart, from a terminal outside the agent sessions")
+// ErrNotAllowed reports that a worker or reviewer ran sfy restart.
+var ErrNotAllowed = errors.New("only the operator and the main agent run sfy restart")
 
 // ErrNotStopped reports a sfy process that kept answering after its session ended.
 var ErrNotStopped = errors.New("the sfy process still answers after it was stopped. Stop it by hand and run sfy up")
@@ -16,9 +16,12 @@ var ErrNotStopped = errors.New("the sfy process still answers after it was stopp
 // mainSession is the multiplexer session of the main agent.
 const mainSession = "main"
 
-// restart stops the sfy process and the main agent, then starts both as sfy up does.
+// mayRestart reports whether the agent may run sfy restart. The operator has no agent name.
+func mayRestart(agent string) bool { return agent == "" || agent == mainSession }
+
+// restart stops the sfy process and starts it again as sfy up does.
 // The multiplexer ends the sfy session with a hangup, which the sfy process handles by removing its socket and lock file.
-// Workers and reviewers keep their sessions, and their tasks stay on disk.
+// A running main agent keeps its session and chat, and gets a note. Workers and reviewers keep their sessions, and their tasks stay on disk.
 func restart(o options) error {
 	var stopped []string
 	serveAlive, err := o.mux.Alive(serveSession)
@@ -40,16 +43,34 @@ func restart(o options) error {
 	if err != nil {
 		return err
 	}
-	if mainAlive {
-		if err := o.launcher.Stop(mainSession); err != nil {
-			return err
-		}
-		stopped = append(stopped, "the main agent")
-	}
 	if err := reportList(o.out, "Stopped", stopped); err != nil {
 		return err
 	}
-	return run(o)
+	if err := run(o); err != nil {
+		return err
+	}
+	if !mainAlive {
+		return nil
+	}
+	return o.noteMain()
+}
+
+// noteMain tells the running main agent that sfy restarted, and where to read a changed prompt.
+// The note is one line, because a multiplexer sends a new line as Enter.
+func (o options) noteMain() error {
+	changed, err := recordMainPrompt(o.home)
+	if err != nil {
+		return err
+	}
+	note := "sfy restarted."
+	if changed {
+		note += " Your prompt changed. Read the new text in " + mainPromptPath(o.home) + " with the Read tool."
+	}
+	if err := o.launcher.Send(mainSession, note); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(o.out, "Told the main agent.")
+	return err
 }
 
 // waitStopped waits until the sfy session ended and the socket stops answering.
