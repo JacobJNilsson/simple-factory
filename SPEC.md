@@ -97,6 +97,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | Command | Used by | What it does |
 |---|---|---|
 | `sfy up` | operator | Starts the sfy process and the main agent. Starts a new main agent if the old one died. Warns when the provider does not trust the sfy home. |
+| `sfy restart` | operator | Stops the sfy process and the main agent, then starts both from the installed sfy binary. The sfy process shuts down on the hangup that the multiplexer sends, so it removes its socket and lock file. Workers and reviewers keep running, and their sfy commands reach the new process. The new main agent gets the same first message as from `sfy up`. Without a sfy process it acts like `sfy up`. It prints what it stopped and started. It does not build or install sfy. It fails when run by the main agent, a worker or a reviewer. |
 | `sfy task new` | main agent, operator, programs | Creates a task from a description, a goal and the optional fields. Prints the task id. A warning about an untrusted folder goes to standard error. |
 | `sfy task edit <id> <file>` | main agent | Replaces the file of a task in any state except `approved`, `done` and `cancelled`. The task keeps its id, state, round, source, progress and folder. Once the task has a workspace, an edit may not change `## Repo` or `## Protected`. A running worker gets a message to read the new file. A running reviewer keeps the old file, and the next round reads the new one. |
 | `sfy task queue <id>` | main agent | Moves a `new` task to `queued`. |
@@ -117,7 +118,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 
 Three internal commands do not appear in prompts:
 
-- `sfy serve` runs the sfy process. `sfy up` starts it.
+- `sfy serve` runs the sfy process. `sfy up` and `sfy restart` start it.
 - `sfy run [-i] <envfile> -- <command...>` starts every agent session and the sfy process. It reads the environment from the file, deletes the file, and replaces itself with the command. With `-i` the command sees only the file's variables. Without it, they overlay the current environment. This keeps variable values, such as tokens, out of the process's argv.
 - `sfy hook <event>` is the command that an agent CLI's hooks run, for example when a turn ends or a permission prompt opens.
 
