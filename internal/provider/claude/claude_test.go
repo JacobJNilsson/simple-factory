@@ -667,7 +667,7 @@ func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
 	ghRead := []string{"Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)"}
 	sfy := []string{"Bash(/opt/sfy/sfy *)", "Bash(sfy *)"}
 	workerWant := append(append(append([]string{}, ghRead...), sfy...),
-		"Bash(gh pr create *)", "Bash(gh pr list *)", "Bash(gh issue create *)", "Bash(gh issue view *)",
+		"Bash(gh pr create *)", "Bash(gh pr list *)", "Bash(gh pr edit * --body-file *)", "Bash(gh pr edit * --title *)", "Bash(gh issue create *)", "Bash(gh issue view *)",
 		"Bash(gh issue list *)", "Bash(gh repo view *)",
 		"Bash(git push -u origin sfy/t1)", "Bash(git push --force-with-lease origin sfy/t1)")
 	cases := map[string]struct {
@@ -692,6 +692,27 @@ func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
 				t.Fatalf("Bash rules\n got %v\nwant %v", got, want)
 			}
 		})
+	}
+}
+
+func TestWorkerDeniesGhPrEditFlagsThatChangeState(t *testing.T) {
+	deny := sandboxed(t)["worker-t1"].Permissions.Deny
+	for _, want := range []string{
+		"Bash(gh pr edit *--add-*)", "Bash(gh pr edit *--remove-*)", "Bash(gh pr edit *--base*)", "Bash(gh pr edit * -B*)",
+		"Bash(gh pr edit *--milestone*)", "Bash(gh pr edit * -m*)", "Bash(gh pr edit *--reviewer*)",
+		"Bash(gh pr edit *--label*)", "Bash(gh pr edit *--assignee*)", "Bash(gh pr edit *--project*)",
+	} {
+		if !slices.Contains(deny, want) {
+			t.Errorf("worker deny lacks %s", want)
+		}
+	}
+}
+
+func TestReviewerDeniesNoGhPrEditRule(t *testing.T) {
+	for _, r := range sandboxed(t)["review-t1-1"].Permissions.Deny {
+		if strings.Contains(r, "gh pr edit") {
+			t.Errorf("reviewer deny has %s", r)
+		}
 	}
 }
 

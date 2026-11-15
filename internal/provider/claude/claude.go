@@ -240,9 +240,11 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 			rules = append(rules, "Bash("+c+" *)")
 		}
 	case "worker":
-		// gh posts as the operator, so only read and create commands pass. Merge, close, edit, comment and review do not.
+		// gh posts as the operator, so only read and create commands pass, and edit passes for the body and the title only.
+		// Merge, close, comment and review do not.
 		rules = append(rules,
 			"Bash(gh pr create *)", "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)",
+			"Bash(gh pr edit * --body-file *)", "Bash(gh pr edit * --title *)",
 			"Bash(gh issue create *)", "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)")
 		// A rule with no wildcard matches that command only, so no second branch, force flag or refspec passes.
 		branch := workspace.Branch(spec.Task)
@@ -268,6 +270,14 @@ func (a adapter) mainReads() []string {
 // A deny rule beats the auto-approval. It cannot match the allowed exact pushes, which have no option before push.
 const pushWithGitOptions = "Bash(git -* push*)"
 
+// prEditStateFlags lists the gh pr edit patterns that a worker may not run. A wildcard allow rule such as
+// gh pr edit * --body-file * also matches a call that adds a state flag, and a deny rule beats an allow rule.
+var prEditStateFlags = []string{
+	"Bash(gh pr edit *--add-*)", "Bash(gh pr edit *--remove-*)", "Bash(gh pr edit *--base*)", "Bash(gh pr edit * -B*)",
+	"Bash(gh pr edit *--milestone*)", "Bash(gh pr edit * -m*)", "Bash(gh pr edit *--reviewer*)",
+	"Bash(gh pr edit *--label*)", "Bash(gh pr edit *--assignee*)", "Bash(gh pr edit *--project*)",
+}
+
 // deny returns the deny rules of a session. The main agent talks to the operator, so it denies nothing.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
@@ -276,6 +286,7 @@ func deny(spec engine.SessionSpec) []string {
 		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":
 		rules = append(rules, "AskUserQuestion", pushWithGitOptions)
+		rules = append(rules, prEditStateFlags...)
 		for _, p := range spec.Protected {
 			p = rulePath(p)
 			// Claude Code applies an Edit rule to Write and NotebookEdit too. The second rule covers a folder's files.
