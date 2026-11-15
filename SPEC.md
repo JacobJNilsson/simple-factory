@@ -77,7 +77,7 @@ A task moves through these states:
 - factory rewrites `status.md` on every state change. It lists each task with its title, state, round, agents and the time of its last change. Escalations stand at the top.
 - The main agent keeps `notes.md` for information that spans tasks, such as goals, the operator's decisions, open questions and lessons. The main agent is its only writer, and it edits the file directly. Workers and reviewers do not read it. The main agent copies what a task needs into the task file.
 - When the main agent starts, it reads `notes.md` and `status.md` first. Its context holds nothing that these files lack, so factory can restart it at any time.
-- The socket file is readable only by the operator's user.
+- The socket file is readable only by the operator's user. It keeps other users out, but it does not separate the operator's own agents from each other, since they all run as that user.
 
 ## Messages
 
