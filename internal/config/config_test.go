@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -21,6 +22,10 @@ func writeConfig(t *testing.T, body string) string {
 
 func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 	home := t.TempDir()
+	wantCache := "~/.cache"
+	if runtime.GOOS == "darwin" {
+		wantCache = "~/Library/Caches"
+	}
 
 	got, err := config.Load(home)
 
@@ -35,6 +40,11 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		Multiplexer:   "tmux",
 		Models:        config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
 		Allow:         []string{"git", "gh", "make", "go", "gofmt"},
+		DenyRead: []string{
+			"~/.ssh", "~/.aws", "~/.config/gh", "~/.gnupg",
+			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
+		},
+		AllowWrite: []string{wantCache, "~/go/pkg/mod"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -139,4 +149,30 @@ func TestLoadFailsNamingResendMinutesBelowOne(t *testing.T) {
 	_, err := config.Load(home)
 
 	assertSetting(t, err, "resend_minutes")
+}
+
+func TestLoadReadsSandboxPathLists(t *testing.T) {
+	home := writeConfig(t, "deny_read = [\"~/.secrets\"]\nallow_write = [\"~/.cache/x\"]\n")
+
+	got, err := config.Load(home)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.DenyRead, []string{"~/.secrets"}) || !reflect.DeepEqual(got.AllowWrite, []string{"~/.cache/x"}) {
+		t.Fatalf("got deny_read %v, allow_write %v", got.DenyRead, got.AllowWrite)
+	}
+}
+
+func TestLoadKeepsAnEmptySandboxListEmpty(t *testing.T) {
+	home := writeConfig(t, "deny_read = []\nallow_write = []\n")
+
+	got, err := config.Load(home)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.DenyRead) != 0 || len(got.AllowWrite) != 0 {
+		t.Fatalf("got deny_read %v, allow_write %v, want both empty", got.DenyRead, got.AllowWrite)
+	}
 }
