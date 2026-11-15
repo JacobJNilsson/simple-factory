@@ -308,6 +308,7 @@ func TestTmuxSet(t *testing.T) {
 	t.Setenv("TMUX_TMPDIR", dir)
 	// tmux reads TMUX before TMUX_TMPDIR, so clear it to stay off the operator's server.
 	t.Setenv("TMUX", "")
+	skipIfTmuxCannotStartPane(t)
 	set, _ := Builtin("tmux")
 	name := uniqueName()
 	exerciseSet(t, Runner(set), name, func() string {
@@ -329,4 +330,40 @@ func TestHerdrSet(t *testing.T) {
 		out, _ := exec.CommandContext(context.Background(), "hc", "read", name).Output()
 		return string(out)
 	})
+}
+
+// skipIfTmuxCannotStartPane starts a throwaway tmux session and skips the test when tmux cannot fork a pane.
+// Any other start failure fails the test.
+func skipIfTmuxCannotStartPane(t *testing.T) {
+	t.Helper()
+	sock := "probe-" + uniqueName()
+	out, err := exec.CommandContext(context.Background(), "tmux", "-f", "/dev/null", "-L", sock, "new-session", "-d", "-s", "probe", "--", "sleep", "5").CombinedOutput()
+	_ = exec.CommandContext(context.Background(), "tmux", "-L", sock, "kill-server").Run()
+	if err == nil {
+		return
+	}
+	msg := strings.TrimSpace(string(out))
+	if tmuxForkBlocked(msg) {
+		t.Skipf("tmux cannot start a pane here, for example inside a sandbox: %s", msg)
+	}
+	t.Fatalf("tmux probe session failed: %v: %s", err, msg)
+}
+
+// tmuxForkBlocked reports whether a tmux start error says the system refused to fork a pane.
+func tmuxForkBlocked(msg string) bool {
+	return strings.Contains(msg, "fork failed") && strings.Contains(msg, "Operation not permitted")
+}
+
+func TestTmuxForkBlocked(t *testing.T) {
+	cases := map[string]bool{
+		"create window failed: fork failed: Operation not permitted": true,
+		"create window failed: fork failed: Resource busy":           false,
+		"error connecting: Operation not permitted":                  false,
+		"": false,
+	}
+	for msg, want := range cases {
+		if got := tmuxForkBlocked(msg); got != want {
+			t.Errorf("tmuxForkBlocked(%q) = %v, want %v", msg, got, want)
+		}
+	}
 }
