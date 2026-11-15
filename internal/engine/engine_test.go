@@ -53,9 +53,15 @@ func (f *fakeLauncher) Notify(name, text string) error {
 type fakeWorkspaces struct {
 	removed   []string
 	removeErr error
+	createErr error
 }
 
-func (f *fakeWorkspaces) Create(t task.Task) (string, error) { return "/work/" + t.ID, nil }
+func (f *fakeWorkspaces) Create(t task.Task) (string, error) {
+	if f.createErr != nil {
+		return "", f.createErr
+	}
+	return "/work/" + t.ID, nil
+}
 func (f *fakeWorkspaces) Remove(t task.Task) error {
 	if f.removeErr != nil {
 		return f.removeErr
@@ -82,7 +88,7 @@ func newEnv(t *testing.T) env {
 	home := t.TempDir()
 	st := store.Files(home)
 	l, ws := &fakeLauncher{}, &fakeWorkspaces{}
-	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, Models: config.Models{Reviewer: "rev-model"}}
+	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, Models: config.Models{Worker: "work-model", Reviewer: "rev-model"}}
 	clock := &fakeClock{now: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	return env{home, st, l, ws, clock, engine.New(st, l, ws, cfg, clock)}
 }
@@ -690,4 +696,233 @@ func TestPermissionFromMainNotifiesTheOperator(t *testing.T) {
 	if len(v.l.notified) != 1 || !strings.Contains(v.l.notified[0], "Run make?") {
 		t.Fatalf("notified %v", v.l.notified)
 	}
+}
+
+func (v env) queue(t *testing.T, n int) {
+	t.Helper()
+	for range n {
+		mustOK(t, v.run("main", "", "task new", taskFile))
+	}
+}
+
+func (v env) tick(t *testing.T) {
+	t.Helper()
+	if err := v.e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTickStartsWorkersUpToMaxWorkersOldestFirst(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 3)
+
+	v.tick(t)
+
+	var names []string
+	for _, s := range v.l.started {
+		names = append(names, s.Name)
+	}
+	if !slices.Equal(names, []string{"worker-t1", "worker-t2"}) {
+		t.Fatalf("started %v", names)
+	}
+	v.statusShows(t, "t3", "queued")
+}
+
+func TestTickMovesAStartedTaskToWorkingWithTheWorkspaceDir(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+
+	v.tick(t)
+
+	tk := v.state(t, "t1")
+	if tk.State != task.Working || tk.Dir != "/work/t1" {
+		t.Fatalf("got %+v", tk)
+	}
+	s := v.l.started[0]
+	if s.Kind != "worker" || s.Dir != "/work/t1" || s.Model != "work-model" || s.Task != "t1" || !strings.Contains(s.Prompt, "Do it.") {
+		t.Fatalf("spec %+v", s)
+	}
+}
+
+func TestTickPutsATaskBackInQueuedWhenTheWorkerDoesNotStart(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+	noPane := errors.New("no pane")
+	v.l.startErr = noPane
+
+	err := v.e.Tick()
+
+	if !errors.Is(err, noPane) {
+		t.Fatalf("got %v", err)
+	}
+	if tk := v.state(t, "t1"); tk.State != task.Queued || tk.Dir != "" {
+		t.Fatalf("got %+v", tk)
+	}
+	if !slices.Equal(v.ws.removed, []string{"t1"}) {
+		t.Fatalf("removed %v", v.ws.removed)
+	}
+}
+
+func TestTickPutsATaskBackInQueuedWhenTheWorkspaceFails(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+	v.ws.createErr = errors.New("disk full")
+
+	err := v.e.Tick()
+
+	if err == nil || v.state(t, "t1").State != task.Queued {
+		t.Fatalf("got %v, %+v", err, v.state(t, "t1"))
+	}
+}
+
+func TestTickResendsTheNoteAfterResendMinutesAndNotBefore(t *testing.T) {
+	v := newEnv(t)
+	mustOK(t, v.run("main", "", "hook turn-ended", ""))
+	mustOK(t, v.run("", "", "task new", taskFile))
+
+	v.clock.now = v.clock.now.Add(4 * time.Minute)
+	v.tick(t)
+	before := len(v.l.sent)
+	v.clock.now = v.clock.now.Add(time.Minute)
+	v.tick(t)
+
+	if before != 1 || len(v.l.sent) != 2 || v.l.sent[1] != "main: "+note {
+		t.Fatalf("before %d, sent %v", before, v.l.sent)
+	}
+}
+
+func TestTickDoesNotResendToAnAgentThatReadItsMessages(t *testing.T) {
+	v := newEnv(t)
+	mustOK(t, v.run("main", "", "hook turn-ended", ""))
+	mustOK(t, v.run("", "", "task new", taskFile))
+	mustOK(t, v.run("main", "", "inbox", ""))
+
+	v.clock.now = v.clock.now.Add(time.Hour)
+	v.tick(t)
+
+	if len(v.l.sent) != 1 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTickRetriesRemoveForACancelledTaskAndClearsDir(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.ws.removeErr = errors.New("busy")
+	mustFail(t, v.run("", "", "task cancel", "", "t1"), "busy")
+	v.ws.removeErr = nil
+
+	v.tick(t)
+
+	if !slices.Equal(v.ws.removed, []string{"t1"}) || v.state(t, "t1").Dir != "" {
+		t.Fatalf("removed %v, dir %q", v.ws.removed, v.state(t, "t1").Dir)
+	}
+}
+
+func TestTickTellsMainOnceWhenAWorkerIsGone(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.dead = map[string]bool{"worker-t1": true}
+
+	v.tick(t)
+	v.tick(t)
+
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "t1") {
+		t.Fatalf("got %+v", msgs)
+	}
+}
+
+func TestTickTellsMainAgainWhenAWorkerDiesAfterRunningAgain(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.dead = map[string]bool{"worker-t1": true}
+	v.tick(t)
+	v.l.dead = nil
+	v.tick(t)
+	v.l.dead = map[string]bool{"worker-t1": true}
+
+	v.tick(t)
+
+	if n := len(v.inbox(t, "main")); n != 2 {
+		t.Fatalf("got %d messages", n)
+	}
+}
+
+func TestAFreshEngineResendsAnUnreadNoteAfterResendMinutes(t *testing.T) {
+	v := newEnv(t)
+	mustOK(t, v.run("", "", "task new", taskFile))
+	cfg := config.Config{ResendMinutes: 5, MaxWorkers: 2}
+	fresh := engine.New(v.st, v.l, v.ws, cfg, v.clock)
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+
+	if err := fresh.Tick(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTickDoesNotResendToMainWhenItsSessionIsGone(t *testing.T) {
+	v := newEnv(t)
+	mustOK(t, v.run("", "", "task new", taskFile))
+	v.l.dead = map[string]bool{"main": true}
+	v.clock.now = v.clock.now.Add(time.Hour)
+
+	v.tick(t)
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestTickKeepsTheDirWhenRemoveFailsAfterAFailedStart(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+	v.l.startErr = errors.New("no pane")
+	v.ws.removeErr = errors.New("busy")
+
+	if err := v.e.Tick(); err == nil {
+		t.Fatal("want an error")
+	}
+
+	if tk := v.state(t, "t1"); tk.State != task.Queued || tk.Dir != "/work/t1" {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
+func TestThreeFailedStartsEscalateTheTask(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+	v.l.startErr = errors.New("no pane")
+
+	for range 3 {
+		_ = v.e.Tick()
+	}
+
+	v.statusShows(t, "t1", "escalated")
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "t1") || !strings.Contains(msgs[0].Body, "no pane") {
+		t.Fatalf("got %+v", msgs)
+	}
+}
+
+func TestASuccessfulStartResetsTheCountOfFailedStarts(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+	v.l.startErr = errors.New("no pane")
+	_ = v.e.Tick()
+	_ = v.e.Tick()
+	v.l.startErr = nil
+	v.tick(t)
+	mustOK(t, v.run("", "", "task cancel", "", "t1"))
+	v.queue(t, 1)
+	v.l.startErr = errors.New("no pane")
+
+	_ = v.e.Tick()
+	_ = v.e.Tick()
+
+	v.statusShows(t, "t2", "queued")
 }
