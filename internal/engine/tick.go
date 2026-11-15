@@ -160,6 +160,7 @@ func (e *Engine) resendNotes() error {
 }
 
 // retryCleanup repeats the cleanup of done and cancelled tasks that still have a workspace.
+// It also ends the sessions of an approved task again, in case the stop after the pass failed.
 func (e *Engine) retryCleanup() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {
@@ -167,6 +168,9 @@ func (e *Engine) retryCleanup() error {
 	}
 	var errs []error
 	for _, t := range tasks {
+		if t.State == task.Approved {
+			errs = append(errs, e.endSessions(t))
+		}
 		if (t.State == task.Done || t.State == task.Cancelled) && t.Dir != "" {
 			errs = append(errs, e.cleanup(t))
 		}

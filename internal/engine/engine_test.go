@@ -582,18 +582,34 @@ func TestReportProgressRecordsTheText(t *testing.T) {
 	}
 }
 
-func TestVerdictPassMovesToDoneAndCleansUp(t *testing.T) {
+// pass records a passing verdict and has main complete the task.
+func (v env) pass(t *testing.T) {
+	t.Helper()
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	mustOK(t, v.run("main", "", "task complete", "", "t1"))
+}
+
+func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
+	tk := v.state(t, "t1")
+	tk.Repo = "repo"
+	if err := v.st.Save(tk); err != nil {
+		t.Fatal(err)
+	}
 
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
 
-	v.statusShows(t, "t1", "done")
-	if len(v.inbox(t, "main")) != 1 {
-		t.Fatal("main got no message")
+	v.statusShows(t, "t1", "approved")
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "sfy/t1") {
+		t.Fatalf("main got %+v", msgs)
 	}
-	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || !slices.Equal(v.ws.removed, []string{"t1"}) {
+	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || len(v.ws.removed) != 0 {
 		t.Fatalf("stopped %v removed %v", v.l.stopped, v.ws.removed)
+	}
+	if d := v.state(t, "t1").Dir; d != "/work/t1" {
+		t.Fatalf("dir %q", d)
 	}
 	if _, err := os.Stat(filepath.Join(v.home, "tasks", "t1", "verdicts", "1-pass.md")); err != nil {
 		t.Fatal(err)
@@ -717,11 +733,62 @@ func TestReportDoneRestoresTheStateWhenTheReviewerDoesNotStart(t *testing.T) {
 	v.statusShows(t, "t1", "working")
 }
 
-func TestVerdictPassClearsTheWorkspaceOfTheTask(t *testing.T) {
+func TestCompleteMovesAnApprovedTaskToDoneAndCleansUp(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+
+	mustOK(t, v.run("main", "", "task complete", "", "t1"))
+
+	v.statusShows(t, "t1", "done")
+	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || !slices.Equal(v.ws.removed, []string{"t1"}) {
+		t.Fatalf("stopped %v removed %v", v.l.stopped, v.ws.removed)
+	}
+}
+
+func TestCompleteOfAWorkingTaskFails(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	mustFail(t, v.run("main", "", "task complete", "", "t1"), "needs approved")
+	if v.state(t, "t1").State != task.Working {
+		t.Fatal("the task changed state")
+	}
+}
+
+func TestAWorkerMayNotRunComplete(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+
+	mustFail(t, v.run("worker-t1", "t1", "task complete", "", "t1"), "task complete")
+	if v.state(t, "t1").State != task.Approved {
+		t.Fatal("the task changed state")
+	}
+}
+
+func TestCancelOfAnApprovedTaskWorks(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+
+	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+
+	v.statusShows(t, "t1", "cancelled")
+	if !slices.Equal(v.ws.removed, []string{"t1"}) {
+		t.Fatalf("removed %v", v.ws.removed)
+	}
+}
+
+func TestTaskEditFailsOnAnApprovedTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+
+	mustFail(t, v.run("main", "", "task edit", taskFile, "t1"), "approved")
+}
+
+func TestCompleteClearsTheWorkspaceOfTheTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
 
-	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
+	v.pass(t)
 
 	if d := v.state(t, "t1").Dir; d != "" {
 		t.Fatalf("dir %q", d)
@@ -1392,7 +1459,7 @@ func TestPassKeepsAWorkspaceThatHoldsWork(t *testing.T) {
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
 
-	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	v.pass(t)
 
 	if len(v.ws.removed) != 0 {
 		t.Fatalf("removed %v", v.ws.removed)
@@ -1404,7 +1471,7 @@ func TestPassTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
 
-	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	v.pass(t)
 
 	want := "Task t1 is done, but its workspace /work/t1 still holds work, so sfy kept it."
 	var found bool
@@ -1459,7 +1526,7 @@ func TestPassKeepsAPlainFolderThatHoldsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	v.pass(t)
 
 	if _, err := os.Stat(answer); err != nil {
 		t.Fatalf("the deliverable is gone: %v", err)
@@ -1474,7 +1541,8 @@ func TestTickAfterAFailedSaveTellsMainOnceThatTheWorkspaceWasKept(t *testing.T) 
 	// The save in cleanup fails because its folder cannot take new files.
 	v.ws.beforeCheck = func() { _ = os.Chmod(taskDir, 0o500) }
 
-	if ans := v.run("review-t1-1", "t1", "verdict pass", "Good."); ans.OK {
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	if ans := v.run("main", "", "task complete", "", "t1"); ans.OK {
 		t.Fatal("the failed save went unreported")
 	}
 	if err := os.Chmod(taskDir, 0o700); err != nil {
@@ -1500,7 +1568,7 @@ func TestTickAfterAKeptWorktreeSendsMainNothing(t *testing.T) {
 	v := newEnv(t)
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
-	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+	v.pass(t)
 	before := len(v.inbox(t, "main"))
 
 	if err := v.e.Tick(); err != nil {
@@ -1836,4 +1904,55 @@ func TestAMessageMidTurnTypesOneNoteAtTheTurnEnd(t *testing.T) {
 	if !slices.Equal(v.l.sent, []string{"worker-t1: " + note}) {
 		t.Fatalf("sent %v", v.l.sent)
 	}
+}
+
+func TestAnApprovedTaskHoldsNoWorkerSlot(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 3)
+	tk := v.state(t, "t1")
+	tk.State, tk.Dir = task.Approved, "/work/t1"
+	if err := v.st.Save(tk); err != nil {
+		t.Fatal(err)
+	}
+
+	v.tick(t)
+
+	if len(v.l.started) != 2 {
+		t.Fatalf("started %d workers", len(v.l.started))
+	}
+}
+
+func TestTickSendsNoNoticeAndNoResendForAnApprovedTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+	v.l.dead = map[string]bool{"worker-t1": true}
+	if err := v.st.Send(store.Message{ID: "1", From: "main", To: "worker-t1", Body: "hi", Created: v.clock.now}); err != nil {
+		t.Fatal(err)
+	}
+
+	v.tick(t)
+	v.clock.now = v.clock.now.Add(10 * time.Minute)
+	v.tick(t)
+
+	if len(v.inbox(t, "main")) != 0 || len(v.l.sent) != 0 {
+		t.Fatalf("main got %+v, sent %v", v.inbox(t, "main"), v.l.sent)
+	}
+}
+
+func TestTickEndsTheSessionsOfAnApprovedTaskAgain(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+
+	v.tick(t)
+
+	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+func TestSendToTheWorkerOfAnApprovedTaskFails(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+
+	mustFail(t, v.run("main", "", "send", "hi", "worker-t1"), "does not run")
 }

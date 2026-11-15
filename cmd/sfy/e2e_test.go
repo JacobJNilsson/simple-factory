@@ -120,7 +120,13 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		shown, _ = sfy("", "", "task", "show", "t1")
-		if strings.Contains(shown, "State: done\n") && strings.Contains(shown, "## Verdict, round 1: pass") {
+		if strings.Contains(shown, "State: approved\n") && strings.Contains(shown, "## Verdict, round 1: pass") {
+			if out, err := sfy("main", "", "task", "complete", "t1"); err != nil {
+				t.Fatalf("task complete: %v\n%s", err, out)
+			}
+			if shown, _ = sfy("", "", "task", "show", "t1"); !strings.Contains(shown, "State: done\n") {
+				t.Fatalf("task t1 is not done after complete:\n%s", shown)
+			}
 			t.Logf("loop finished in %s", time.Since(start))
 			if _, err := os.Stat(filepath.Join(home, "sfy.log")); err != nil {
 				t.Errorf("sfy.log: %v", err)

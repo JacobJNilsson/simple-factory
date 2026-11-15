@@ -12,7 +12,7 @@ This spec covers version 0.
 - The agent provider sits behind an adapter. Version 0 has one adapter, for Claude Code. The design allows more providers, and several in one sfy process.
 - A multiplexer is a set of command templates in `config.toml`, with no Go code. Version 0 ships sets for tmux and Herdr. A new multiplexer needs only a new set.
 - The core knows nothing about any one kind of work. The extension points below add that.
-- Version 0 has no web console, cost tracking, merge handling, remote agents or trust rules.
+- Version 0 has no web console, cost tracking, remote agents or trust rules. sfy merges nothing itself. The main agent merges through the provider's tools.
 
 ## Agents
 
@@ -20,7 +20,7 @@ sfy runs three kinds of agent session. Each session runs in its own pane.
 
 - **The main agent** is the one the operator talks to. It creates tasks, prepares the tasks that others create, answers workers, and cancels tasks. It escalates to the operator when it cannot decide. sfy sets no limit on what it may decide.
 - **A worker** does one task. It runs in the task's workspace and stays alive through the task's review rounds.
-- **A reviewer** checks one result. sfy starts a fresh reviewer for each review round. The reviewer reads the task file and the result, and runs the checks itself, such as the tests and the build. It judges whether the result meets the task's goal, and its verdict decides whether the task is done. It never reads the worker's transcript, and it never takes the worker's summary as proof.
+- **A reviewer** checks one result. sfy starts a fresh reviewer for each review round. The reviewer reads the task file and the result, and runs the checks itself, such as the tests and the build. It judges whether the result meets the task's goal, and its verdict decides whether the task is approved. It never reads the worker's transcript, and it never takes the worker's summary as proof.
 
 sfy starts each session with an identity in the environment: `SFY_AGENT` holds the session's name, and `SFY_TASK` holds the task id for workers and reviewers. The CLI reads these to know who is calling.
 
@@ -41,7 +41,7 @@ sfy ships a default prompt for each kind of agent: main, worker and reviewer. Th
 ## Tasks
 
 - A task file, `task.md`, holds a description and a goal. It may also name a repo, a check command, and paths that the worker must not edit.
-- A task can deliver anything: a code change, a document, an answer. A reviewer decides when a task is done.
+- A task can deliver anything: a code change, a document, an answer. A reviewer decides when a task is approved.
 - A task on a repo gets its own git worktree on a new branch. A task with no repo gets an empty folder.
 - sfy gives each task an id of the form `t<n>`, counting up from `t1`.
 
@@ -54,18 +54,20 @@ A task moves through these states:
 | `working` | A worker is doing the task. |
 | `review` | A reviewer checks the worker's result. |
 | `feedback` | The worker fixes the result after a failed review. The round shows how many reviews have run, for example `feedback 1` after the first failed review. |
-| `done` | A reviewer passed the result. |
+| `approved` | A reviewer passed the result. The task waits for the main agent to complete it. |
+| `done` | The main agent completed the task. |
 | `escalated` | The task waits for the operator. |
 | `cancelled` | The main agent or the operator stopped the task. |
 
-- A task that a program or the operator creates starts in `new`, and sfy tells the main agent. The main agent adds context, for example from its notes, and may replace the task file at any time before the task is done or cancelled. It then queues the task, cancels it, or escalates it.
+- A task that a program or the operator creates starts in `new`, and sfy tells the main agent. The main agent adds context, for example from its notes, and may replace the task file at any time before the task is approved or cancelled. It then queues the task, cancels it, or escalates it.
 - A task that the main agent creates starts in `queued`.
 - sfy starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
-- When the reviewer's verdict is `pass`, the task moves to `done`, and sfy tells the main agent.
+- When the reviewer's verdict is `pass`, the task moves to `approved`. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent: "Task <id> is approved. Merge the pull request of branch <branch>, then run: sfy task complete <id>". A task with no repo gets a note that says it has no pull request.. A task without a pull request, for example a report, is completed the same way. The main agent checks the result and runs the command.
+- When the main agent runs `sfy task complete`, the task moves to `done`. The main agent merges, and a merge completes a task.
 - When the verdict is `fail`, sfy sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. sfy first sends the verdict to the worker. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
-- When a task is `done` or `cancelled`, sfy ends its worker and reviewer sessions. It then checks the workspace. A clean worktree, found with `git status --porcelain`, or an empty folder is removed, and the branch stays. A worktree with uncommitted changes or untracked files stays, and so does a folder with files. sfy then tells the main agent that the workspace still holds work, and where it is.
+- When a task is `done` or `cancelled`, sfy ends any worker and reviewer sessions that still run. It then checks the workspace. A clean worktree, found with `git status --porcelain`, or an empty folder is removed, and the branch stays. A worktree with uncommitted changes or untracked files stays, and so does a folder with files. sfy then tells the main agent that the workspace still holds work, and where it is.
 - `sfy task resume` ends `escalated`. The task returns to the state it had before the escalation, with the same round. sfy tells its worker to go on, and its reviewer too when the task returns to `review`. A task that escalated after its last failed review returns to `feedback`, so its worker fixes the result and gets one more review round. The command fails for a task in any other state.
 - sfy does not restart a worker that ended on its own. It tells the main agent, which decides what happens to the task.
 
@@ -96,11 +98,12 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 |---|---|---|
 | `sfy up` | operator | Starts the sfy process and the main agent. Starts a new main agent if the old one died. Warns when the provider does not trust the sfy home. |
 | `sfy task new` | main agent, operator, programs | Creates a task from a description, a goal and the optional fields. Prints the task id. A warning about an untrusted folder goes to standard error. |
-| `sfy task edit <id> <file>` | main agent | Replaces the file of a task in any state except `done` and `cancelled`. The task keeps its id, state, round, source, progress and folder. Once the task has a workspace, an edit may not change `## Repo` or `## Protected`. A running worker gets a message to read the new file. A running reviewer keeps the old file, and the next round reads the new one. |
+| `sfy task edit <id> <file>` | main agent | Replaces the file of a task in any state except `approved`, `done` and `cancelled`. The task keeps its id, state, round, source, progress and folder. Once the task has a workspace, an edit may not change `## Repo` or `## Protected`. A running worker gets a message to read the new file. A running reviewer keeps the old file, and the next round reads the new one. |
 | `sfy task queue <id>` | main agent | Moves a `new` task to `queued`. |
 | `sfy task list` | anyone | Lists the tasks and their states. |
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
-| `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. |
+| `sfy task complete <id>` | main agent, operator | Moves an `approved` task to `done` and cleans up. Fails for a task in any other state. |
+| `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. Works in any state except `done` and `cancelled`. |
 | `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |
 | `sfy send <agent> <text>` | main agent | Sends a message to an agent. |
 | `sfy report done <text>` | worker | Reports the result and starts the review. |
