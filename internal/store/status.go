@@ -9,7 +9,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-// RenderStatus returns the text of status.md. It leaves out archived tasks. Escalated tasks come first, then the rest by id.
+// RenderStatus returns the text of status.md. It leaves out archived tasks. Escalated tasks come first, then the rest. Each group lists the newest change first, a zero time last, and the higher id first on a tie.
 func RenderStatus(tasks []task.Task) string {
 	var sorted []task.Task
 	for _, t := range tasks {
@@ -22,7 +22,14 @@ func RenderStatus(tasks []task.Task) string {
 		if ei != ej {
 			return ei
 		}
-		return number(sorted[i].ID) < number(sorted[j].ID)
+		ui, uj := sorted[i].Updated, sorted[j].Updated
+		if zi, zj := ui.IsZero(), uj.IsZero(); zi != zj {
+			return zj
+		}
+		if !ui.Equal(uj) {
+			return ui.After(uj)
+		}
+		return number(sorted[i].ID) > number(sorted[j].ID)
 	})
 
 	var b strings.Builder
