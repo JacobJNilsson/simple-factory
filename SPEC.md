@@ -16,7 +16,7 @@ This spec covers version 0.
 
 ## Agents
 
-sfy runs three kinds of agent session. Each session runs in its own pane.
+sfy runs three kinds of agent session. Each session runs in its own terminal. By default the main agent opens a pane or tab, and workers and reviewers run in the background without one. The operator opens one in Herdr with `hc attach <name>` or the `hc` picker. A worker that stops at the provider's trust dialog needs that attach.
 
 - **The main agent** is the one the operator talks to. It creates tasks, prepares the tasks that others create, answers workers, and cancels tasks. It escalates to the operator when it cannot decide. sfy sets no limit on what it may decide.
 - **A worker** does one task. It runs in the task's workspace and stays alive through the task's review rounds.
@@ -161,6 +161,7 @@ A command that an agent kind may not run fails with an error that names the comm
 | `review_rounds` | 3 | Failed reviews before a task moves to `escalated`. |
 | `max_workers` | 2 | Workers that run at once. |
 | `resend_minutes` | 5 | Minutes between notes for an unread message. |
+| `show_agents` | `false` | When `true`, sfy runs the multiplexer's `show` template for each worker and reviewer, which opens a tab in Herdr. The main agent always gets it. |
 | `provider` | `claude` | The agent provider adapter. |
 | `multiplexer` | `tmux` | The name of the template set to use. |
 | `models.main` | `opus` | The main agent's model. |
@@ -182,7 +183,7 @@ A template set lives under `[multiplexers.<name>]` in `config.toml`. Each templa
 | `alive` | yes | Exits 0 if session `{name}` still runs. |
 | `stop` | yes | Ends session `{name}`. |
 | `notify` | no | Draws the operator's attention to session `{name}`, with `{text}` as the message. |
-| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start`. A failure goes to `sfy.log` and does not fail the start. |
+| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of the main agent, and of a worker or reviewer only when `show_agents` is `true`. A failure goes to `sfy.log` and does not fail the start. |
 
 sfy does not ask the multiplexer whether an agent waits for input. The provider adapter tells it.
 
