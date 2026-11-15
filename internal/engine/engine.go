@@ -4,6 +4,7 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"regexp"
 	"sort"
 	"strings"
@@ -54,6 +55,7 @@ type Engine struct {
 	cfg config.Config
 	c   Clock
 
+	log     io.Writer
 	mu      sync.Mutex
 	counter int
 	// agents holds what sfy knows of each session, in memory only.
@@ -75,6 +77,10 @@ type agentState struct {
 	lastNote  time.Time
 	// gone is true after sfy told main that the session no longer runs.
 	gone bool
+	// skipLogged is true after the log named this agent as not alive, until it lives again.
+	skipLogged bool
+	// aliveFailLogged is true after the log named a failed alive check of this agent, until a check succeeds.
+	aliveFailLogged bool
 }
 
 func (e *Engine) agent(name string) *agentState {
@@ -82,6 +88,20 @@ func (e *Engine) agent(name string) *agentState {
 		e.agents[name] = &agentState{}
 	}
 	return e.agents[name]
+}
+
+// SetLog makes the engine write one line to w for each note it types and for each unread agent it skips as not alive.
+func (e *Engine) SetLog(w io.Writer) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.log = w
+}
+
+// logf writes one timestamped line to the log, when one is set.
+func (e *Engine) logf(format string, args ...any) {
+	if e.log != nil {
+		_, _ = fmt.Fprintf(e.log, "%s "+format+"\n", append([]any{e.c.Now().Format(time.RFC3339)}, args...)...)
+	}
 }
 
 // New returns an Engine that works through the given store and interfaces.

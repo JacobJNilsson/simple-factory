@@ -184,7 +184,7 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 			continue
 		}
 		if e.agent(name).waiting {
-			errs = append(errs, e.ignoreGone(name, e.typeNote(name)))
+			errs = append(errs, e.ignoreGone(name, e.typeNote(name, "new message")))
 		}
 	}
 	return "", errors.Join(errs...)
@@ -430,7 +430,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 		return "", errors.Join(append(errs, err)...)
 	}
 	if len(unread) > 0 {
-		errs = append(errs, e.typeNote(name))
+		errs = append(errs, e.typeNote(name, "turn ended"))
 	}
 	return "", errors.Join(errs...)
 }
