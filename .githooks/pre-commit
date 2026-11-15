@@ -1,0 +1,15 @@
+#!/bin/sh
+# The commit gate. Install it with `make hooks`. Bypass it with SKIP_PRE_COMMIT=1.
+set -eu
+
+if [ "${SKIP_PRE_COMMIT:-}" = "1" ]; then
+	echo "pre-commit: skipped (SKIP_PRE_COMMIT=1)"
+	exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+# Tests that run git must not act on the real repository.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_PREFIX
+
+echo "pre-commit: make check"
+make check
