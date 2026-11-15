@@ -378,3 +378,58 @@ func TestCommandRejectsAPathInTheName(t *testing.T) {
 		t.Error("path in name accepted")
 	}
 }
+
+func TestMainSettingsAllowRules(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, mainSpec())
+	s := readSettings(t, home, "main")
+
+	for _, want := range []string{"Bash(sfy *)", "Read(/" + home + "/**)", "Bash(ls *)"} {
+		t.Run(want, func(t *testing.T) {
+			if !slices.Contains(s.Permissions.Allow, want) {
+				t.Errorf("allow lacks %s: %v", want, s.Permissions.Allow)
+			}
+		})
+	}
+}
+
+func TestMainBashRulesAreTheConfigSfyAndLsRules(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, mainSpec())
+
+	s := readSettings(t, home, "main")
+
+	var got []string
+	for _, a := range s.Permissions.Allow {
+		if strings.HasPrefix(a, "Bash") {
+			got = append(got, a)
+		}
+	}
+	want := []string{"Bash(git *)", "Bash(make *)", "Bash(" + bin + " *)", "Bash(sfy *)", "Bash(ls *)"}
+	if !slices.Equal(got, want) {
+		t.Errorf("Bash rules %v, want %v", got, want)
+	}
+}
+
+func TestMainKeepsAcceptEdits(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	argv := command(t, p, mainSpec())
+
+	if got := flagValue(t, argv, "--permission-mode"); got != "acceptEdits" {
+		t.Errorf("--permission-mode %q", got)
+	}
+}
+
+func TestWorkerSettingsHaveNoSfyHomeReadRule(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+
+	s := readSettings(t, home, "worker-t1")
+
+	for _, a := range s.Permissions.Allow {
+		if strings.HasPrefix(a, "Read(") || a == "Bash(ls *)" {
+			t.Errorf("worker allows %s", a)
+		}
+	}
+}
