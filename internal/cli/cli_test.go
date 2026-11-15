@@ -96,6 +96,7 @@ func (quietLauncher) Send(string, string) error      { return nil }
 func (quietLauncher) Alive(string) (bool, error)     { return true, nil }
 func (quietLauncher) Stop(string) error              { return nil }
 func (quietLauncher) Notify(string, string) error    { return nil }
+func (quietLauncher) TrustWarning(string) string     { return "" }
 
 type fixedClock struct{}
 
@@ -104,12 +105,27 @@ func (fixedClock) Now() time.Time { return time.Date(2026, 11, 15, 12, 0, 0, 0, 
 // liveServer starts a real server and returns the environment of a client that talks to it.
 func liveServer(t *testing.T) func(string) string {
 	t.Helper()
+	return liveServerWith(t, quietLauncher{}, nil)
+}
+
+// warnLauncher is a quietLauncher whose trust check always warns.
+type warnLauncher struct{ quietLauncher }
+
+func (warnLauncher) TrustWarning(string) string { return "untrusted" }
+
+// repoWorkspaces names every repo as its own folder. It supports no other call.
+type repoWorkspaces struct{ engine.Workspaces }
+
+func (repoWorkspaces) RepoFolder(repo string) string { return repo }
+
+func liveServerWith(t *testing.T, l engine.Launcher, ws engine.Workspaces) func(string) string {
+	t.Helper()
 	home, err := os.MkdirTemp("", "fc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	eng := engine.New(store.Files(t.TempDir()), quietLauncher{}, nil, config.Config{}, fixedClock{})
+	eng := engine.New(store.Files(t.TempDir()), l, ws, config.Config{}, fixedClock{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, filepath.Join(home, "sfy.sock"), eng, time.Hour, io.Discard) }()
@@ -208,5 +224,18 @@ func TestRunResumeIsRefusedForAWorker(t *testing.T) {
 	code, msg := run("worker-t1", "t1", "task", "resume", "t1")
 	if code != exitFailed || !strings.Contains(msg, "not for a worker") {
 		t.Fatalf("code %d, stderr %q", code, msg)
+	}
+}
+
+func TestTaskNewPrintsOnlyTheIdToStdoutAndTheWarningToStderr(t *testing.T) {
+	env := liveServerWith(t, warnLauncher{}, repoWorkspaces{})
+	var out, errb bytes.Buffer
+	body := "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n\n## Repo\n\n/some/repo\n"
+	code := Run([]string{"task", "new", "-"}, env, strings.NewReader(body), &out, &errb)
+	if code != exitOK || out.String() != "t1\n" {
+		t.Fatalf("code %d, stdout %q", code, out.String())
+	}
+	if !strings.Contains(errb.String(), "untrusted") {
+		t.Errorf("stderr %q", errb.String())
 	}
 }

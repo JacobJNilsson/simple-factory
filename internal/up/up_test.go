@@ -52,6 +52,14 @@ type fakeLauncher struct {
 	*fakeMux
 	specs []engine.SessionSpec
 	err   error
+	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
+	warning    string
+	trustAsked []string
+}
+
+func (l *fakeLauncher) TrustWarning(dir string) string {
+	l.trustAsked = append(l.trustAsked, dir)
+	return l.warning
 }
 
 func (l *fakeLauncher) Start(s engine.SessionSpec) error {
@@ -68,6 +76,7 @@ type rig struct {
 	l   *fakeLauncher
 	o   options
 	out *bytes.Buffer
+	err *bytes.Buffer
 }
 
 func newRig(t *testing.T) *rig {
@@ -75,11 +84,12 @@ func newRig(t *testing.T) *rig {
 	m := &fakeMux{alive: map[string]bool{}, serveAnswers: true}
 	l := &fakeLauncher{fakeMux: m}
 	out := &bytes.Buffer{}
-	return &rig{m: m, l: l, out: out, o: options{
+	errb := &bytes.Buffer{}
+	return &rig{m: m, l: l, out: out, err: errb, o: options{
 		home: t.TempDir(), config: config.Config{Models: config.Models{Main: "opus"}},
 		bin: "/bin/sfy", environ: []string{"PATH=/usr/bin"},
 		mux: m, launcher: l, answers: m.probe,
-		wait: time.Second, poll: time.Millisecond, out: out,
+		wait: time.Second, poll: time.Millisecond, out: out, warn: errb,
 	}}
 }
 
@@ -295,3 +305,42 @@ func TestFailedServeStartLeavesNoEnvFile(t *testing.T) {
 type failingMux struct{ *fakeMux }
 
 func (failingMux) Start(string, string, []string) error { return errors.New("no pane") }
+
+func TestUpWarnsWhenHomeIsNotTrusted(t *testing.T) {
+	r := newRig(t)
+	r.l.warning = "some warning"
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.l.trustAsked) != 1 || r.l.trustAsked[0] != r.o.home {
+		t.Errorf("asked %v, want the sfy home", r.l.trustAsked)
+	}
+	if !strings.Contains(r.err.String(), "some warning") {
+		t.Errorf("stderr: %q", r.err.String())
+	}
+	if len(r.l.specs) != 1 || r.out.Len() == 0 {
+		t.Errorf("up must still start the main agent: %v, stdout %q", r.l.specs, r.out.String())
+	}
+}
+
+func TestUpSaysNothingWhenHomeIsTrusted(t *testing.T) {
+	r := newRig(t)
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if r.err.Len() != 0 {
+		t.Errorf("stderr: %q", r.err.String())
+	}
+}
+
+func TestUpDoesNotWarnWhenMainAlreadyRuns(t *testing.T) {
+	r := newRig(t)
+	r.l.warning = "some warning"
+	r.m.alive["main"] = true
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if r.err.Len() != 0 || len(r.l.trustAsked) != 0 {
+		t.Errorf("stderr %q, asked %v", r.err.String(), r.l.trustAsked)
+	}
+}

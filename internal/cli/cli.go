@@ -166,8 +166,17 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		_, _ = fmt.Fprintln(stderr, strings.TrimRight(ans.Error, "\n"))
 		return exitFailed
 	}
-	if ans.Text != "" {
-		_, _ = fmt.Fprintln(stdout, strings.TrimRight(ans.Text, "\n"))
+	text := strings.TrimRight(ans.Text, "\n")
+	if req.Command == "task new" {
+		// The reply holds the id, then any warning. The warning goes to stderr so $(sfy task new f) yields the id.
+		var warning string
+		text, warning, _ = strings.Cut(text, "\n")
+		if warning != "" {
+			_, _ = fmt.Fprintln(stderr, "sfy: "+strings.ToLower(warning[:1])+warning[1:])
+		}
+	}
+	if text != "" {
+		_, _ = fmt.Fprintln(stdout, text)
 	}
 	return exitOK
 }

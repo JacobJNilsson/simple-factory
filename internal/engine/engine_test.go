@@ -29,6 +29,9 @@ type fakeLauncher struct {
 	started  []engine.SessionSpec
 	stopped  []string
 	notified []string
+	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
+	warning    string
+	trustAsked []string
 }
 
 func (f *fakeLauncher) Start(s engine.SessionSpec) error {
@@ -63,6 +66,11 @@ func (f *fakeLauncher) Notify(name, text string) error {
 	return nil
 }
 
+func (f *fakeLauncher) TrustWarning(dir string) string {
+	f.trustAsked = append(f.trustAsked, dir)
+	return f.warning
+}
+
 type fakeWorkspaces struct {
 	removed     []string
 	removeErr   error
@@ -83,6 +91,7 @@ func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 	}
 	return f.dirty[t.ID], nil
 }
+func (f *fakeWorkspaces) RepoFolder(repo string) string { return "/folder/" + repo }
 
 func (f *fakeWorkspaces) Remove(t task.Task) error {
 	if f.removeErr != nil {
@@ -198,6 +207,42 @@ func TestTaskNewFromTheOperatorStartsNewAndMessagesMain(t *testing.T) {
 		t.Fatalf("main inbox: %+v", msgs)
 	}
 	v.statusShows(t, a.Text, "new")
+}
+
+func TestTaskNewWarnsInReplyAndNoteWhenRepoIsUntrusted(t *testing.T) {
+	v := newEnv(t)
+	v.l.warning = "untrusted"
+
+	a := v.run("", "", "task new", taskFile+"\n## Repo\n\nhttps://example.com/x.git\n")
+
+	mustOK(t, a)
+	id, warning, _ := strings.Cut(a.Text, "\n")
+	if id != "t1" || !strings.Contains(warning, "untrusted") {
+		t.Errorf("reply %q", a.Text)
+	}
+	if want := []string{"/folder/https://example.com/x.git"}; !reflect.DeepEqual(v.l.trustAsked, want) {
+		t.Errorf("asked %v, want %v", v.l.trustAsked, want)
+	}
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "untrusted") {
+		t.Fatalf("main inbox: %+v", msgs)
+	}
+}
+
+func TestTaskNewIsQuietWhenRepoIsTrustedOrAbsent(t *testing.T) {
+	v := newEnv(t)
+
+	withRepo := v.run("", "", "task new", taskFile+"\n## Repo\n\n/some/repo\n")
+	without := v.run("", "", "task new", taskFile)
+
+	mustOK(t, withRepo)
+	mustOK(t, without)
+	if strings.ContainsAny(withRepo.Text, " \n") || strings.ContainsAny(without.Text, " \n") {
+		t.Errorf("replies %q and %q hold more than an id", withRepo.Text, without.Text)
+	}
+	if len(v.l.trustAsked) != 1 {
+		t.Errorf("a task without a repo must not ask: %v", v.l.trustAsked)
+	}
 }
 
 func TestTaskNewFromMainStartsQueued(t *testing.T) {
