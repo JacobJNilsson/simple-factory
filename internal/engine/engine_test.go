@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -925,4 +926,24 @@ func TestASuccessfulStartResetsTheCountOfFailedStarts(t *testing.T) {
 	_ = v.e.Tick()
 
 	v.statusShows(t, "t2", "queued")
+}
+
+const protectedTaskFile = taskFile + "\n## Protected\n\n- SPEC.md\n- internal/store\n"
+
+func TestStartedSessionsCarryTheTasksProtectedPaths(t *testing.T) {
+	v := newEnv(t)
+	mustOK(t, v.run("main", "", "task new", protectedTaskFile))
+	want := []string{"SPEC.md", "internal/store"}
+
+	v.tick(t)
+	mustOK(t, v.run("worker-t1", "t1", "report done", "", "finished"))
+
+	if len(v.l.started) != 2 {
+		t.Fatalf("started %+v", v.l.started)
+	}
+	for _, s := range v.l.started {
+		if !reflect.DeepEqual(s.Protected, want) {
+			t.Fatalf("%s protected %v, want %v", s.Name, s.Protected, want)
+		}
+	}
 }
