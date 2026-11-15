@@ -54,8 +54,6 @@ func Builtin(name string) (Templates, bool) {
 		return tmuxSet, true
 	case "herdr":
 		return herdrSet, true
-	case "rex":
-		return rexSet, true
 	}
 	return Templates{}, false
 }
@@ -93,37 +91,6 @@ while :; do
 done
 printf '%s\n' "$res" >&2
 exit 1`,
-}
-
-// rexFind sets rex to the Rex command. It takes rex from the PATH, then $REX_BIN_DIR/rex, then the app bundle.
-// The bundle path has spaces, so every template uses "$rex" in quotes.
-const rexFind = `if command -v rex >/dev/null 2>&1; then rex=rex
-elif [ -n "${REX_BIN_DIR:-}" ] && [ -x "$REX_BIN_DIR/rex" ]; then rex="$REX_BIN_DIR/rex"
-else rex="$HOME/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"; fi
-`
-
-// Rex allows two sessions with one label, so Start refuses a label that exists and Alive reports ambiguity as an error.
-// A missing label exits 3 with "not found" and an ambiguous label exits 3 with "is ambiguous".
-// The process call prints JSON. Its child is null once the program exits, because --keep-open keeps the terminal.
-// Alive and Stop use --autostart=false, so a stopped Rex server is an error and sfy starts no server.
-// Show stays empty, because rex new opens a window without moving focus.
-var rexSet = Templates{
-	Start: rexFind + `out=$("$rex" block call -s {name} process 2>&1); rc=$?
-if [ $rc -eq 0 ]; then echo "rex session {name} exists" >&2; exit 1; fi
-case $out in *'not found'*) ;; *) printf '%s\n' "$out" >&2; exit 1;; esac
-"$rex" new {name} -c {dir} --keep-open -- {command}`,
-	Send: rexFind + `"$rex" send -s {name} -- {text} && "$rex" send-key -s {name} enter`,
-	// Exit 1 means missing or finished. Any other rex failure exits 2.
-	Alive: rexFind + `out=$("$rex" --autostart=false block call -s {name} process 2>&1); rc=$?
-case $out in *'not found'*) [ $rc -eq 3 ] && exit 1;; esac
-if [ $rc -ne 0 ]; then printf '%s\n' "$out" >&2; exit 2; fi
-case $out in
-  *'"child":null'*|*'"child": null'*) exit 1;;
-  *'"child"'*) exit 0;;
-esac
-printf '%s\n' "$out" >&2
-exit 2`,
-	Stop: rexFind + `"$rex" --autostart=false kill {name}`,
 }
 
 // A template that runs longer than this is killed and reported as an error.
