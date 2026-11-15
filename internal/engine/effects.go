@@ -65,7 +65,7 @@ func (e *Engine) stop(name string) error {
 }
 
 // cleanup ends the sessions of a task that ran and removes its workspace, then clears Dir.
-// A later slice retries it for done and cancelled tasks that still have a Dir.
+// Tick retries it for done and cancelled tasks that still have a Dir.
 func (e *Engine) cleanup(t task.Task) error {
 	if t.Dir == "" {
 		return nil

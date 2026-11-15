@@ -54,6 +54,8 @@ type Engine struct {
 	counter int
 	// agents holds what factory knows of each session, in memory only.
 	agents map[string]*agentState
+	// startFails counts the failed starts in a row of each task.
+	startFails map[string]int
 }
 
 // agentState tracks when a session may take a note.
@@ -67,6 +69,8 @@ type agentState struct {
 	// reminders counts the turns in a row that ended without a report.
 	reminders int
 	lastNote  time.Time
+	// gone is true after factory told main that the session no longer runs.
+	gone bool
 }
 
 func (e *Engine) agent(name string) *agentState {
@@ -78,7 +82,7 @@ func (e *Engine) agent(name string) *agentState {
 
 // New returns an Engine that works through the given store and interfaces.
 func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
-	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}}
+	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}}
 }
 
 type kind string
