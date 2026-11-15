@@ -8,7 +8,7 @@ SPEC.md holds the requirements.
 
 Install sfy from the tap with `brew install jacobjnilsson/tap/sfy`. Upgrade it with `brew upgrade sfy`. Run `sfy --version` to see the installed version. A build from source prints `dev`.
 
-Each pushed tag `v*` triggers a release. GoReleaser builds sfy for macOS and Linux on amd64 and arm64, publishes a GitHub release, and updates the formula in `JacobJNilsson/homebrew-tap`. The workflow needs the repository secret `HOMEBREW_TAP_GITHUB_TOKEN`, a token with write access to the tap.
+Each pushed tag `v*` triggers a release. GoReleaser builds sfy for macOS and Linux on amd64 and arm64, publishes a GitHub release, and updates the cask in `JacobJNilsson/homebrew-tap`. The workflow needs the repository secret `HOMEBREW_TAP_GITHUB_TOKEN`, a token with write access to the tap.
 
 ## Install a new build
 

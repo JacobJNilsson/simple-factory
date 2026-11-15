@@ -36,15 +36,20 @@ release:
     owner: JacobJNilsson
     name: simple-factory
 
-# The formula goes to the public tap. The token comes from the repository secret HOMEBREW_TAP_GITHUB_TOKEN.
-brews:
+# The cask goes to the public tap. The token comes from the repository secret HOMEBREW_TAP_GITHUB_TOKEN.
+homebrew_casks:
   - name: sfy
     repository:
       owner: JacobJNilsson
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: https://github.com/JacobJNilsson/simple-factory
     description: Runs coding agents as interactive sessions in terminal panes.
-    test: |
-      assert_match version.to_s, shell_output("#{bin}/sfy --version")
+    binaries:
+      - sfy
+    # The binary is not signed or notarized. Remove the quarantine attribute so Gatekeeper does not block it.
+    hooks:
+      post:
+        install_steps: |
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/sfy"]

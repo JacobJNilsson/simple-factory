@@ -188,4 +188,4 @@ A use of sfy extends it at these points, without changes to the core:
 
 sfy runs on Linux and macOS, with tmux or Herdr.
 
-A pushed tag `v*` starts a release. GoReleaser builds sfy for darwin and linux on amd64 and arm64, publishes a GitHub release, and writes the Homebrew formula to `JacobJNilsson/homebrew-tap`. The binary reports the tag with `sfy --version`, and a build without the release flags reports `dev`.
+A pushed tag `v*` starts a release. GoReleaser builds sfy for darwin and linux on amd64 and arm64, publishes a GitHub release, and writes the Homebrew cask to `JacobJNilsson/homebrew-tap`. The binary reports the tag with `sfy --version`, and a build without the release flags reports `dev`.
