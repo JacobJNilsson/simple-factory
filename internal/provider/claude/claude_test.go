@@ -420,7 +420,7 @@ func TestArgvEndsWithThePrompt(t *testing.T) {
 	}
 }
 
-func TestMainArgvOmitsTheTask(t *testing.T) {
+func TestMainEnvOmitsTheTask(t *testing.T) {
 	p, _ := setup(t, bin)
 
 	c := envruntest.Parse(t, command(t, p, mainSpec()))
