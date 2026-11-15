@@ -72,7 +72,8 @@ func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error
 		return err
 	}
 	defer func() { _ = logFile.Close() }()
-	err = serve(ctx, env, io.MultiWriter(stderr, logFile))
+	// The file comes first, because MultiWriter stops at the first failing writer and a closed pane makes stderr fail.
+	err = serve(ctx, env, io.MultiWriter(logFile, stderr))
 	if err != nil {
 		_, _ = fmt.Fprintf(logFile, "%s fatal: %v\n", time.Now().Format(time.RFC3339), err)
 	}
