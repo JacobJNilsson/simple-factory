@@ -179,6 +179,7 @@ var commands = map[string]command{
 	"status":          {(*Engine).status, anyone},
 	"hook turn-ended": {(*Engine).hookTurnEnded, agents},
 	"hook permission": {(*Engine).hookPermission, agents},
+	"hook idle":       {(*Engine).hookIdle, agents},
 }
 
 // Handle runs one command and returns its answer.

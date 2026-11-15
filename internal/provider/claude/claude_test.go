@@ -29,7 +29,8 @@ type settings struct {
 		Deny  []string `json:"deny"`
 	} `json:"permissions"`
 	Hooks map[string][]struct {
-		Hooks []hookEntry `json:"hooks"`
+		Matcher string      `json:"matcher"`
+		Hooks   []hookEntry `json:"hooks"`
 	} `json:"hooks"`
 }
 
@@ -136,7 +137,7 @@ func TestProtectedPathLosesItsLeadingDotSlash(t *testing.T) {
 	}
 }
 
-func TestWorkerSettingsSetBothHooksToTheSfyBinary(t *testing.T) {
+func TestWorkerSettingsSetEveryHookToTheSfyBinary(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
 
@@ -145,8 +146,22 @@ func TestWorkerSettingsSetBothHooksToTheSfyBinary(t *testing.T) {
 	if got := hookOf(t, s, "Stop").Command; got != bin+" hook turn-ended" {
 		t.Errorf("Stop runs %q", got)
 	}
+	if got := hookOf(t, s, "Notification").Command; got != bin+" hook idle" {
+		t.Errorf("idle hook %q", got)
+	}
 	if got := hookOf(t, s, "PermissionRequest").Command; got != bin+" hook permission" {
 		t.Errorf("PermissionRequest runs %q", got)
+	}
+}
+
+func TestIdleHookMatchesOnlyIdlePrompts(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+
+	s := readSettings(t, home, "worker-t1")
+
+	if got := s.Hooks["Notification"][0].Matcher; got != "idle_prompt" {
+		t.Errorf("matcher %q", got)
 	}
 }
 

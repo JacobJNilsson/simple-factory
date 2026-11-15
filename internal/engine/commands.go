@@ -450,11 +450,12 @@ func (e *Engine) runs(name string) bool {
 // hookTurnEnded runs when an agent's turn ends and its session waits for input.
 func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
+	s := e.agent(name)
+	// The pane waits even when the task does not run. A later message must find that out.
+	s.waiting, s.hookSince = true, true
 	if !e.runs(name) {
 		return "", nil
 	}
-	s := e.agent(name)
-	s.waiting, s.hookSince = true, true
 	var errs []error
 	if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
 		errs = append(errs, e.remind(name, s))
@@ -468,6 +469,22 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 		errs = append(errs, e.typeNote(name, "turn ended"))
 	}
 	return "", errors.Join(errs...)
+}
+
+// hookIdle runs when Claude Code reports that a session waits for input.
+// It types no reminder, because no turn just ended.
+func (e *Engine) hookIdle(req protocol.Request) (string, error) {
+	name := req.Caller.Agent
+	s := e.agent(name)
+	s.waiting, s.hookSince = true, true
+	if !e.runs(name) {
+		return "", nil
+	}
+	unread, err := e.st.Unread(name)
+	if err != nil || len(unread) == 0 {
+		return "", err
+	}
+	return "", e.typeNote(name, "idle")
 }
 
 // remind types the reminder for a missing report. After maxReminders it tells main once and types nothing.
