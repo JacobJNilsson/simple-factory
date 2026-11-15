@@ -39,7 +39,7 @@ func (e *Engine) message(to, from, body string) error {
 		return err
 	}
 	if e.agent(to).waiting {
-		return e.typeNote(to)
+		return e.typeNote(to, "new message")
 	}
 	return nil
 }
@@ -50,7 +50,8 @@ const (
 )
 
 // typeNote types the new-message note into a pane. The agent is busy until its next turn ends.
-func (e *Engine) typeNote(name string) error {
+func (e *Engine) typeNote(name, why string) error {
+	e.logf("note typed to %s: %s", name, why)
 	s := e.agent(name)
 	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
 	return e.l.Send(name, newMessageNote)

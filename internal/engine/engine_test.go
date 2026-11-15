@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ type fakeLauncher struct {
 	sent     []string
 	dead     map[string]bool
 	sendErr  error
+	aliveErr error
 	startErr error
 	stopErr  error
 	started  []engine.SessionSpec
@@ -36,7 +38,6 @@ func (f *fakeLauncher) Start(s engine.SessionSpec) error {
 	f.started = append(f.started, s)
 	return nil
 }
-
 func (f *fakeLauncher) Send(name, text string) error {
 	if f.sendErr != nil {
 		return f.sendErr
@@ -44,9 +45,12 @@ func (f *fakeLauncher) Send(name, text string) error {
 	f.sent = append(f.sent, name+": "+text)
 	return nil
 }
-
-func (f *fakeLauncher) Alive(name string) (bool, error) { return !f.dead[name], nil }
-
+func (f *fakeLauncher) Alive(name string) (bool, error) {
+	if f.aliveErr != nil {
+		return false, f.aliveErr
+	}
+	return !f.dead[name], nil
+}
 func (f *fakeLauncher) Stop(name string) error {
 	if f.stopErr != nil {
 		return f.stopErr
@@ -54,7 +58,6 @@ func (f *fakeLauncher) Stop(name string) error {
 	f.stopped = append(f.stopped, name)
 	return nil
 }
-
 func (f *fakeLauncher) Notify(name, text string) error {
 	f.notified = append(f.notified, name+": "+text)
 	return nil
@@ -1325,5 +1328,71 @@ func TestPermissionMessageNamesTheToolAndItsMainInput(t *testing.T) {
 				t.Fatalf("got %+v, want %q", msgs, want)
 			}
 		})
+	}
+}
+
+func TestEngineLogsEachNoteItTypesAndWhyItWasTyped(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	mustOK(t, v.run("main", "", "hook turn-ended", ""))
+	mustOK(t, v.run("", "", "task new", taskFile))
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+	v.tick(t)
+
+	lines := strings.Split(strings.TrimSpace(log.String()), "\n")
+	if len(lines) != 2 || lines[0] == lines[1] || strings.TrimPrefix(lines[0], strings.Fields(lines[0])[0]) == strings.TrimPrefix(lines[1], strings.Fields(lines[1])[0]) {
+		t.Fatalf("log %q", log.String())
+	}
+}
+
+func TestEngineLogsOnceWhenATickSkipsAnUnreadMainThatIsNotAlive(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	mustOK(t, v.run("", "", "task new", taskFile))
+	v.l.dead = map[string]bool{"main": true}
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+
+	v.tick(t)
+	v.tick(t)
+
+	if lines := strings.Count(log.String(), "\n"); lines != 1 || len(v.l.sent) != 0 {
+		t.Fatalf("log %q, sent %v", log.String(), v.l.sent)
+	}
+}
+
+func TestEngineLogsAgainForASecondPeriodInWhichMainIsNotAlive(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	mustOK(t, v.run("", "", "task new", taskFile))
+	v.clock.now = v.clock.now.Add(time.Minute)
+	v.l.dead = map[string]bool{"main": true}
+	v.tick(t)
+	v.l.dead = nil
+	v.tick(t)
+	v.l.dead = map[string]bool{"main": true}
+
+	v.tick(t)
+
+	if lines := strings.Count(log.String(), "\n"); lines != 2 {
+		t.Fatalf("log %q", log.String())
+	}
+}
+
+func TestEngineLogsOnceWhenTheAliveCheckOfMainFails(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	mustOK(t, v.run("", "", "task new", taskFile))
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+	v.l.aliveErr = errors.New("hc failed")
+
+	v.tick(t)
+	v.tick(t)
+
+	if got := strings.Count(log.String(), "alive check"); got != 1 || len(v.l.sent) != 1 {
+		t.Fatalf("log %q, sent %v", log.String(), v.l.sent)
 	}
 }

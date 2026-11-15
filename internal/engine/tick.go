@@ -118,9 +118,19 @@ func (e *Engine) resendNotes() error {
 	wait := time.Duration(e.cfg.ResendMinutes) * time.Minute
 	var errs []error
 	for _, name := range names {
+		s := e.agent(name)
+		down := false
 		if name == "main" {
-			if alive, err := e.l.Alive(name); err == nil && !alive {
-				continue
+			alive, err := e.l.Alive(name)
+			down = err == nil && !alive
+			if err != nil && !s.aliveFailLogged {
+				e.logf("alive check of %s failed: %v", name, err)
+				s.aliveFailLogged = true
+			} else if err == nil {
+				s.aliveFailLogged = false
+			}
+			if !down {
+				s.skipLogged = false
 			}
 		}
 		unread, err := e.st.Unread(name)
@@ -131,13 +141,19 @@ func (e *Engine) resendNotes() error {
 		if len(unread) == 0 {
 			continue
 		}
-		s := e.agent(name)
+		if down {
+			if !s.skipLogged {
+				e.logf("note skipped for %s: its session is not alive", name)
+				s.skipLogged = true
+			}
+			continue
+		}
 		last := s.lastNote
 		if last.IsZero() {
 			last = unread[0].Created
 		}
 		if e.c.Now().Sub(last) >= wait && (s.waiting || !s.hookSince) {
-			errs = append(errs, e.typeNote(name))
+			errs = append(errs, e.typeNote(name, "resend"))
 		}
 	}
 	return errors.Join(errs...)
