@@ -91,7 +91,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 
 func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 	s := settings{
-		Permissions: permissions{Allow: a.allow(), Deny: deny(spec)},
+		Permissions: permissions{Allow: a.allow(spec), Deny: deny(spec)},
 		Hooks: map[string][]hookGroup{
 			"Stop":              {{Hooks: []hook{a.hook("turn-ended")}}},
 			"PermissionRequest": {{Hooks: []hook{a.hook("permission")}}},
@@ -126,13 +126,22 @@ func shellWord(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func (a adapter) allow() []string {
+func (a adapter) allow(spec engine.SessionSpec) []string {
 	rules := []string{}
 	for _, c := range a.cfg.Allow {
 		rules = append(rules, "Bash("+c+" *)")
 	}
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
-	return append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
+	rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
+	if spec.Kind == "main" {
+		rules = append(rules, a.mainReads()...)
+	}
+	return rules
+}
+
+// mainReads lets the main agent read the sfy home without a prompt and list folders. It gets no cat rule, because a rule matches the command text and cannot limit a path.
+func (a adapter) mainReads() []string {
+	return []string{"Read(" + rulePath(a.home) + "/**)", "Bash(ls *)"}
 }
 
 // deny returns the deny rules of a session. The main agent talks to the operator, so it denies nothing.
