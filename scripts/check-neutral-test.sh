@@ -5,7 +5,7 @@ set -eu
 
 script="$(cd "$(dirname "$0")" && pwd)/check-neutral.sh"
 word="kny""ta"
-tmp=$(mktemp -d)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/check-neutral.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 fails=0
 out=""
