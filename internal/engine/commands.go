@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
@@ -114,16 +115,40 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := need(t, task.New); err != nil {
+	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Escalated); err != nil {
 		return "", err
 	}
 	edited, err := task.Parse(req.Body)
 	if err != nil {
 		return "", err
 	}
+	if t.Dir != "" && edited.Repo != t.Repo {
+		return "", fmt.Errorf("task %s has a workspace, so its repo is fixed", t.ID)
+	}
+	if t.Dir != "" && !slices.Equal(edited.Protected, t.Protected) {
+		return "", fmt.Errorf("task %s has a workspace, so its protected paths are fixed", t.ID)
+	}
 	edited.ID, edited.State, edited.Round, edited.Source = t.ID, t.State, t.Round, t.Source
 	edited.Progress, edited.Dir = t.Progress, t.Dir
-	return "", e.save(edited)
+	if err := e.save(edited); err != nil {
+		return "", err
+	}
+	if t.Dir == "" {
+		return "", nil
+	}
+	return "", e.noteWorker(t)
+}
+
+// noteWorker tells a worker to read its changed task file. A pane that no longer takes the note is no failure, because the message waits in the inbox.
+func (e *Engine) noteWorker(t task.Task) error {
+	name := "worker-" + t.ID
+	if err := e.storeMessage(name, "main", "The task file for "+t.ID+" changed. Run: sfy task show "+t.ID); err != nil {
+		return err
+	}
+	if !e.agent(name).waiting {
+		return nil
+	}
+	return e.ignoreGone(name, e.typeNote(name, "task file changed"))
 }
 
 func (e *Engine) taskQueue(req protocol.Request) (string, error) {

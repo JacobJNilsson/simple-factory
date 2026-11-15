@@ -245,13 +245,190 @@ func TestTaskEditReplacesTheGoalOfANewTask(t *testing.T) {
 	}
 }
 
-func TestTaskEditFailsOnAQueuedTask(t *testing.T) {
+const editedFile = "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nBetter.\n"
+
+func editGoal(v env, t *testing.T) {
+	t.Helper()
+	mustOK(t, v.run("main", "", "task edit", editedFile, "t1"))
+}
+
+func TestTaskEditReplacesTheGoalOfAQueuedTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
 
+	editGoal(v, t)
+
+	if g := v.state(t, "t1").Goal; g != "Better." {
+		t.Fatalf("goal %q", g)
+	}
+}
+
+func TestTaskEditOfAWorkingTaskMessagesTheWorker(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 2)
+
+	editGoal(v, t)
+
+	msgs := v.inbox(t, "worker-t1")
+	if len(msgs) != 1 || msgs[0].Body != "The task file for t1 changed. Run: sfy task show t1" {
+		t.Fatalf("worker inbox: %+v", msgs)
+	}
+}
+
+func TestTaskEditKeepsStateAndRound(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 2)
+
+	editGoal(v, t)
+
+	got := v.state(t, "t1")
+	if got.State != task.Working || got.Round != 2 {
+		t.Fatalf("state %s, round %d", got.State, got.Round)
+	}
+}
+
+func TestTaskEditOfAQueuedTaskMessagesNobody(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Queued, 0)
+
+	editGoal(v, t)
+
+	if m := v.inbox(t, "worker-t1"); len(m) != 0 {
+		t.Fatalf("worker inbox: %+v", m)
+	}
+}
+
+func TestTaskEditOfAnEscalatedTaskWithAWorkspaceMessagesTheWorker(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Escalated, 0)
+
+	editGoal(v, t)
+
+	if m := v.inbox(t, "worker-t1"); len(m) != 1 {
+		t.Fatalf("worker inbox: %+v", m)
+	}
+}
+
+func TestTaskEditOfAnEscalatedTaskWithoutAWorkspaceMessagesNobody(t *testing.T) {
+	v := newEnv(t)
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Escalated, Source: "main"}
+	if err := v.st.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+
+	editGoal(v, t)
+
+	if m := v.inbox(t, "worker-t1"); len(m) != 0 {
+		t.Fatalf("worker inbox: %+v", m)
+	}
+}
+
+// waitingWorker leaves the worker of a working task idle, so the next message types a note into its pane.
+func waitingWorker(v env, t *testing.T) {
+	t.Helper()
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "halfway"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+}
+
+func TestTaskEditWithADeadWorkerSessionSucceeds(t *testing.T) {
+	v := newEnv(t)
+	waitingWorker(v, t)
+	v.l.dead = map[string]bool{"worker-t1": true}
+	v.l.sendErr = errors.New("no such pane")
+
+	editGoal(v, t)
+
+	if m := v.inbox(t, "worker-t1"); len(m) != 1 {
+		t.Fatalf("worker inbox: %+v", m)
+	}
+}
+
+func TestTaskEditFailsWhenTheNoteFailsForALiveWorker(t *testing.T) {
+	v := newEnv(t)
+	waitingWorker(v, t)
+	v.l.sendErr = errors.New("pane refused")
+
+	a := v.run("main", "", "task edit", editedFile, "t1")
+
+	mustFail(t, a, "pane refused")
+}
+
+func TestTaskEditFailsOnADoneTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Done, 0)
+
 	a := v.run("main", "", "task edit", taskFile, "t1")
 
-	mustFail(t, a, "queued")
+	if a.OK {
+		t.Fatalf("want an error, got %+v", a)
+	}
+}
+
+func TestTaskEditFailsOnACancelledTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Cancelled, 0)
+
+	a := v.run("main", "", "task edit", taskFile, "t1")
+
+	if a.OK {
+		t.Fatalf("want an error, got %+v", a)
+	}
+}
+
+func TestTaskEditRefusesANewRepoOnceTheWorkspaceExists(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	a := v.run("main", "", "task edit", taskFile+"\n## Repo\n\nother\n", "t1")
+
+	mustFail(t, a, "repo is fixed")
+}
+
+func TestTaskEditRefusesNewProtectedPathsOnceTheWorkspaceExists(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	a := v.run("main", "", "task edit", taskFile+"\n## Protected\n\n- a.go\n", "t1")
+
+	mustFail(t, a, "protected paths are fixed")
+}
+
+func TestTaskEditAllowsANewRepoBeforeTheWorkspaceExists(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Queued, 0)
+
+	mustOK(t, v.run("main", "", "task edit", taskFile+"\n## Repo\n\nother\n", "t1"))
+
+	if r := v.state(t, "t1").Repo; r != "other" {
+		t.Fatalf("repo %q", r)
+	}
+}
+
+func TestTaskEditOfATaskInReviewKeepsTheRunningReviewersPrompt(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "report done", "", "all", "done"))
+
+	editGoal(v, t)
+
+	if p := v.l.started[0].Prompt; !strings.Contains(p, "Done.") || strings.Contains(p, "Better.") {
+		t.Fatalf("prompt %q", p)
+	}
+}
+
+func TestTheRoundAfterAnEditReviewsTheNewFile(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "report done", "", "all", "done"))
+	editGoal(v, t)
+	mustOK(t, v.run("review-t1-1", "t1", "verdict fail", "Tests fail."))
+
+	mustOK(t, v.run("worker-t1", "t1", "report done", "", "again"))
+
+	if p := v.l.started[1].Prompt; !strings.Contains(p, "Better.") {
+		t.Fatalf("prompt %q", p)
+	}
 }
 
 func TestTaskQueueMovesANewTaskToQueued(t *testing.T) {
@@ -569,15 +746,6 @@ func TestTaskShowPrintsTheVerdicts(t *testing.T) {
 	if !strings.Contains(a.Text, "Tests fail.") {
 		t.Fatalf("got %q", a.Text)
 	}
-}
-
-func TestTaskEditOfAQueuedTaskNamesTheStateItNeeds(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Queued, 0)
-
-	a := v.run("main", "", "task edit", taskFile, "t1")
-
-	mustFail(t, a, "needs new")
 }
 
 const (
