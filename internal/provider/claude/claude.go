@@ -112,16 +112,14 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if clean {
 		env = append(env, a.inherited()...)
 	}
+	argv := []string{"claude", "--name", spec.Name, "--model", spec.Model}
+	// The main agent gets no permission flag, so claude uses the operator's own default mode.
+	if spec.Kind != "main" {
+		argv = append(argv, "--permission-mode", "acceptEdits")
+	}
+	argv = append(argv, "--settings", path, "--append-system-prompt", role, spec.Prompt)
 	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.
-	return envrun.Wrap(filepath.Dir(path), env, clean, a.sfyBin, []string{
-		"claude",
-		"--name", spec.Name,
-		"--model", spec.Model,
-		"--permission-mode", "acceptEdits",
-		"--settings", path,
-		"--append-system-prompt", role,
-		spec.Prompt,
-	})
+	return envrun.Wrap(filepath.Dir(path), env, clean, a.sfyBin, argv)
 }
 
 // inherited returns the variables that a clean worker or reviewer keeps from sfy's environment.
