@@ -24,12 +24,13 @@ type adapter struct {
 	home   string
 	sfyBin string
 	goos   string
+	uid    int
 }
 
 // New returns the adapter for Claude Code. The hooks in each session run sfyBin.
 // CONTRACT: the sfy process picks an adapter by the provider setting, so New returns the interface.
 func New(cfg config.Config, home, sfyBin string) provider.Provider {
-	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: runtime.GOOS}
+	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: runtime.GOOS, uid: os.Getuid()}
 }
 
 type hook struct {
@@ -59,6 +60,12 @@ type sandbox struct {
 	ExcludedCommands         []string   `json:"excludedCommands"`
 	// WeakerNetworkIsolation lets macOS commands reach the system TLS trust service, which Go tools need.
 	WeakerNetworkIsolation bool `json:"enableWeakerNetworkIsolation,omitempty"`
+	// Network lists the Unix sockets that sandboxed commands may use. Claude Code reads it on macOS only.
+	Network *network `json:"network,omitempty"`
+}
+
+type network struct {
+	AllowUnixSockets []string `json:"allowUnixSockets"`
 }
 
 type permissions struct {
@@ -188,8 +195,13 @@ func (a adapter) sandboxFor(s *settings) error {
 		},
 	}
 	// gh and git push fail inside the macOS sandbox, and the sandbox blocks the sfy socket. The allow rules keep the excluded calls narrow.
-	// allowUnixSockets would open the socket on macOS only.
 	s.Sandbox.WeakerNetworkIsolation = a.goos == "darwin"
+	if a.goos == "darwin" {
+		// Go tests bind sockets in their temp folder. allowUnixSockets takes a folder as a prefix and stays narrower than allowAllUnixSockets.
+		s.Sandbox.Network = &network{AllowUnixSockets: []string{
+			fmt.Sprintf("/tmp/claude-%d", a.uid), fmt.Sprintf("/private/tmp/claude-%d", a.uid),
+		}}
+	}
 	s.Sandbox.ExcludedCommands = []string{"gh *", "git push *", "sfy *"}
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
