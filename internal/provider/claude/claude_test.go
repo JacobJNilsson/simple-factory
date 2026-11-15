@@ -25,10 +25,11 @@ type hookEntry struct {
 
 type settings struct {
 	Sandbox *struct {
-		Enabled                  bool `json:"enabled"`
-		FailIfUnavailable        bool `json:"failIfUnavailable"`
-		AutoAllowBashIfSandboxed bool `json:"autoAllowBashIfSandboxed"`
-		AllowUnsandboxedCommands bool `json:"allowUnsandboxedCommands"`
+		Enabled                  bool     `json:"enabled"`
+		FailIfUnavailable        bool     `json:"failIfUnavailable"`
+		AutoAllowBashIfSandboxed bool     `json:"autoAllowBashIfSandboxed"`
+		AllowUnsandboxedCommands bool     `json:"allowUnsandboxedCommands"`
+		ExcludedCommands         []string `json:"excludedCommands"`
 		Filesystem               struct {
 			DenyRead   []string `json:"denyRead"`
 			AllowWrite []string `json:"allowWrite"`
@@ -57,7 +58,7 @@ func setupSandbox(t *testing.T) (provider.Provider, string) {
 	t.Setenv("HOME", t.TempDir())
 	home := t.TempDir()
 	cfg := config.Config{
-		Allow:      []string{"git", "make"},
+		Allow:      []string{"git status", "gh", "make"},
 		DenyRead:   []string{"~/.ssh", "~/.aws"},
 		AllowWrite: []string{"~/Library/Caches", "~/go/pkg/mod"},
 	}
@@ -214,11 +215,11 @@ func TestHookQuotesABinaryPathWithASpace(t *testing.T) {
 	}
 }
 
-func TestSettingsAllowTheConfiguredCommandsAndSfy(t *testing.T) {
+func TestMainSettingsAllowTheConfiguredCommandsAndSfy(t *testing.T) {
 	p, home := setup(t, bin)
-	command(t, p, worker())
+	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "worker-t1")
+	s := readSettings(t, home, "main")
 
 	for _, want := range []string{"Bash(git *)", "Bash(make *)", "Bash(" + bin + " *)", "Bash(sfy *)"} {
 		if !slices.Contains(s.Permissions.Allow, want) {
@@ -582,4 +583,80 @@ func reviewerSpec() engine.SessionSpec {
 	spec := worker()
 	spec.Name, spec.Kind = "review-t1-1", "reviewer"
 	return spec
+}
+
+func bashRules(allow []string) []string {
+	var out []string
+	for _, r := range allow {
+		if strings.HasPrefix(r, "Bash(") {
+			out = append(out, r)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// TestWorkerAndReviewerBashRulesAreExact pins the whole Bash allow set. A rule for gh merge, close, edit,
+// comment or review, a broad git rule, a rule from config allow, or a second push form would fail it.
+func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
+	ghRead := []string{"Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)"}
+	sfy := []string{"Bash(/opt/sfy/sfy *)", "Bash(sfy *)"}
+	workerWant := append(append(append([]string{}, ghRead...), sfy...),
+		"Bash(gh pr create *)", "Bash(gh pr list *)", "Bash(gh issue create *)", "Bash(gh issue view *)",
+		"Bash(gh issue list *)", "Bash(gh repo view *)",
+		"Bash(git push -u origin sfy/t1)", "Bash(git push --force-with-lease origin sfy/t1)")
+	cases := map[string]struct {
+		spec engine.SessionSpec
+		want []string
+	}{
+		"worker":   {worker(), workerWant},
+		"reviewer": {reviewerSpec(), append(append([]string{}, ghRead...), sfy...)},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			home := t.TempDir()
+			p := claude.New(config.Config{Allow: []string{"git", "gh", "make"}}, home, bin)
+			command(t, p, c.spec)
+
+			got := bashRules(readSettings(t, home, c.spec.Name).Permissions.Allow)
+
+			want := slices.Clone(c.want)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Fatalf("Bash rules\n got %v\nwant %v", got, want)
+			}
+		})
+	}
+}
+
+func TestWorkerAndReviewerSandboxExcludesGhAndGitPush(t *testing.T) {
+	for name, s := range sandboxed(t) {
+		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"gh *", "git push *"}) {
+			t.Errorf("%s excludedCommands = %v", name, got)
+		}
+	}
+}
+
+// A push with a git option before the subcommand, such as git -C . push or git -c a=b push, is not an
+// excluded command. It stays sandboxed and auto-approved unless a deny rule matches it.
+func TestWorkerAndReviewerDenyAPushThatStartsWithAGitOption(t *testing.T) {
+	for name, s := range sandboxed(t) {
+		if !slices.Contains(s.Permissions.Deny, "Bash(git -* push*)") {
+			t.Errorf("%s deny lacks the git-option push rule: %v", name, s.Permissions.Deny)
+		}
+		for _, r := range s.Permissions.Allow {
+			if strings.Contains(r, "git -") {
+				t.Errorf("%s allows %s, which the deny rule would override", name, r)
+			}
+		}
+	}
+}
+
+func TestReviewerHasNoPushAllowRule(t *testing.T) {
+	for _, r := range sandboxed(t)["review-t1-1"].Permissions.Allow {
+		if strings.Contains(r, "push") {
+			t.Errorf("reviewer allows %s", r)
+		}
+	}
 }

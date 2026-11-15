@@ -126,6 +126,7 @@ A command that an agent kind may not run fails with an error that names the comm
 - A worker or a reviewer never waits on a permission prompt. sfy's permission hook denies the call, gives the agent a reason, and records the denial in `sfy.log`.
 - Workers and reviewers get a clean environment. It holds the `SFY_*` variables, the basic shell variables, the provider's own variables and the names in `pass_env`.
 - Workers and reviewers run their sandboxed commands without an allow list. The `allow` setting is the main agent's allow list.
+- Workers may read and create pull requests and issues through gh, and push only the task branch. They may not merge, close, edit, comment or review. Reviewers may view, diff and check pull requests. Reviewers may not push. These commands run outside the sandbox.
 - The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
 - Deny rules protect the paths that the task file names, in every mode.
 - Reviewers may run commands in the sandbox, but their edit tools are off. The sandbox limits what a build can write.
