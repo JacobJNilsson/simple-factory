@@ -29,6 +29,7 @@ const usage = `usage:
   sfy task edit <id> <file>
   sfy task queue <id>
   sfy task cancel <id>
+  sfy task resume <id>
   sfy send <agent> <text...>
   sfy report done|blocked|progress <text...>
   sfy verdict pass|fail <file>
@@ -64,6 +65,7 @@ var forms = map[string]form{
 	"task edit":       {words: 2, ids: 2, file: true},
 	"task queue":      {words: 2, ids: 1},
 	"task cancel":     {words: 2, ids: 1},
+	"task resume":     {words: 2, ids: 1},
 	"send":            {words: 1, ids: 1, text: true},
 	"report done":     {words: 2, text: true},
 	"report blocked":  {words: 2, text: true},

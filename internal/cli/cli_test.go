@@ -40,6 +40,7 @@ func TestParse(t *testing.T) {
 		{"task edit", []string{"task", "edit", "t1", file}, protocol.Request{Command: "task edit", Args: []string{"t1"}, Body: "FILE"}},
 		{"task queue", []string{"task", "queue", "t1"}, protocol.Request{Command: "task queue", Args: []string{"t1"}}},
 		{"task cancel", []string{"task", "cancel", "t1"}, protocol.Request{Command: "task cancel", Args: []string{"t1"}}},
+		{"task resume", []string{"task", "resume", "t1"}, protocol.Request{Command: "task resume", Args: []string{"t1"}}},
 		{"send", []string{"send", "worker-t1", "hello", "there"}, protocol.Request{Command: "send", Args: []string{"worker-t1", "hello", "there"}}},
 		{"report done", []string{"report", "done", "all", "done"}, protocol.Request{Command: "report done", Args: []string{"all", "done"}}},
 		{"report blocked", []string{"report", "blocked", "stuck"}, protocol.Request{Command: "report blocked", Args: []string{"stuck"}}},
@@ -87,6 +88,15 @@ func TestRunBadForm(t *testing.T) {
 	}
 }
 
+// quietLauncher accepts every call and starts nothing.
+type quietLauncher struct{}
+
+func (quietLauncher) Start(engine.SessionSpec) error { return nil }
+func (quietLauncher) Send(string, string) error      { return nil }
+func (quietLauncher) Alive(string) (bool, error)     { return true, nil }
+func (quietLauncher) Stop(string) error              { return nil }
+func (quietLauncher) Notify(string, string) error    { return nil }
+
 type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC) }
@@ -99,7 +109,7 @@ func liveServer(t *testing.T) func(string) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	eng := engine.New(store.Files(t.TempDir()), nil, nil, config.Config{}, fixedClock{})
+	eng := engine.New(store.Files(t.TempDir()), quietLauncher{}, nil, config.Config{}, fixedClock{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, filepath.Join(home, "sfy.sock"), eng, time.Hour, io.Discard) }()
@@ -156,5 +166,47 @@ func TestRunMissingFile(t *testing.T) {
 	code := Run([]string{"task", "new", "/nonexistent/file"}, envOf(nil), strings.NewReader(""), &out, &errb)
 	if code != exitFailed {
 		t.Fatalf("code %d", code)
+	}
+}
+
+// escalatedTask starts a server with one escalated task and returns a function that runs sfy as a caller.
+func escalatedTask(t *testing.T) func(agent, task string, args ...string) (int, string) {
+	t.Helper()
+	home := liveServer(t)
+	run := func(agent, task string, args ...string) (int, string) {
+		env := func(k string) string {
+			switch k {
+			case "SFY_AGENT":
+				return agent
+			case "SFY_TASK":
+				return task
+			}
+			return home(k)
+		}
+		var out, errb bytes.Buffer
+		code := Run(args, env, strings.NewReader("# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n"), &out, &errb)
+		return code, errb.String()
+	}
+	if code, msg := run("main", "", "task", "new", "-"); code != exitOK {
+		t.Fatalf("task new: %d %s", code, msg)
+	}
+	if code, msg := run("main", "", "escalate", "t1", "why"); code != exitOK {
+		t.Fatalf("escalate: %d %s", code, msg)
+	}
+	return run
+}
+
+func TestRunResumeSucceedsForTheOperator(t *testing.T) {
+	run := escalatedTask(t)
+	if code, msg := run("", "", "task", "resume", "t1"); code != exitOK {
+		t.Fatalf("code %d, stderr %s", code, msg)
+	}
+}
+
+func TestRunResumeIsRefusedForAWorker(t *testing.T) {
+	run := escalatedTask(t)
+	code, msg := run("worker-t1", "t1", "task", "resume", "t1")
+	if code != exitFailed || !strings.Contains(msg, "not for a worker") {
+		t.Fatalf("code %d, stderr %q", code, msg)
 	}
 }

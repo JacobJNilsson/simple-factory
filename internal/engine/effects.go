@@ -24,14 +24,18 @@ func (e *Engine) refreshStatus() error {
 	return e.st.WriteStatus(store.RenderStatus(tasks))
 }
 
-// message stores a message. Its id sorts in send order and never repeats, because the counter breaks ties within one clock tick.
-func (e *Engine) message(to, from, body string) error {
+// storeMessage stores a message without a note. Its id sorts in send order and never repeats, because the counter breaks ties within one clock tick.
+func (e *Engine) storeMessage(to, from, body string) error {
 	e.counter++
 	now := e.c.Now()
-	err := e.st.Send(store.Message{
+	return e.st.Send(store.Message{
 		ID: fmt.Sprintf("%019d-%06d", now.UnixNano(), e.counter), From: from, To: to, Body: body, Created: now,
 	})
-	if err != nil {
+}
+
+// message stores a message and types the note when the receiver waits.
+func (e *Engine) message(to, from, body string) error {
+	if err := e.storeMessage(to, from, body); err != nil {
 		return err
 	}
 	if e.agent(to).waiting {
@@ -50,6 +54,17 @@ func (e *Engine) typeNote(name string) error {
 	s := e.agent(name)
 	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
 	return e.l.Send(name, newMessageNote)
+}
+
+// ignoreGone drops a note error from a session that no longer runs, because the note cannot arrive.
+func (e *Engine) ignoreGone(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if alive, aerr := e.l.Alive(name); aerr == nil && !alive {
+		return nil
+	}
+	return err
 }
 
 // stop ends a session. A failure counts only while the session still runs, because a session may already be gone.

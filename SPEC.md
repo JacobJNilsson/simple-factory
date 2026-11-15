@@ -64,8 +64,9 @@ A task moves through these states:
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
 - When the reviewer's verdict is `pass`, the task moves to `done`, and sfy tells the main agent.
 - When the verdict is `fail`, sfy sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
-- After `review_rounds` failed reviews, the task moves to `escalated`. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
+- After `review_rounds` failed reviews, the task moves to `escalated`. sfy first sends the verdict to the worker. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
 - When a task is `done` or `cancelled`, sfy ends its worker and reviewer sessions and removes the worktree. The branch stays.
+- `sfy task resume` ends `escalated`. The task returns to the state it had before the escalation, with the same round. sfy tells its worker to go on, and its reviewer too when the task returns to `review`. A task that escalated after its last failed review returns to `feedback`, so its worker fixes the result and gets one more review round. The command fails for a task in any other state.
 - sfy does not restart a worker that ended on its own. It tells the main agent, which decides what happens to the task.
 
 ## State
@@ -100,6 +101,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task list` | anyone | Lists the tasks and their states. |
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
 | `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. |
+| `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |
 | `sfy send <agent> <text>` | main agent | Sends a message to an agent. |
 | `sfy report done <text>` | worker | Reports the result and starts the review. |
 | `sfy report blocked <text>` | worker | Tells the main agent that the worker cannot go on. |

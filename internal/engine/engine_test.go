@@ -20,6 +20,7 @@ import (
 type fakeLauncher struct {
 	sent     []string
 	dead     map[string]bool
+	sendErr  error
 	startErr error
 	stopErr  error
 	started  []engine.SessionSpec
@@ -35,6 +36,9 @@ func (f *fakeLauncher) Start(s engine.SessionSpec) error {
 	return nil
 }
 func (f *fakeLauncher) Send(name, text string) error {
+	if f.sendErr != nil {
+		return f.sendErr
+	}
 	f.sent = append(f.sent, name+": "+text)
 	return nil
 }
@@ -945,5 +949,185 @@ func TestStartedSessionsCarryTheTasksProtectedPaths(t *testing.T) {
 		if !reflect.DeepEqual(s.Protected, want) {
 			t.Fatalf("%s protected %v, want %v", s.Name, s.Protected, want)
 		}
+	}
+}
+
+func TestResumeReturnsAWorkingTaskToWorking(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+
+	mustOK(t, v.run("", "", "task resume", "", "t1"))
+
+	if tk := v.state(t, "t1"); tk.State != task.Working || tk.Before != "" {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
+func TestResumeTellsTheWorkerToGoOn(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+
+	mustOK(t, v.run("", "", "task resume", "", "t1"))
+
+	msgs := v.inbox(t, "worker-t1")
+	if len(msgs) != 1 || msgs[0].Body != "Task t1 is resumed. Go on, and report as usual." {
+		t.Fatalf("worker got %+v", msgs)
+	}
+}
+
+func TestResumeKeepsTheRoundOfAFeedbackTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Feedback, 2)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	if tk := v.state(t, "t1"); tk.State != task.Feedback || tk.Round != 2 {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
+// failLastRound escalates task t1 through a failed verdict in the last review round.
+func (v env) failLastRound(t *testing.T) {
+	t.Helper()
+	v.seed(t, task.Review, 3)
+	mustOK(t, v.run("review-t1-3", "t1", "verdict fail", "Still wrong."))
+}
+
+func TestTheLastFailedRoundSendsTheWorkerTheVerdict(t *testing.T) {
+	v := newEnv(t)
+	v.failLastRound(t)
+
+	msgs := v.inbox(t, "worker-t1")
+
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "Review round 3 of task t1 failed") || !strings.Contains(msgs[0].Body, "Still wrong.") {
+		t.Fatalf("worker got %+v", msgs)
+	}
+}
+
+func TestResumeAfterTheLastFailedRoundGoesToFeedbackWithTheSameRound(t *testing.T) {
+	v := newEnv(t)
+	v.failLastRound(t)
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	if tk := v.state(t, "t1"); tk.State != task.Feedback || tk.Round != 3 {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
+func TestReportDoneAfterThatResumeStartsTheNextRound(t *testing.T) {
+	v := newEnv(t)
+	v.failLastRound(t)
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	mustOK(t, v.run("worker-t1", "t1", "report done", "", "fixed"))
+
+	if tk := v.state(t, "t1"); tk.State != task.Review || tk.Round != 4 {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
+func TestResumeOfAQueuedEscalationGoesBackToQueuedWithoutAWorkerMessage(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Queued, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	v.statusShows(t, "t1", "queued")
+	if len(v.inbox(t, "worker-t1")) != 0 {
+		t.Fatal("a worker that does not run got a message")
+	}
+}
+
+func TestResumeFailsForATaskThatIsNotEscalated(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	ans := v.run("main", "", "task resume", "", "t1")
+
+	if ans.OK || !strings.Contains(ans.Error, "needs escalated") {
+		t.Fatalf("got %+v", ans)
+	}
+	if v.state(t, "t1").State != task.Working {
+		t.Fatal("the task changed state")
+	}
+}
+
+func TestResumeIntoReviewTellsTheReviewerToo(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Review, 1)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	want := "Task t1 is resumed. Go on, and report as usual."
+	for _, name := range []string{"worker-t1", "review-t1-1"} {
+		if msgs := v.inbox(t, name); len(msgs) != 1 || msgs[0].Body != want {
+			t.Fatalf("%s got %+v", name, msgs)
+		}
+	}
+}
+
+// escalateWithAWaitingWorker escalates task t1 while its worker waits for input, so a note to it goes to the launcher.
+// The report and the turn end are the shortest public way to reach that state.
+func (v env) escalateWithAWaitingWorker(t *testing.T) {
+	t.Helper()
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	v.l.sendErr = errors.New("no such pane")
+}
+
+func TestResumeSucceedsWhenTheWorkerSessionIsGone(t *testing.T) {
+	v := newEnv(t)
+	v.escalateWithAWaitingWorker(t)
+	v.l.dead = map[string]bool{"worker-t1": true}
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+}
+
+func TestResumeFailsWhenTheNoteFailsAndTheSessionRuns(t *testing.T) {
+	v := newEnv(t)
+	v.escalateWithAWaitingWorker(t)
+
+	ans := v.run("main", "", "task resume", "", "t1")
+
+	if ans.OK || !strings.Contains(ans.Error, "no such pane") {
+		t.Fatalf("got %+v", ans)
+	}
+}
+
+func TestResumeFailsWhenTheMessageCannotBeStoredAndTheSessionIsGone(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	v.l.dead = map[string]bool{"worker-t1": true}
+	// A file where the inbox folder belongs makes every write to that inbox fail.
+	if err := os.MkdirAll(filepath.Join(v.home, "inbox"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(v.home, "inbox", "worker-t1"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if ans := v.run("main", "", "task resume", "", "t1"); ans.OK {
+		t.Fatal("resume reported success although the message was lost")
+	}
+}
+
+func TestCancelOfAnEscalatedTaskClearsTheStateBefore(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+
+	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+
+	if tk := v.state(t, "t1"); tk.State != task.Cancelled || tk.Before != "" {
+		t.Fatalf("got %+v", tk)
 	}
 }
