@@ -413,3 +413,24 @@ func TestSaveTrimsBlankSpaceAroundFieldsAndDropsBlankProtectedEntries(t *testing
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }
+
+func TestSaveKeepsAWorkersProgressForTheNextRead(t *testing.T) {
+	s := store.Files(t.TempDir())
+	in := sample("t1", task.Working)
+	if err := s.Create(in); err != nil {
+		t.Fatal(err)
+	}
+	in.Progress = "tests written"
+
+	if err := s.Save(in); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Task("t1")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Progress != "tests written" {
+		t.Fatalf("got progress %q", got.Progress)
+	}
+}

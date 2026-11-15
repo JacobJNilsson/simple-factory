@@ -37,8 +37,10 @@ type Task struct {
 	State State
 	Round int
 	// Source is "main" for the main agent, otherwise the creator's name.
-	Source  string
-	Updated time.Time
+	Source string
+	// Progress is the worker's latest progress report.
+	Progress string
+	Updated  time.Time
 }
 
 // MissingError reports a required part of a task file that is absent or empty.
