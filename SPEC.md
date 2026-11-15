@@ -36,7 +36,7 @@ factory enforces the rule for workers and reviewers:
 - A hook reports a permission prompt to factory, and the task's worker counts as blocked.
 - When a turn ends without a `factory report`, factory sends the agent a note: "Your turn ended without a report. If you need an answer, run factory report blocked <question>." After two such turns in a row, factory stops the note and tells the main agent instead.
 
-Each kind of agent has a prompt file in the repo: `prompts/main.md`, `prompts/worker.md` and `prompts/reviewer.md`. The prompt tells the agent which `factory` commands it uses.
+factory ships a default prompt for each kind of agent: main, worker and reviewer. The prompt tells the agent which `factory` commands it uses.
 
 ## Tasks
 
@@ -104,7 +104,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `factory report done <text>` | worker | Reports the result and starts the review. |
 | `factory report blocked <text>` | worker | Tells the main agent that the worker cannot go on. |
 | `factory report progress <text>` | worker | Records progress in the task's state. |
-| `factory verdict pass\|fail <file>` | reviewer | Records the verdict that the file holds. |
+| `factory verdict pass\|fail <file>` | reviewer | Records the verdict that the file holds. `-` reads it from standard input. |
 | `factory inbox` | any agent | Prints unread messages and marks them read. |
 | `factory escalate <id> <text>` | main agent | Moves a task to `escalated` and tells the operator. |
 | `factory status` | anyone | Prints `status.md`. |
@@ -120,7 +120,7 @@ A command that an agent kind may not run fails with an error that names the comm
 
 - Workers run in the provider's mode that accepts edits without prompts. One default allow list lets them run git, gh and the repo's build and test commands.
 - Deny rules protect the paths that the task file names, in every mode.
-- Reviewers may run commands but may not edit files.
+- Reviewers may run the allowed commands, but their edit tools are off. An allowed command such as a build can still write files, so the edit deny is not a sandbox.
 
 ## Configuration
 
