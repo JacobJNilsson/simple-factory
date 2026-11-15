@@ -597,17 +597,12 @@ func (v env) pass(t *testing.T) {
 func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
-	tk := v.state(t, "t1")
-	tk.Repo = "repo"
-	if err := v.st.Save(tk); err != nil {
-		t.Fatal(err)
-	}
 
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
 
 	v.statusShows(t, "t1", "approved")
 	msgs := v.inbox(t, "main")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "sfy/t1") {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no pull request") {
 		t.Fatalf("main got %+v", msgs)
 	}
 	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || len(v.ws.removed) != 0 {

@@ -112,7 +112,7 @@ func workerPrompt(t task.Task) string {
 	for _, f := range t.Pending {
 		prompt += "\nFeedback:\n\n" + f + "\n"
 	}
-	if t.PushAfterReview {
+	if t.Repo != "" {
 		prompt += "\n" + holdPush + "\n"
 	}
 	if t.Reopened {
