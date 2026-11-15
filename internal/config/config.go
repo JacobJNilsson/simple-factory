@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"runtime"
 
 	"github.com/BurntSushi/toml"
 )
@@ -26,6 +27,9 @@ type Config struct {
 	Multiplexer   string   `toml:"multiplexer"`
 	Models        Models   `toml:"models"`
 	Allow         []string `toml:"allow"`
+	// DenyRead and AllowWrite are the sandbox paths for workers and reviewers. An empty list stays empty.
+	DenyRead   []string `toml:"deny_read"`
+	AllowWrite []string `toml:"allow_write"`
 	// Multiplexers holds the raw template sets by name. A later package validates and fills them.
 	Multiplexers map[string]map[string]string `toml:"multiplexers"`
 }
@@ -53,7 +57,20 @@ func defaults() Config {
 		Multiplexer:   "tmux",
 		Models:        Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
 		Allow:         []string{"git", "gh", "make", "go", "gofmt"},
+		DenyRead: []string{
+			"~/.ssh", "~/.aws", "~/.config/gh", "~/.gnupg",
+			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
+		},
+		AllowWrite: []string{cacheDir(runtime.GOOS), "~/go/pkg/mod"},
 	}
+}
+
+// cacheDir returns the user cache folder for an operating system, with ~ for the home folder.
+func cacheDir(goos string) string {
+	if goos == "darwin" {
+		return "~/Library/Caches"
+	}
+	return "~/.cache"
 }
 
 // Load reads <home>/config.toml. A missing file gives the defaults, and a setting left out keeps its default.
