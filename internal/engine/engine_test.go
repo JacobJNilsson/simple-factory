@@ -36,6 +36,7 @@ func (f *fakeLauncher) Start(s engine.SessionSpec) error {
 	f.started = append(f.started, s)
 	return nil
 }
+
 func (f *fakeLauncher) Send(name, text string) error {
 	if f.sendErr != nil {
 		return f.sendErr
@@ -43,7 +44,9 @@ func (f *fakeLauncher) Send(name, text string) error {
 	f.sent = append(f.sent, name+": "+text)
 	return nil
 }
+
 func (f *fakeLauncher) Alive(name string) (bool, error) { return !f.dead[name], nil }
+
 func (f *fakeLauncher) Stop(name string) error {
 	if f.stopErr != nil {
 		return f.stopErr
@@ -51,6 +54,7 @@ func (f *fakeLauncher) Stop(name string) error {
 	f.stopped = append(f.stopped, name)
 	return nil
 }
+
 func (f *fakeLauncher) Notify(name, text string) error {
 	f.notified = append(f.notified, name+": "+text)
 	return nil
@@ -1280,6 +1284,23 @@ func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
 		t.Fatalf("notified %v", v.l.notified)
 	}
 }
+
+func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.T) {
+	v := newEnv(t)
+	fresh := engine.New(v.st, v.l, v.ws, config.Config{ResendMinutes: 5, MaxWorkers: 2}, v.clock)
+	answer := fresh.Handle(protocol.Request{Caller: protocol.Caller{}, Command: "task new", Body: taskFile})
+	mustOK(t, answer)
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+
+	if err := fresh.Tick(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
 func TestPermissionMessageNamesTheToolAndItsMainInput(t *testing.T) {
 	const ids = `"session_id":"s1","transcript_path":"/x/y.jsonl"`
 	cases := map[string]struct{ body, want string }{
