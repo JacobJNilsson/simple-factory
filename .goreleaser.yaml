@@ -1,0 +1,50 @@
+version: 2
+
+project_name: sfy
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: sfy
+    main: ./cmd/sfy
+    binary: sfy
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native
+
+release:
+  github:
+    owner: JacobJNilsson
+    name: simple-factory
+
+# The formula goes to the public tap. The token comes from the repository secret HOMEBREW_TAP_GITHUB_TOKEN.
+brews:
+  - name: sfy
+    repository:
+      owner: JacobJNilsson
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/JacobJNilsson/simple-factory
+    description: Runs coding agents as interactive sessions in terminal panes.
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/sfy --version")
