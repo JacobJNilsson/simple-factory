@@ -49,6 +49,10 @@ type Task struct {
 	Pending []string
 	// Reopened is true after feedback sent the task back from approved, done or cancelled. Its branch holds earlier work.
 	Reopened bool
+	// PushAfterReview is true after feedback on a task that did work. Its worker pushes only after a review passes.
+	PushAfterReview bool
+	// Pushing is true in review after a passed review of such a task, until the worker reports that it pushed.
+	Pushing bool
 	// Dir is the task's workspace folder, empty until sfy creates it.
 	Dir     string
 	Updated time.Time

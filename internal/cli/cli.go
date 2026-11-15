@@ -35,7 +35,7 @@ const usage = `usage:
   sfy task complete <id>
   sfy task archive <id>
   sfy send <agent> <text...>
-  sfy report done|blocked|progress <text...>
+  sfy report done|blocked|progress|pushed <text...>
   sfy verdict pass|fail <text...|->
   sfy inbox
   sfy escalate <id> <text...>
@@ -81,6 +81,7 @@ var forms = map[string]form{
 	"report done":     {words: 2, text: true},
 	"report blocked":  {words: 2, text: true},
 	"report progress": {words: 2, text: true},
+	"report pushed":   {words: 2, text: true},
 	"verdict pass":    {words: 2, verdict: true},
 	"verdict fail":    {words: 2, verdict: true},
 	"inbox":           {words: 1},

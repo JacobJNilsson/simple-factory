@@ -153,6 +153,7 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	}
 	edited.ID, edited.State, edited.Round, edited.Source = t.ID, t.State, t.Round, t.Source
 	edited.Progress, edited.Dir, edited.Pending, edited.Reopened = t.Progress, t.Dir, t.Pending, t.Reopened
+	edited.PushAfterReview, edited.Pushing = t.PushAfterReview, t.Pushing
 	if err := e.save(edited); err != nil {
 		return "", err
 	}
@@ -235,14 +236,25 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 	if from == "" {
 		from = "operator"
 	}
-	note := fmt.Sprintf("Feedback on task %s. Address it, then run sfy report done.\n\n%s", t.ID, body)
+	// A task that did no work keeps today's flow. After that, the worker pushes only once a review passes.
+	if t.State != task.New && t.State != task.Queued && (t.State != task.Escalated || (t.Before != task.New && t.Before != task.Queued)) {
+		t.PushAfterReview = true
+	}
+	note := fmt.Sprintf("Feedback on task %s. Address it, then run sfy report done.", t.ID)
+	if t.PushAfterReview {
+		note += " " + holdPush
+	}
+	note += "\n\n" + body
 	switch t.State {
 	case task.Working, task.Feedback:
+		if err := e.save(t); err != nil {
+			return "", err
+		}
 		return "", e.message(to, from, note)
 	case task.Review:
 		// The review judges a result that the feedback may change, so it ends without a verdict.
 		reviewer := reviewerOf(t)
-		t.State = task.Feedback
+		t.State, t.Pushing = task.Feedback, false
 		if err := e.save(t); err != nil {
 			return "", err
 		}
@@ -250,7 +262,7 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		delete(e.agents, reviewer)
 		return "", errors.Join(err, e.message(to, from, note))
 	case task.Approved, task.Done, task.Cancelled:
-		t.State, t.Archived, t.Reopened = task.Queued, false, true
+		t.State, t.Archived, t.Reopened, t.Pushing = task.Queued, false, true, false
 	}
 	t.Pending = append(t.Pending, body)
 	return "", e.save(t)
@@ -296,11 +308,14 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	note := fmt.Sprintf("Task %s is resumed. Go on, and report as usual.", t.ID)
+	if len(pending) > 0 && t.PushAfterReview {
+		note += " " + holdPush
+	}
 	for _, f := range pending {
 		note += "\n\nFeedback:\n\n" + f
 	}
 	names := []string{"worker-" + t.ID}
-	if t.State == task.Review {
+	if t.State == task.Review && !t.Pushing {
 		names = append(names, reviewerOf(t))
 	}
 	var errs []error
@@ -417,7 +432,11 @@ func (e *Engine) reportBlocked(req protocol.Request) (string, error) {
 	if strings.HasPrefix(req.Caller.Agent, "review-") {
 		t, err = e.reviewing(req)
 	} else {
-		t, err = e.worker(req, task.Working, task.Feedback)
+		t, err = e.worker(req, task.Working, task.Feedback, task.Review)
+		// A worker in review may report only while it waits to push.
+		if err == nil && !t.Pushing && t.State == task.Review {
+			err = need(t, task.Working, task.Feedback)
+		}
 	}
 	if err != nil {
 		return "", err
@@ -446,6 +465,9 @@ func (e *Engine) reviewing(req protocol.Request) (task.Task, error) {
 	if err := need(t, task.Review); err != nil {
 		return task.Task{}, err
 	}
+	if t.Pushing {
+		return task.Task{}, fmt.Errorf("round %d of task %s already has its verdict", t.Round, t.ID)
+	}
 	if req.Caller.Agent != reviewerOf(t) {
 		return task.Task{}, fmt.Errorf("%s may judge only round %d of task %s", req.Caller.Agent, t.Round, t.ID)
 	}
@@ -463,20 +485,50 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 	if err := e.st.AddVerdict(t.ID, t.Round, true, req.Body); err != nil {
 		return "", err
 	}
+	if t.PushAfterReview {
+		// The worker has not pushed the feedback changes. It keeps running, pushes now, and reports before the task is approved.
+		t.Pushing = true
+		if err := e.save(t); err != nil {
+			return "", err
+		}
+		note := fmt.Sprintf("Review round %d of task %s passed. Push the branch now, then run sfy report pushed <summary>.", t.Round, t.ID)
+		return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(req.Caller.Agent))
+	}
+	return "", e.approve(t, req.Caller.Agent)
+}
+
+// reportPushed lets the worker of a passed review say that it pushed. The task is approved only now.
+func (e *Engine) reportPushed(req protocol.Request) (string, error) {
+	t, err := e.worker(req, task.Review)
+	if err != nil {
+		return "", err
+	}
+	if !t.Pushing {
+		return "", fmt.Errorf("task %s waits for no push, so sfy report pushed has nothing to report", t.ID)
+	}
+	t.Pushing = false
+	return "", e.approve(t, req.Caller.Agent)
+}
+
+// approve moves a task to approved and tells main to merge it.
+func (e *Engine) approve(t task.Task, from string) error {
 	t.State = task.Approved
 	if err := e.save(t); err != nil {
-		return "", err
+		return err
 	}
 	note := fmt.Sprintf("Task %s is approved. It has no pull request. Check its result, then run: sfy task complete %s", t.ID, t.ID)
 	if t.Repo != "" {
 		note = fmt.Sprintf("Task %s is approved. Merge the pull request of branch %s, then run: sfy task complete %s", t.ID, workspace.Branch(t.ID), t.ID)
 	}
-	if err := e.message("main", req.Caller.Agent, note); err != nil {
-		return "", err
+	if err := e.message("main", from, note); err != nil {
+		return err
 	}
 	// The work is finished, so both sessions end. The workspace stays until main completes the task.
-	return "", e.endSessions(t)
+	return e.endSessions(t)
 }
+
+// holdPush tells a worker how to treat the changes that feedback asked for.
+const holdPush = "Commit the changes on the task branch and do not push. sfy tells you to push after the review passes."
 
 func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	t, err := e.reviewing(req)

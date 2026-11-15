@@ -179,6 +179,7 @@ var commands = map[string]command{
 	"report done":     {(*Engine).reportDone, []kind{worker}},
 	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},
 	"report progress": {(*Engine).reportProgress, []kind{worker}},
+	"report pushed":   {(*Engine).reportPushed, []kind{worker}},
 	"verdict pass":    {(*Engine).verdictPass, []kind{reviewer}},
 	"verdict fail":    {(*Engine).verdictFail, []kind{reviewer}},
 	"inbox":           {(*Engine).inbox, agents},
