@@ -45,7 +45,7 @@ func TestForRejectsAnUnknownKind(t *testing.T) {
 // allowed lists the commands that each kind may run, from the spec's command table.
 var allowed = map[string][]string{
 	"worker":   {"report done", "report blocked", "report progress", "inbox", "task list", "task show", "status"},
-	"reviewer": {"verdict pass", "verdict fail", "inbox", "task list", "task show", "status"},
+	"reviewer": {"verdict pass", "verdict fail", "report blocked", "inbox", "task list", "task show", "status"},
 	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume",
 		"send", "escalate", "inbox", "status"},
 }

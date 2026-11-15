@@ -170,7 +170,7 @@ var commands = map[string]command{
 	"task resume":     {(*Engine).resume, []kind{operator, main}},
 	"send":            {(*Engine).send, []kind{main}},
 	"report done":     {(*Engine).reportDone, []kind{worker}},
-	"report blocked":  {(*Engine).reportBlocked, []kind{worker}},
+	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},
 	"report progress": {(*Engine).reportProgress, []kind{worker}},
 	"verdict pass":    {(*Engine).verdictPass, []kind{reviewer}},
 	"verdict fail":    {(*Engine).verdictFail, []kind{reviewer}},

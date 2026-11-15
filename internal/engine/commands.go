@@ -309,8 +309,15 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	return "", nil
 }
 
+// reportBlocked lets a worker or a reviewer tell the main agent that it cannot go on.
 func (e *Engine) reportBlocked(req protocol.Request) (string, error) {
-	t, err := e.worker(req, task.Working, task.Feedback)
+	var t task.Task
+	var err error
+	if strings.HasPrefix(req.Caller.Agent, "review-") {
+		t, err = e.reviewing(req)
+	} else {
+		t, err = e.worker(req, task.Working, task.Feedback)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -501,19 +508,29 @@ func (e *Engine) remind(name string, s *agentState) error {
 }
 
 // hookPermission runs when an agent's permission prompt opens.
+// A worker or a reviewer never waits at a prompt. The hook denies the call and records it in the log.
+// Main hears nothing, so a denial does not wake it.
 func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
-	if !e.runs(name) {
-		return "", nil
-	}
-	e.agent(name).hookSince = true
-	request := permissionRequest(req.Body)
+	runs := e.runs(name)
 	if name == "main" {
-		return "", e.l.Notify("main", "Main waits at a permission prompt. "+request)
+		if !runs {
+			return "", nil
+		}
+		e.agent(name).hookSince = true
+		return "", e.l.Notify("main", "Main waits at a permission prompt. "+permissionRequest(req.Body))
 	}
-	note := fmt.Sprintf("%s waits at a permission prompt for task %s. %s", name, req.Caller.Task, request)
-	return "", e.message("main", name, note)
+	// A stale agent of a finished task gets the denial too, because its prompt would wait for nobody.
+	if runs {
+		e.logf("denied tool call of %s. %s", name, permissionRequest(req.Body))
+	}
+	return permissionDenial, nil
 }
+
+// permissionDenial is the PermissionRequest hook reply that denies a call and tells the agent why.
+const permissionDenial = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":` +
+	`"sfy denied this tool call. Change files with the Edit and Write tools inside your folder. ` +
+	`Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."}}}`
 
 // permissionRequest names the tool and its main input from a permission hook payload.
 // A body that is not a payload with a tool name stays as it is.
