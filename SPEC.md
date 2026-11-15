@@ -58,7 +58,7 @@ A task moves through these states:
 | `escalated` | The task waits for the operator. |
 | `cancelled` | The main agent or the operator stopped the task. |
 
-- A task that a program or the operator creates starts in `new`, and sfy tells the main agent. The main agent adds context, for example from its notes, and replaces the task file. It then queues the task, cancels it, or escalates it.
+- A task that a program or the operator creates starts in `new`, and sfy tells the main agent. The main agent adds context, for example from its notes, and may replace the task file at any time before the task is done or cancelled. It then queues the task, cancels it, or escalates it.
 - A task that the main agent creates starts in `queued`.
 - sfy starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
@@ -96,7 +96,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 |---|---|---|
 | `sfy up` | operator | Starts the sfy process and the main agent. Starts a new main agent if the old one died. |
 | `sfy task new` | main agent, operator, programs | Creates a task from a description, a goal and the optional fields. Prints the task id. |
-| `sfy task edit <id> <file>` | main agent | Replaces the file of a `new` task. |
+| `sfy task edit <id> <file>` | main agent | Replaces the file of a task in any state except `done` and `cancelled`. The task keeps its id, state, round, source, progress and folder. Once the task has a workspace, an edit may not change `## Repo` or `## Protected`. A running worker gets a message to read the new file. A running reviewer keeps the old file, and the next round reads the new one. |
 | `sfy task queue <id>` | main agent | Moves a `new` task to `queued`. |
 | `sfy task list` | anyone | Lists the tasks and their states. |
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
