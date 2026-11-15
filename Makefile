@@ -1,7 +1,7 @@
 # The anti-slop-go package patterns. The default covers the whole module.
 ANTISLOP_PKGS ?= ./...
 
-.PHONY: check fmt-check neutral neutral-test vet lint antislop test hooks
+.PHONY: check fmt-check neutral neutral-test vet lint antislop test hooks install
 
 check: fmt-check neutral-test neutral vet lint antislop test
 
@@ -34,6 +34,9 @@ antislop:
 
 test:
 	go test -race ./...
+
+install:
+	go install ./cmd/sfy
 
 hooks:
 	git config core.hooksPath .githooks
