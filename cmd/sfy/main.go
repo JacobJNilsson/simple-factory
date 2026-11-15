@@ -13,12 +13,19 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
 
+// version is the release version. The release build sets it with -ldflags "-X main.version=<tag>".
+var version = "dev"
+
 func main() {
 	// The exit code is the process result, so main exits with it after run returns.
 	os.Exit(run(os.Args[1:]))
 }
 
 func run(args []string) int {
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Println(version)
+		return 0
+	}
 	if len(args) > 0 && args[0] == "serve" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
