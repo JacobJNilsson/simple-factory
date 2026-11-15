@@ -410,6 +410,23 @@ func TestArgvAppendsTheRolePrompt(t *testing.T) {
 	}
 }
 
+func TestArgvAddsTheRepoPartOnlyForATaskWithARepo(t *testing.T) {
+	p, _ := setup(t, bin)
+	plain := worker()
+	withRepo := worker()
+	withRepo.HasRepo = true
+
+	got := flagValue(t, command(t, p, plain), "--append-system-prompt")
+	gotRepo := flagValue(t, command(t, p, withRepo), "--append-system-prompt")
+
+	if strings.Contains(got, "git push") {
+		t.Error("a task with no repo gets git steps")
+	}
+	if !strings.Contains(gotRepo, "git push") {
+		t.Error("a task with a repo lacks git steps")
+	}
+}
+
 func TestArgvEndsWithThePrompt(t *testing.T) {
 	p, _ := setup(t, bin)
 

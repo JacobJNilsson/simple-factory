@@ -22,6 +22,8 @@ type SessionSpec struct {
 	Name, Kind, Task, Dir, Model, Prompt string
 	// Protected lists the paths that a worker or reviewer must not edit. It is empty for the main agent.
 	Protected []string
+	// HasRepo reports that the task names a repo, so a worker gets the repo part of its prompt.
+	HasRepo bool
 }
 
 // Launcher controls agent sessions in terminal panes.

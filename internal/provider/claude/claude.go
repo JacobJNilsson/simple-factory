@@ -92,7 +92,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if !sessionName.MatchString(spec.Name) {
 		return nil, fmt.Errorf("claude: bad session name %q", spec.Name)
 	}
-	role, err := prompts.For(spec.Kind, a.home)
+	role, err := prompts.Role(spec.Kind, a.home, spec.HasRepo)
 	if err != nil {
 		return nil, err
 	}

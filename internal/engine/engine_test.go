@@ -1336,6 +1336,24 @@ func TestASuccessfulStartResetsTheCountOfFailedStarts(t *testing.T) {
 
 const protectedTaskFile = taskFile + "\n## Protected\n\n- SPEC.md\n- internal/store\n"
 
+func TestStartedWorkerKnowsWhetherTheTaskHasARepo(t *testing.T) {
+	for name, tc := range map[string]struct {
+		file string
+		want bool
+	}{"no repo": {taskFile, false}, "repo": {taskFile + "\n## Repo\n\nhttps://example.com/r.git\n", true}} {
+		t.Run(name, func(t *testing.T) {
+			v := newEnv(t)
+			mustOK(t, v.run("main", "", "task new", tc.file))
+
+			v.tick(t)
+
+			if len(v.l.started) != 1 || v.l.started[0].HasRepo != tc.want {
+				t.Fatalf("started %+v, want HasRepo %v", v.l.started, tc.want)
+			}
+		})
+	}
+}
+
 func TestStartedSessionsCarryTheTasksProtectedPaths(t *testing.T) {
 	v := newEnv(t)
 	mustOK(t, v.run("main", "", "task new", protectedTaskFile))

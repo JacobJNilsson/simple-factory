@@ -38,6 +38,8 @@ sfy enforces the rule for workers and reviewers:
 
 sfy ships a default prompt for each kind of agent: main, worker and reviewer. The prompt tells the agent which `sfy` commands it uses.
 
+The worker prompt has two parts. The common part holds the rules for every task: the task file, the workspace, tools, protected paths, the `sfy report` commands, checks, the summary, failed reviews and the report that ends each turn. A worker on a task with no repo delivers its result as files in the workspace and leaves them there. The repo part holds the rules for git: commits, the task branch, push forms, the push after a passed review, `sfy report pushed` and pull requests. sfy appends the repo part after the common part only when the task file has a `## Repo` section. The common part never mentions git steps. The main and reviewer prompts have no parts.
+
 ## Tasks
 
 - A task file, `task.md`, holds a description and a goal. It may also name a repo, a check command, and paths that the worker must not edit.
@@ -191,7 +193,7 @@ sfy does not ask the multiplexer whether an agent waits for input. The provider 
 
 A use of sfy extends it at these points, without changes to the core:
 
-- **Prompts.** A prompt file in the state folder's `prompts/` replaces the default prompt for that kind of agent.
+- **Prompts.** A prompt file in the state folder's `prompts/` replaces the default prompt for that kind of agent. For a worker, `worker.md` replaces the common part and `worker-repo.md` replaces the repo part.
 - **Task files.** A task file may carry extra sections. sfy passes the whole file to the worker and the reviewer.
 - **Programs.** Any program can create, list and cancel tasks through the CLI.
 - **Providers.** A new provider is a new adapter that implements the Go interface.
