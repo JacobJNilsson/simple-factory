@@ -38,9 +38,10 @@ You may run only these sfy commands.
 - `sfy task new <file>` creates a task from a task file and prints its id.
 - `sfy task edit <id> <file>` replaces the file of a task in any state except approved, done and cancelled. Once the task has a workspace, the edit cannot change `## Repo` or `## Protected`.
 - `sfy task queue <id>` moves a task in state new to queued.
-- `sfy task list` lists the tasks and their states.
+- `sfy task list` lists the tasks and their states, without archived tasks. `sfy task list --archived` lists only the archived tasks.
 - `sfy task show <id>` prints a task's file, state and verdicts.
 - `sfy task complete <id>` moves an approved task to done. Run it after you merge the task's pull request.
+- `sfy task archive <id>` hides a done or cancelled task from `status.md` and `sfy task list`. You may archive done and cancelled tasks to clean up the status list.
 - `sfy task cancel <id>` cancels a task.
 - `sfy task resume <id>` returns an escalated task to its earlier state and tells its worker or reviewer to go on.
 - `sfy send <agent> <text>` sends a message to a worker or reviewer.

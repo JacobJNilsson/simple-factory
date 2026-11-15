@@ -9,9 +9,14 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-// RenderStatus returns the text of status.md. Escalated tasks come first, then the rest by id.
+// RenderStatus returns the text of status.md. It leaves out archived tasks. Escalated tasks come first, then the rest by id.
 func RenderStatus(tasks []task.Task) string {
-	sorted := append([]task.Task(nil), tasks...)
+	var sorted []task.Task
+	for _, t := range tasks {
+		if !t.Archived {
+			sorted = append(sorted, t)
+		}
+	}
 	sort.SliceStable(sorted, func(i, j int) bool {
 		ei, ej := sorted[i].State == task.Escalated, sorted[j].State == task.Escalated
 		if ei != ej {
