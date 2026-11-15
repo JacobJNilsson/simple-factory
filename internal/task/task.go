@@ -45,6 +45,10 @@ type Task struct {
 	Source string
 	// Progress is the worker's latest progress report.
 	Progress string
+	// Pending holds feedback that no worker has read yet. The next worker's first message carries it.
+	Pending []string
+	// Reopened is true after feedback sent the task back from approved, done or cancelled. Its branch holds earlier work.
+	Reopened bool
 	// Dir is the task's workspace folder, empty until sfy creates it.
 	Dir     string
 	Updated time.Time

@@ -38,6 +38,8 @@ type Launcher interface {
 // Workspaces creates and removes the folder of a task.
 type Workspaces interface {
 	Create(task.Task) (dir string, err error)
+	// Restore makes the folder of a reopened task again, on the task branch with its earlier work.
+	Restore(task.Task) (dir string, err error)
 	Remove(task.Task) error
 	// HoldsWork reports whether the task's workspace holds work that Remove would delete.
 	HoldsWork(task.Task) (bool, error)

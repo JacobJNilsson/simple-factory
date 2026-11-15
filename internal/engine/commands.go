@@ -152,7 +152,7 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 		return "", fmt.Errorf("task %s has a workspace, so its protected paths are fixed", t.ID)
 	}
 	edited.ID, edited.State, edited.Round, edited.Source = t.ID, t.State, t.Round, t.Source
-	edited.Progress, edited.Dir = t.Progress, t.Dir
+	edited.Progress, edited.Dir, edited.Pending, edited.Reopened = t.Progress, t.Dir, t.Pending, t.Reopened
 	if err := e.save(edited); err != nil {
 		return "", err
 	}
@@ -217,17 +217,12 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 	return "", e.cleanup(t)
 }
 
-// taskFeedback sends an approved task back to a worker in the same workspace. The round stays as it is.
+// taskFeedback sends feedback on a task to its worker and records it. The round stays as it is.
+// A task in a state with no worker keeps the feedback for its next worker. A finished task goes back to queued.
 func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 	t, err := e.load(req)
 	if err != nil {
 		return "", err
-	}
-	if err := need(t, task.Approved); err != nil {
-		return "", err
-	}
-	if t.Dir == "" {
-		return "", fmt.Errorf("task %s has no workspace left, so a worker cannot go on in it", t.ID)
 	}
 	body := strings.TrimSpace(text(req, req.Args[1:]))
 	if body == "" {
@@ -236,7 +231,28 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 	if err := e.st.AddFeedback(t.ID, t.Round, body); err != nil {
 		return "", err
 	}
-	t.State = task.Queued
+	from, to := req.Caller.Agent, "worker-"+t.ID
+	if from == "" {
+		from = "operator"
+	}
+	note := fmt.Sprintf("Feedback on task %s. Address it, then run sfy report done.\n\n%s", t.ID, body)
+	switch t.State {
+	case task.Working, task.Feedback:
+		return "", e.message(to, from, note)
+	case task.Review:
+		// The review judges a result that the feedback may change, so it ends without a verdict.
+		reviewer := reviewerOf(t)
+		t.State = task.Feedback
+		if err := e.save(t); err != nil {
+			return "", err
+		}
+		err := e.stop(reviewer)
+		delete(e.agents, reviewer)
+		return "", errors.Join(err, e.message(to, from, note))
+	case task.Approved, task.Done, task.Cancelled:
+		t.State, t.Archived, t.Reopened = task.Queued, false, true
+	}
+	t.Pending = append(t.Pending, body)
 	return "", e.save(t)
 }
 
@@ -269,6 +285,10 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 		return "", fmt.Errorf("task %s has no recorded state to return to", t.ID)
 	}
 	t.State, t.Before = t.Before, ""
+	pending := t.Pending
+	if active(t) {
+		t.Pending = nil
+	}
 	if err := e.save(t); err != nil {
 		return "", err
 	}
@@ -276,6 +296,9 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	note := fmt.Sprintf("Task %s is resumed. Go on, and report as usual.", t.ID)
+	for _, f := range pending {
+		note += "\n\nFeedback:\n\n" + f
+	}
 	names := []string{"worker-" + t.ID}
 	if t.State == task.Review {
 		names = append(names, reviewerOf(t))

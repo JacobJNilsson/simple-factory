@@ -36,7 +36,20 @@ func (w *Workspaces) dir(id string) string {
 // Create makes the folder of a task and returns its path. A failed Create leaves no folder behind.
 // The engine holds its lock during Create, so a slow clone blocks commands for up to the git timeout.
 func (w *Workspaces) Create(t task.Task) (dir string, err error) {
+	return w.create(t, false)
+}
+
+// Restore makes the folder of a task that did work before. A folder that still holds the task's work stays as it is.
+// Otherwise Restore checks out the task branch with its commits, where Create refuses a branch that holds work.
+func (w *Workspaces) Restore(t task.Task) (dir string, err error) {
+	return w.create(t, true)
+}
+
+func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	dir = w.dir(t.ID)
+	if restore && w.holdsTask(t) {
+		return dir, nil
+	}
 	if err := requireEmpty(dir); err != nil {
 		return "", err
 	}
@@ -56,7 +69,7 @@ func (w *Workspaces) Create(t task.Task) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	if err := addWorktree(repo, dir, Branch(t.ID), base); err != nil {
+	if err := addWorktree(repo, dir, Branch(t.ID), base, restore); err != nil {
 		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
 			return "", fmt.Errorf("%w (and the folder stays: %v)", err, rmErr)
 		}
@@ -68,8 +81,20 @@ func (w *Workspaces) Create(t task.Task) (dir string, err error) {
 // Branch returns the name of the git branch that holds a task's work.
 func Branch(id string) string { return "sfy/" + id }
 
+// holdsTask reports whether the task's folder still holds its work: its worktree on the task branch, or a plain folder with files.
+func (w *Workspaces) holdsTask(t task.Task) bool {
+	dir := w.dir(t.ID)
+	if t.Repo == "" {
+		entries, err := os.ReadDir(dir)
+		return err == nil && len(entries) > 0
+	}
+	head, err := git(dir, "rev-parse", "--abbrev-ref", "HEAD")
+	return err == nil && head == Branch(t.ID)
+}
+
 // addWorktree checks out branch in dir. A leftover branch that holds no work of its own moves to base.
-func addWorktree(repo, dir, branch, base string) error {
+// With keep, the branch stays as it is, whatever work it holds.
+func addWorktree(repo, dir, branch, base string, keep bool) error {
 	// A task folder that someone deleted by hand must stop holding its branch.
 	if _, err := git(repo, "worktree", "prune"); err != nil {
 		return err
@@ -89,15 +114,17 @@ func addWorktree(repo, dir, branch, base string) error {
 	if holder != "" {
 		return &BranchBusyError{Branch: branch, Worktree: holder}
 	}
-	ahead, err := git(repo, "rev-list", "--count", baseCommit+".."+branch)
-	if err != nil {
-		return err
-	}
-	if ahead != "0" {
-		return &BranchHasWorkError{Branch: branch}
-	}
-	if _, err := git(repo, "branch", "-f", branch, baseCommit); err != nil {
-		return err
+	if !keep {
+		ahead, err := git(repo, "rev-list", "--count", baseCommit+".."+branch)
+		if err != nil {
+			return err
+		}
+		if ahead != "0" {
+			return &BranchHasWorkError{Branch: branch}
+		}
+		if _, err := git(repo, "branch", "-f", branch, baseCommit); err != nil {
+			return err
+		}
 	}
 	_, err = git(repo, "worktree", "add", dir, branch)
 	return err
