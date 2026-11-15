@@ -289,6 +289,15 @@ func (w *Workspaces) HoldsWork(t task.Task) (bool, error) {
 	return len(entries) > 0, err
 }
 
+// RepoFolder returns the folder that a task's worktree belongs to: a local repo itself, or the clone of a URL.
+// The clone folder is known before the clone exists.
+func (w *Workspaces) RepoFolder(repo string) string {
+	if local, ok := localRepo(repo); ok {
+		return local
+	}
+	return filepath.Join(w.home, "repos", cloneName(repo))
+}
+
 // Remove deletes the folder of a task. A worktree's branch stays.
 func (w *Workspaces) Remove(t task.Task) error {
 	dir := w.dir(t.ID)

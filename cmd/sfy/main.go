@@ -34,7 +34,7 @@ func run(args []string) int {
 		return report(envrun.Run(args[1:]))
 	}
 	if len(args) > 0 && args[0] == "up" {
-		return report(up.Command(os.Environ(), os.Getenv, os.Stdout))
+		return report(up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr))
 	}
 	return cli.Run(args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
 }

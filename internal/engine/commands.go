@@ -68,11 +68,21 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 	if err := e.refreshStatus(); err != nil {
 		return "", err
 	}
+	warning := ""
+	if t.Repo != "" {
+		if w := e.l.TrustWarning(e.w.RepoFolder(t.Repo)); w != "" {
+			warning = " Warning: " + w
+		}
+	}
 	if t.State == task.New {
-		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID)
+		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID) + warning
 		if err := e.message("main", "sfy", note); err != nil {
 			return "", err
 		}
+	}
+	if warning != "" {
+		// The id stays alone on the first line, so a program that reads the id still works.
+		return t.ID + "\n" + strings.TrimSpace(warning), nil
 	}
 	return t.ID, nil
 }

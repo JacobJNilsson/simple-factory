@@ -30,6 +30,9 @@ func (l launcher) Start(spec engine.SessionSpec) error {
 	return l.Mux.Start(spec.Name, spec.Dir, argv)
 }
 
+// TrustWarning asks the provider whether it would stop at a trust prompt for dir.
+func (l launcher) TrustWarning(dir string) string { return l.p.TrustWarning(dir) }
+
 // unknownError reports a multiplexer name with no config set and no built-in set.
 type unknownError struct{ Name string }
 

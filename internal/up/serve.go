@@ -122,7 +122,7 @@ func checkSocketPath(path string) error {
 }
 
 // Command runs sfy up for the sfy home that env names.
-func Command(environ []string, env func(string) string, stdout io.Writer) error {
+func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
 	p, err := newParts(env)
 	if err != nil {
 		return err
@@ -133,7 +133,7 @@ func Command(environ []string, env func(string) string, stdout io.Writer) error 
 	}
 	return run(options{
 		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
-		mux: p.mux, launcher: p.launcher,
+		mux: p.mux, launcher: p.launcher, warn: stderr,
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
 	})

@@ -30,6 +30,8 @@ func (f *fakeMux) Notify(name, text string) error { f.notified = name + ":" + te
 
 type fakeProvider struct{ spec engine.SessionSpec }
 
+func (p *fakeProvider) TrustWarning(string) string { return "" }
+
 func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
 	p.spec = spec
 	return []string{"agent", "--flag"}, nil

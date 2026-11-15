@@ -41,12 +41,14 @@ func (l *launcher) Send(string, string) error   { return nil }
 func (l *launcher) Alive(string) (bool, error)  { return true, nil }
 func (l *launcher) Stop(string) error           { return nil }
 func (l *launcher) Notify(string, string) error { return nil }
+func (l *launcher) TrustWarning(string) string  { return "" }
 
 type workspaces struct{}
 
 func (workspaces) Create(t task.Task) (string, error) { return "/work/" + t.ID, nil }
 func (workspaces) Remove(task.Task) error             { return nil }
 func (workspaces) HoldsWork(task.Task) (bool, error)  { return false, nil }
+func (workspaces) RepoFolder(repo string) string      { return repo }
 
 type clock struct{}
 

@@ -31,6 +31,8 @@ type Launcher interface {
 	Alive(name string) (bool, error)
 	Stop(name string) error
 	Notify(name, text string) error
+	// TrustWarning returns a warning when the provider would stop an agent at a trust prompt for dir.
+	TrustWarning(dir string) string
 }
 
 // Workspaces creates and removes the folder of a task.
@@ -39,6 +41,8 @@ type Workspaces interface {
 	Remove(task.Task) error
 	// HoldsWork reports whether the task's workspace holds work that Remove would delete.
 	HoldsWork(task.Task) (bool, error)
+	// RepoFolder returns the folder that a task on repo belongs to, which exists after the first clone.
+	RepoFolder(repo string) string
 }
 
 // Clock tells the time.

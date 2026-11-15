@@ -52,6 +52,8 @@ type options struct {
 	// wait limits how long run waits for the socket, and poll sets the pause between checks.
 	wait, poll time.Duration
 	out        io.Writer
+	// warn receives warnings. They never stop up.
+	warn io.Writer
 }
 
 // run starts what is missing: notes.md, the sfy process and the main agent.
@@ -76,6 +78,9 @@ func run(o options) error {
 		return err
 	}
 	if !alive {
+		if w := o.launcher.TrustWarning(o.home); w != "" {
+			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
+		}
 		spec := engine.SessionSpec{
 			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt,
 		}

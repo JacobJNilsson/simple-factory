@@ -94,8 +94,8 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 
 | Command | Used by | What it does |
 |---|---|---|
-| `sfy up` | operator | Starts the sfy process and the main agent. Starts a new main agent if the old one died. |
-| `sfy task new` | main agent, operator, programs | Creates a task from a description, a goal and the optional fields. Prints the task id. |
+| `sfy up` | operator | Starts the sfy process and the main agent. Starts a new main agent if the old one died. Warns when the provider does not trust the sfy home. |
+| `sfy task new` | main agent, operator, programs | Creates a task from a description, a goal and the optional fields. Prints the task id. A warning about an untrusted folder goes to standard error. |
 | `sfy task edit <id> <file>` | main agent | Replaces the file of a task in any state except `done` and `cancelled`. The task keeps its id, state, round, source, progress and folder. Once the task has a workspace, an edit may not change `## Repo` or `## Protected`. A running worker gets a message to read the new file. A running reviewer keeps the old file, and the next round reads the new one. |
 | `sfy task queue <id>` | main agent | Moves a `new` task to `queued`. |
 | `sfy task list` | anyone | Lists the tasks and their states. |
@@ -122,6 +122,7 @@ A command that an agent kind may not run fails with an error that names the comm
 ## Permissions
 
 - Workers run in the provider's mode that accepts edits without prompts. One default allow list lets them run git, gh and the repo's build and test commands.
+- The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
 - Deny rules protect the paths that the task file names, in every mode.
 - Reviewers may run the allowed commands, but their edit tools are off. An allowed command such as a build can still write files, so the edit deny is not a sandbox.
 

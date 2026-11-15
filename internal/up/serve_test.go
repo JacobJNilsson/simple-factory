@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,7 @@ func TestUpRefusesALongSocketPathBeforeItStartsAnything(t *testing.T) {
 		return ""
 	}
 
-	err := Command(nil, env, &bytes.Buffer{})
+	err := Command(nil, env, &bytes.Buffer{}, io.Discard)
 
 	var perr *socketPathError
 	if !errors.As(err, &perr) || perr.max != socketPathLimit()-1 {

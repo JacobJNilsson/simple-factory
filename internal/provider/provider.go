@@ -8,4 +8,7 @@ type Provider interface {
 	// Command prepares the session's files and returns the argv to run in the session's folder.
 	// The argv holds one element for each word, unquoted. The mux runner quotes them.
 	Command(spec engine.SessionSpec) ([]string, error)
+	// TrustWarning returns a warning when the agent CLI would stop at a trust prompt for dir, or when sfy cannot tell.
+	// It returns an empty string for a trusted folder, and it never changes the CLI's config.
+	TrustWarning(dir string) string
 }
