@@ -434,3 +434,24 @@ func TestSaveKeepsAWorkersProgressForTheNextRead(t *testing.T) {
 		t.Fatalf("got progress %q", got.Progress)
 	}
 }
+
+func TestSaveKeepsATasksWorkspaceForTheNextRead(t *testing.T) {
+	s := store.Files(t.TempDir())
+	in := sample("t1", task.Working)
+	if err := s.Create(in); err != nil {
+		t.Fatal(err)
+	}
+	in.Dir = "/work/t1"
+
+	if err := s.Save(in); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Task("t1")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Dir != "/work/t1" {
+		t.Fatalf("got dir %q", got.Dir)
+	}
+}

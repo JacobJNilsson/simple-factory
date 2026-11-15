@@ -40,7 +40,9 @@ type Task struct {
 	Source string
 	// Progress is the worker's latest progress report.
 	Progress string
-	Updated  time.Time
+	// Dir is the task's workspace folder, empty until factory creates it.
+	Dir     string
+	Updated time.Time
 }
 
 // MissingError reports a required part of a task file that is absent or empty.
