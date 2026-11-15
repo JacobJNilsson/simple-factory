@@ -144,7 +144,7 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 }
 
 // Restart runs sfy restart for the sfy home that env names. The operator and the main agent may run it.
-// With update set, it runs brew upgrade sfy first and restarts only when that succeeds.
+// With update set, it updates the tap and runs brew upgrade sfy first, and restarts only when that succeeds.
 func Restart(environ []string, env func(string) string, stdout, stderr io.Writer, update bool) error {
 	if !mayRestart(env("SFY_AGENT")) {
 		return ErrNotAllowed
@@ -167,7 +167,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 	}
 	return options{
 		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
-		mux: p.mux, launcher: p.launcher, warn: stderr, brew: brewUpgrade,
+		mux: p.mux, launcher: p.launcher, warn: stderr, brew: runBrew,
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
 	}, nil
