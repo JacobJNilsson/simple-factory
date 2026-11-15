@@ -2,11 +2,14 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -50,7 +53,7 @@ func (e *SettingError) Error() string {
 	return fmt.Sprintf("config: %s must be 1 or more", e.Setting)
 }
 
-func defaults() Config {
+func defaults(userTempDir func() (string, error)) Config {
 	return Config{
 		ReviewRounds:  3,
 		MaxWorkers:    2,
@@ -63,8 +66,29 @@ func defaults() Config {
 			"~/.ssh", "~/.aws", "~/.config/gh", "~/.gnupg",
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
 		},
-		AllowWrite: []string{cacheDir(runtime.GOOS), "~/go/pkg/mod"},
+		AllowWrite: defaultAllowWrite(runtime.GOOS, userTempDir),
 	}
+}
+
+// getconfTempDir looks up the macOS per-user temp folder.
+func getconfTempDir() (string, error) {
+	out, err := exec.CommandContext(context.Background(), "getconf", "DARWIN_USER_TEMP_DIR").Output()
+	return string(out), err
+}
+
+// defaultAllowWrite lists the default sandbox write paths for an operating system.
+// On macOS, mktemp and other tools write to the per-user temp folder, not to TMPDIR.
+func defaultAllowWrite(goos string, userTempDir func() (string, error)) []string {
+	paths := []string{cacheDir(goos), "~/go/pkg/mod"}
+	if goos != "darwin" {
+		return paths
+	}
+	dir, err := userTempDir()
+	dir = strings.TrimRight(strings.TrimSpace(dir), "/")
+	if err != nil || dir == "" {
+		return paths
+	}
+	return append(paths, dir)
 }
 
 // cacheDir returns the user cache folder for an operating system, with ~ for the home folder.
@@ -77,7 +101,11 @@ func cacheDir(goos string) string {
 
 // Load reads <home>/config.toml. A missing file gives the defaults, and a setting left out keeps its default.
 func Load(home string) (Config, error) {
-	c := defaults()
+	return load(home, getconfTempDir)
+}
+
+func load(home string, userTempDir func() (string, error)) (Config, error) {
+	c := defaults(userTempDir)
 	md, err := toml.DecodeFile(filepath.Join(home, "config.toml"), &c)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return Config{}, fmt.Errorf("config: %w", err)

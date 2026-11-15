@@ -149,7 +149,7 @@ A command that an agent kind may not run fails with an error that names the comm
 | `models.reviewer` | `sonnet` | The reviewers' model. |
 | `allow` | git, gh, gofmt, build, test | The main agent's allow list. |
 | `deny_read` | `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
-| `allow_write` | The user cache folder and `~/go/pkg/mod` | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
+| `allow_write` | The user cache folder and `~/go/pkg/mod`. On macOS also the per-user temp folder from `getconf DARWIN_USER_TEMP_DIR`, without its trailing slash | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
 
 ## Multiplexer templates
