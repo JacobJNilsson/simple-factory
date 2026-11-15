@@ -10,7 +10,7 @@ This spec covers version 0.
 
 - sfy is written in Go and ships as one binary, `sfy`.
 - The agent provider sits behind an adapter. Version 0 has one adapter, for Claude Code. The design allows more providers, and several in one sfy process.
-- A multiplexer is a set of command templates in `config.toml`, with no Go code. Version 0 ships sets for tmux, Herdr and Rex. A new multiplexer needs only a new set.
+- A multiplexer is a set of command templates in `config.toml`, with no Go code. Version 0 ships sets for tmux and Herdr. A new multiplexer needs only a new set.
 - The core knows nothing about any one kind of work. The extension points below add that.
 - Version 0 has no web console, cost tracking, remote agents or trust rules. sfy merges nothing itself. The main agent merges through the provider's tools.
 
@@ -203,17 +203,8 @@ A use of sfy extends it at these points, without changes to the core:
 
 ## Platforms
 
-sfy runs on Linux and macOS, with tmux, Herdr or Rex.
+sfy runs on Linux and macOS, with tmux or Herdr.
 
-### Running on Rex
-
-The operator picks the multiplexer with `multiplexer = "rex"` in `config.toml`. `sfy up` then starts the sfy process and the main agent as Rex sessions, and every later session too. The built-in set needs no `[multiplexers.rex]` table.
-
-- **Binary.** The set runs `rex` from the PATH, then `$REX_BIN_DIR/rex`, which a Rex terminal sets, then the binary in the Rex app bundle under `~/Library/Application Support/com.superlogical.rex`. Each template does this lookup, so no setting is needed.
-- **Start.** `rex new <name> -c <dir> --keep-open -- <command>` opens a window in the Rex app without moving focus, so the set has no `show` template and `show_agents` has no effect. Start fails when a session with that label exists.
-- **Send.** `rex send` and `rex send-key enter` type the text and press Enter.
-- **Alive.** `rex block call process` reports a running program with a `child` and a finished program with `child` null. The template exits 0 for a running program and 1 for a finished or missing session. It exits 2 for an ambiguous label, a stopped Rex server or any other failure. It uses `--autostart=false`, so a stopped server is an error and sfy starts none.
-- **Stop.** `rex kill <name>`, also with `--autostart=false`.
-- **Draft.** Rex cannot read the input line, so sfy cannot see a draft that the operator has typed.
+docs/rex.md has an example config for Rex.
 
 A pushed tag `v*` starts a release. GoReleaser builds sfy for darwin and linux on amd64 and arm64, publishes a GitHub release, and writes the Homebrew cask to `JacobJNilsson/homebrew-tap`. The binary reports the tag with `sfy --version`, and a build without the release flags reports `dev`.

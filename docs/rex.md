@@ -156,53 +156,45 @@ The operator finds an agent in the Rex app by the session label. sfy finds it wi
 - **Argument quoting.** sfy quotes `{command}` word by word. `rex new ... -- {command}` takes words after `--` (read in help). Test T1 checks that quoting survives.
 - **Duplicate sessions after a timeout.** The usage guide says a timed-out command may have succeeded, so inspect state before a retry (read in help). sfy's Start does not retry, so it needs no change.
 
-## 6. Recommendation
+## 6. Example config
 
-Wait for the tests, then add a `rex` template set if they pass. Do not write the code before the operator runs the tests below.
+sfy ships no Rex set. A user adds one to `~/.sfy/config.toml` and sets `multiplexer = "rex"`. Each template is a shell command, so the example writes the full binary path in each one.
 
-Reasons:
+```toml
+multiplexer = "rex"
 
-- Start, Send, Stop, and Show map to documented commands (read in help).
-- Question 2 has a likely yes, and tests T1 and T2 confirm it.
-- Question 3 has no answer in the help text, so Rex gives sfy no more than Herdr does for the draft problem. t25 stays cancelled unless test T4 finds a method.
-- Alive has no documented single command, and its output is untested.
-
-If T1 to T3 pass, add the set. If T2 fails (the app jumps to the new session), stop.
-
-### Sketch
-
-This goes into `internal/mux/mux.go` next to `herdrSet`. It is a sketch. Names and output checks depend on tests T3 and T5.
-
-```go
-// Rex sessions have no tab for the operator until Show runs. Alive treats a missing
-// session as gone (exit 1) and any other rex failure as an error (exit 2).
-var rexSet = Templates{
-	Start: "rex --autostart=false new {name} -c {dir} --keep-open -- {command}",
-	Send:  "rex --autostart=false send -s {name} -- {text} && rex --autostart=false send-key -s {name} enter",
-	Alive: `out=$(rex --autostart=false block call -s {name} process 2>&1); rc=$?
-case $out in *'not found'*) exit 1;; esac
+[multiplexers.rex]
+start = '''
+"/Users/<you>/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex" new {name} -c {dir} --keep-open -- {command}
+'''
+send = '''
+rex="/Users/<you>/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"
+"$rex" send -s {name} -- {text} && "$rex" send-key -s {name} enter
+'''
+alive = '''
+rex="/Users/<you>/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex"
+out=$("$rex" --autostart=false block call -s {name} process 2>&1); rc=$?
+case $out in *"not found"*) exit 1;; esac
 if [ $rc -ne 0 ]; then printf '%s\n' "$out" >&2; exit 2; fi
-case $out in *'"running":true'*) exit 0;; esac
-exit 1`,
-	Stop: "rex --autostart=false kill {name}",
-	Show: "rex do session.select session_id={name}",
-}
+case $out in
+  *'"child":null'*|*'"child": null'*) exit 1;;
+  *'"child"'*) exit 0;;
+esac
+exit 2
+'''
+stop = '''
+"/Users/<you>/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex" --autostart=false kill {name}
+'''
 ```
 
-`Builtin` gets a `"rex"` case that returns `rexSet`. The strings `not found` and `"running":true` are placeholders until test T3 shows the real output. Start omits `--autostart=false` if sfy should start the server.
+Notes on the example:
 
-### Tests the set needs
-
-Unit tests in `internal/mux`, with a fake `rex` script on the PATH, as the existing tests do for the other sets:
-
-1. `Builtin("rex")` returns the set, and `FromMap` accepts every key of it.
-2. Start passes the name, the directory, and a command with spaces and single quotes intact.
-3. Send passes text with single quotes, newlines, and a leading dash intact, and it presses Enter after the text.
-4. Alive returns true for a running session, false for a missing session, false for a finished process, and an error for an unreachable server.
-5. Stop and Show pass the quoted name.
-6. Show fails with a clear error when Remote Control is off.
-
-An integration test, run by hand with a real Rex server, repeats T1 to T3 through the `Runner` and not through the shell.
+- Replace `/Users/<you>` with the home folder. The path contains `Versions/Current`, so an app update may move the binary.
+- `rex new` does not move focus, so the set has no `show` template.
+- Rex allows two sessions with one label. Remove a stale session with `rex kill <label>`.
+- Alive exits 1 for a finished or missing session and 2 for any other failure.
+- Rex cannot read the input line, so sfy cannot see a draft that the operator has typed.
+- The strings `not found` and `"child"` come from the `rex block call process` output. Test T3 shows the real output on your version.
 
 ## Tests to run outside the sandbox
 
