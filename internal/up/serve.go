@@ -50,7 +50,7 @@ func newParts(env func(string) string) (parts, error) {
 	if err != nil {
 		return parts{}, err
 	}
-	bin, err := os.Executable()
+	bin, err := runningBinary()
 	if err != nil {
 		return parts{}, err
 	}
