@@ -53,7 +53,7 @@ A task moves through these states:
 | `queued` | The task waits for a free worker slot. |
 | `working` | A worker is doing the task. |
 | `review` | A reviewer checks the worker's result. |
-| `feedback` | The worker fixes the result after a failed review. The state shows the round, for example `feedback 2`. |
+| `feedback` | The worker fixes the result after a failed review. The round shows how many reviews have run, for example `feedback 1` after the first failed review. |
 | `done` | A reviewer passed the result. |
 | `escalated` | The task waits for the operator. |
 | `cancelled` | The main agent or the operator stopped the task. |
@@ -63,7 +63,7 @@ A task moves through these states:
 - factory starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2.
 - When a worker reports `done`, the task moves to `review`, and factory starts a reviewer.
 - When the reviewer's verdict is `pass`, the task moves to `done`, and factory tells the main agent.
-- When the verdict is `fail`, factory sends the verdict to the worker, and the task moves to `feedback` with the next round number.
+- When the verdict is `fail`, factory sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
 - When a task is `done` or `cancelled`, factory ends its worker and reviewer sessions and removes the worktree. The branch stays.
 
@@ -72,7 +72,7 @@ A task moves through these states:
 - One long-running factory process is the only writer of factory state. The CLI sends each command to that process over a Unix socket. Agents never write state files.
 - The state folder is `~/.factory` by default. `FACTORY_HOME` overrides it.
 - The store is plain files behind one Go interface, so another store can replace it later.
-- Each task has a folder, `tasks/<id>/`, with `task.md`, its state, its verdicts and its messages.
+- Each task has a folder, `tasks/<id>/`, with `task.md`, its state, its verdicts and its messages. The state includes the task's workspace folder and the worker's last progress report.
 - factory rewrites `status.md` on every state change. It lists each task with its title, state, round, agents and the time of its last change. Escalations stand at the top.
 - The main agent keeps `notes.md` for information that spans tasks, such as goals, the operator's decisions, open questions and lessons. The main agent is its only writer, and it edits the file directly. Workers and reviewers do not read it. The main agent copies what a task needs into the task file.
 - When the main agent starts, it reads `notes.md` and `status.md` first. Its context holds nothing that these files lack, so factory can restart it at any time.
@@ -105,7 +105,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `factory report progress <text>` | worker | Records progress in the task's state. |
 | `factory verdict pass\|fail <file>` | reviewer | Records the verdict that the file holds. |
 | `factory inbox` | any agent | Prints unread messages and marks them read. |
-| `factory escalate <text>` | main agent | Moves a task to `escalated` and tells the operator. |
+| `factory escalate <id> <text>` | main agent | Moves a task to `escalated` and tells the operator. |
 | `factory status` | anyone | Prints `status.md`. |
 
 Two internal commands do not appear in prompts:
