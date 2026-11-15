@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
 )
 
 func TestRetryableAcceptErrors(t *testing.T) {
@@ -59,7 +59,7 @@ func TestFatalAcceptErrorEndsServe(t *testing.T) {
 	if _, err := os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("socket file remains: %v", err)
 	}
-	lock, err := takeLock(filepath.Join(dir, "factory.lock"))
+	lock, err := takeLock(filepath.Join(dir, "sfy.lock"))
 	if err != nil {
 		t.Fatalf("lock still held: %v", err)
 	}

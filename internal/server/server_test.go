@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/protocol"
-	"github.com/JacobJNilsson/factory/internal/server"
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/server"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 type launcher struct {
@@ -237,7 +237,7 @@ func TestFolderOfAnotherOwnerFails(t *testing.T) {
 		t.Skip("root owns /tmp")
 	}
 	eng, _, _ := newEngine(t)
-	socket := "/tmp/factory-owner-test.sock"
+	socket := "/tmp/sfy-owner-test.sock"
 	err := server.Serve(context.Background(), socket, eng, time.Hour, io.Discard)
 	if !errors.Is(err, server.ErrNotOwner) {
 		t.Fatalf("want ErrNotOwner, got %v", err)

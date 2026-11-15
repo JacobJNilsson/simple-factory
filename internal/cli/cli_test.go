@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/protocol"
-	"github.com/JacobJNilsson/factory/internal/server"
-	"github.com/JacobJNilsson/factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/server"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
 func envOf(m map[string]string) func(string) string {
@@ -65,7 +65,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseCaller(t *testing.T) {
-	env := envOf(map[string]string{"FACTORY_AGENT": "worker-t1", "FACTORY_TASK": "t1"})
+	env := envOf(map[string]string{"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"})
 	got, err := parse([]string{"inbox"}, env, strings.NewReader(""))
 	if err != nil {
 		t.Fatal(err)
@@ -102,16 +102,16 @@ func liveServer(t *testing.T) func(string) string {
 	eng := engine.New(store.Files(t.TempDir()), nil, nil, config.Config{}, fixedClock{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- server.Serve(ctx, filepath.Join(home, "factory.sock"), eng, time.Hour, io.Discard) }()
+	go func() { done <- server.Serve(ctx, filepath.Join(home, "sfy.sock"), eng, time.Hour, io.Discard) }()
 	t.Cleanup(func() {
 		cancel()
 		if err := <-done; err != nil {
 			t.Error(err)
 		}
 	})
-	env := envOf(map[string]string{"FACTORY_HOME": home})
+	env := envOf(map[string]string{"SFY_HOME": home})
 	for i := 0; i < 1000; i++ {
-		if _, err := server.Call(filepath.Join(home, "factory.sock"), protocol.Request{Command: "status"}); err == nil {
+		if _, err := server.Call(filepath.Join(home, "sfy.sock"), protocol.Request{Command: "status"}); err == nil {
 			return env
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -145,7 +145,7 @@ func TestRunNotRunning(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
 	var out, errb bytes.Buffer
-	code := Run([]string{"status"}, envOf(map[string]string{"FACTORY_HOME": home}), strings.NewReader(""), &out, &errb)
+	code := Run([]string{"status"}, envOf(map[string]string{"SFY_HOME": home}), strings.NewReader(""), &out, &errb)
 	if code != exitNotRunning {
 		t.Fatalf("code %d, stderr %q", code, errb.String())
 	}

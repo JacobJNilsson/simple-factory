@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JacobJNilsson/factory/internal/prompts"
+	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 )
 
 func TestForReturnsTheEmbeddedWorkerPrompt(t *testing.T) {
@@ -15,7 +15,7 @@ func TestForReturnsTheEmbeddedWorkerPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, "factory report done") {
+	if !strings.Contains(got, "sfy report done") {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -50,7 +50,7 @@ var allowed = map[string][]string{
 		"send", "escalate", "inbox", "status"},
 }
 
-var command = regexp.MustCompile("`factory ([^`]*)`")
+var command = regexp.MustCompile("`sfy ([^`]*)`")
 
 func TestEachPromptNamesOnlyCommandsOfItsKind(t *testing.T) {
 	for kind, cmds := range allowed {
@@ -64,7 +64,7 @@ func TestEachPromptNamesOnlyCommandsOfItsKind(t *testing.T) {
 		}
 		for _, m := range found {
 			if !permitted(cmds, m[1]) {
-				t.Errorf("%s prompt names `factory %s`, which the kind may not run", kind, m[1])
+				t.Errorf("%s prompt names `sfy %s`, which the kind may not run", kind, m[1])
 			}
 		}
 	}
@@ -91,8 +91,8 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, c := range cmds {
-			if !strings.Contains(text, "`factory "+c) {
-				t.Errorf("%s prompt lacks `factory %s`", kind, c)
+			if !strings.Contains(text, "`sfy "+c) {
+				t.Errorf("%s prompt lacks `sfy %s`", kind, c)
 			}
 		}
 	}
@@ -103,7 +103,7 @@ func TestReviewerPromptGivesTheVerdictOnStandardInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"`factory verdict pass -", "`factory verdict fail -"} {
+	for _, want := range []string{"`sfy verdict pass -", "`sfy verdict fail -"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("reviewer prompt lacks %s", want)
 		}

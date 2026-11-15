@@ -1,4 +1,4 @@
-// Package protocol defines the request and answer that the CLI and the factory process exchange.
+// Package protocol defines the request and answer that the CLI and the sfy process exchange.
 package protocol
 
 // Caller identifies who runs a command.
@@ -12,7 +12,7 @@ type Caller struct {
 // Request is one command from the CLI.
 type Request struct {
 	Caller Caller
-	// Command is the words after factory, for example "task new" or "report done".
+	// Command is the words after sfy, for example "task new" or "report done".
 	Command string
 	Args    []string
 	// Body carries file contents and long text.

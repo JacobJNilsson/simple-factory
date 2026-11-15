@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/provider"
-	"github.com/JacobJNilsson/factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/provider"
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 )
 
-const bin = "/opt/factory/factory"
+const bin = "/opt/sfy/sfy"
 
 type hookEntry struct {
 	Type    string `json:"type"`
@@ -32,10 +32,10 @@ type settings struct {
 	} `json:"hooks"`
 }
 
-func setup(t *testing.T, factoryBin string) (provider.Provider, string) {
+func setup(t *testing.T, sfyBin string) (provider.Provider, string) {
 	t.Helper()
 	home := t.TempDir()
-	return claude.New(config.Config{Allow: []string{"git", "make"}}, home, factoryBin), home
+	return claude.New(config.Config{Allow: []string{"git", "make"}}, home, sfyBin), home
 }
 
 func command(t *testing.T, p provider.Provider, spec engine.SessionSpec) []string {
@@ -135,7 +135,7 @@ func TestProtectedPathLosesItsLeadingDotSlash(t *testing.T) {
 	}
 }
 
-func TestWorkerSettingsSetBothHooksToTheFactoryBinary(t *testing.T) {
+func TestWorkerSettingsSetBothHooksToTheSfyBinary(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
 
@@ -163,24 +163,24 @@ func TestHooksHaveATenSecondTimeout(t *testing.T) {
 }
 
 func TestHookQuotesABinaryPathWithASpace(t *testing.T) {
-	p, home := setup(t, "/opt/my tools/factory")
+	p, home := setup(t, "/opt/my tools/sfy")
 	command(t, p, worker())
 
 	s := readSettings(t, home, "worker-t1")
 
-	want := "'/opt/my tools/factory' hook turn-ended"
+	want := "'/opt/my tools/sfy' hook turn-ended"
 	if got := hookOf(t, s, "Stop").Command; got != want {
 		t.Errorf("Stop runs %q, want %q", got, want)
 	}
 }
 
-func TestSettingsAllowTheConfiguredCommandsAndFactory(t *testing.T) {
+func TestSettingsAllowTheConfiguredCommandsAndSfy(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
 
 	s := readSettings(t, home, "worker-t1")
 
-	for _, want := range []string{"Bash(git *)", "Bash(make *)", "Bash(" + bin + " *)", "Bash(factory *)"} {
+	for _, want := range []string{"Bash(git *)", "Bash(make *)", "Bash(" + bin + " *)", "Bash(sfy *)"} {
 		if !slices.Contains(s.Permissions.Allow, want) {
 			t.Errorf("allow lacks %s: %v", want, s.Permissions.Allow)
 		}
@@ -221,7 +221,7 @@ func TestArgvStartsWithEnvAndTheAgentIdentity(t *testing.T) {
 
 	argv := command(t, p, worker())
 
-	want := []string{"env", "FACTORY_AGENT=worker-t1", "FACTORY_TASK=t1", "FACTORY_HOME=" + home}
+	want := []string{"env", "SFY_AGENT=worker-t1", "SFY_TASK=t1", "SFY_HOME=" + home}
 	if !slices.Equal(argv[:len(want)], want) {
 		t.Fatalf("argv starts %v", argv[:len(want)])
 	}
@@ -230,13 +230,13 @@ func TestArgvStartsWithEnvAndTheAgentIdentity(t *testing.T) {
 	}
 }
 
-func TestArgvPutsTheFactoryBinaryFolderFirstOnThePath(t *testing.T) {
+func TestArgvPutsTheSfyBinaryFolderFirstOnThePath(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	p, _ := setup(t, bin)
 
 	argv := command(t, p, worker())
 
-	if !slices.Contains(argv, "PATH=/opt/factory:/usr/bin:/bin") {
+	if !slices.Contains(argv, "PATH=/opt/sfy:/usr/bin:/bin") {
 		t.Errorf("argv %v", argv)
 	}
 }
@@ -293,7 +293,7 @@ func TestMainArgvOmitsTheTask(t *testing.T) {
 	argv := command(t, p, mainSpec())
 
 	for _, a := range argv {
-		if strings.HasPrefix(a, "FACTORY_TASK=") {
+		if strings.HasPrefix(a, "SFY_TASK=") {
 			t.Errorf("argv has %s", a)
 		}
 	}

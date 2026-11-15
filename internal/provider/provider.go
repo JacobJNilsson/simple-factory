@@ -1,7 +1,7 @@
 // Package provider defines the adapter that starts agent sessions for one agent CLI.
 package provider
 
-import "github.com/JacobJNilsson/factory/internal/engine"
+import "github.com/JacobJNilsson/simple-factory/internal/engine"
 
 // Provider turns a session spec into the command that runs the agent CLI.
 type Provider interface {

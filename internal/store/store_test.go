@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 var noon = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)

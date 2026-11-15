@@ -1,4 +1,4 @@
-// Package server carries factory commands from the CLI to the engine over a Unix socket.
+// Package server carries sfy commands from the CLI to the engine over a Unix socket.
 package server
 
 import (
@@ -16,8 +16,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 )
 
 // NotRunningError reports that nothing listens on the socket.
@@ -26,11 +26,11 @@ type NotRunningError struct {
 }
 
 func (e *NotRunningError) Error() string {
-	return fmt.Sprintf("the factory process does not run (no server on %s). Start it with: factory up", e.Socket)
+	return fmt.Sprintf("the sfy process does not run (no server on %s). Start it with: sfy up", e.Socket)
 }
 
-// ErrAlreadyRunning reports that another factory process holds the socket folder's lock.
-var ErrAlreadyRunning = errors.New("a factory process already runs")
+// ErrAlreadyRunning reports that another sfy process holds the socket folder's lock.
+var ErrAlreadyRunning = errors.New("a sfy process already runs")
 
 // ErrNotOwner reports that the socket folder belongs to another user.
 var ErrNotOwner = errors.New("the socket folder is not yours")
@@ -60,7 +60,7 @@ func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Dur
 	if err := secureDir(dir); err != nil {
 		return err
 	}
-	lock, err := takeLock(filepath.Join(dir, "factory.lock"))
+	lock, err := takeLock(filepath.Join(dir, "sfy.lock"))
 	if err != nil {
 		return err
 	}

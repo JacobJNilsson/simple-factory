@@ -135,7 +135,7 @@ func TestNotifyFillsTemplate(t *testing.T) {
 func TestHerdrAliveFailsWhenHcIsMissing(t *testing.T) {
 	set, _ := Builtin("herdr")
 	t.Setenv("PATH", t.TempDir())
-	alive, err := Runner(set).Alive("factory-test-x")
+	alive, err := Runner(set).Alive("sfy-test-x")
 	if err == nil || alive {
 		t.Fatalf("got %v, %v, want an error", alive, err)
 	}
@@ -162,7 +162,7 @@ func uniqueName() string {
 	if _, err := rand.Read(b[:]); err != nil {
 		panic(err)
 	}
-	return "factory-test-" + hex.EncodeToString(b[:])
+	return "sfy-test-" + hex.EncodeToString(b[:])
 }
 
 // exerciseSet drives one session through the whole lifecycle and reads the screen with read.

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/task"
-	"github.com/JacobJNilsson/factory/internal/workspace"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 var _ engine.Workspaces = (*workspace.Workspaces)(nil)
@@ -88,7 +88,7 @@ func TestCreateGivesALocalRepoAWorktreeOnATaskBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); got != "factory/t2" {
+	if got := git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); got != "sfy/t2" {
 		t.Fatalf("branch = %s", got)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "hello.txt")); err != nil {
@@ -113,7 +113,7 @@ func TestRemoveDeletesAWorktreeAndKeepsItsBranch(t *testing.T) {
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Fatalf("folder still exists: %v", err)
 	}
-	if got := git(t, repo, "branch", "--list", "factory/t3"); !strings.Contains(got, "factory/t3") {
+	if got := git(t, repo, "branch", "--list", "sfy/t3"); !strings.Contains(got, "sfy/t3") {
 		t.Fatalf("branch is gone: %q", got)
 	}
 	if got := git(t, repo, "worktree", "list"); strings.Contains(got, "t3") {
@@ -196,7 +196,7 @@ func TestCreateClonesAURLRepoOnce(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "hello.txt")); err != nil {
 		t.Fatalf("repo file missing: %v", err)
 	}
-	if got := git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); got != "factory/t7" {
+	if got := git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); got != "sfy/t7" {
 		t.Fatalf("branch = %s", got)
 	}
 }
@@ -245,7 +245,7 @@ func TestCreateAfterRemoveSucceedsAgainOnTheSameBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); got != "factory/t9" {
+	if got := git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"); got != "sfy/t9" {
 		t.Fatalf("branch = %s", got)
 	}
 }
@@ -292,10 +292,10 @@ func TestCreateFailsWhenTheBranchHoldsItsOwnCommits(t *testing.T) {
 	_, err = ws.Create(tk)
 
 	var hasWork *workspace.BranchHasWorkError
-	if !errors.As(err, &hasWork) || hasWork.Branch != "factory/t11" {
+	if !errors.As(err, &hasWork) || hasWork.Branch != "sfy/t11" {
 		t.Fatalf("want a BranchHasWorkError, got %v", err)
 	}
-	if got := git(t, repo, "rev-parse", "factory/t11"); got != tip {
+	if got := git(t, repo, "rev-parse", "sfy/t11"); got != tip {
 		t.Fatalf("branch moved to %s, want %s", got, tip)
 	}
 	if _, err := os.Stat(filepath.Join(home, "work", "t11")); !os.IsNotExist(err) {
@@ -307,13 +307,13 @@ func TestCreateFailsWhenAnotherWorktreeHoldsTheBranch(t *testing.T) {
 	gitEnv(t)
 	repo := newRepo(t)
 	other := filepath.Join(t.TempDir(), "other")
-	git(t, repo, "worktree", "add", "-b", "factory/t12", other)
+	git(t, repo, "worktree", "add", "-b", "sfy/t12", other)
 	ws := workspace.New(t.TempDir())
 
 	_, err := ws.Create(task.Task{ID: "t12", Repo: repo})
 
 	var busy *workspace.BranchBusyError
-	if !errors.As(err, &busy) || busy.Branch != "factory/t12" || !strings.HasSuffix(busy.Worktree, "other") {
+	if !errors.As(err, &busy) || busy.Branch != "sfy/t12" || !strings.HasSuffix(busy.Worktree, "other") {
 		t.Fatalf("want a BranchBusyError naming the worktree, got %v", err)
 	}
 }

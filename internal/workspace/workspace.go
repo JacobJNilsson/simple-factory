@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 const gitTimeout = 5 * time.Minute
@@ -56,7 +56,7 @@ func (w *Workspaces) Create(t task.Task) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	if err := addWorktree(repo, dir, "factory/"+t.ID, base); err != nil {
+	if err := addWorktree(repo, dir, "sfy/"+t.ID, base); err != nil {
 		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
 			return "", fmt.Errorf("%w (and the folder stays: %v)", err, rmErr)
 		}
@@ -142,10 +142,10 @@ type BranchHasWorkError struct {
 }
 
 func (e *BranchHasWorkError) Error() string {
-	return "branch " + e.Branch + " holds work that factory will not overwrite"
+	return "branch " + e.Branch + " holds work that sfy will not overwrite"
 }
 
-// CloneInUseError reports a broken clone that a task folder still uses, so factory keeps it.
+// CloneInUseError reports a broken clone that a task folder still uses, so sfy keeps it.
 type CloneInUseError struct {
 	Clone string
 }

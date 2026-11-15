@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // RenderStatus returns the text of status.md. Escalated tasks come first, then the rest by id.
@@ -21,7 +21,7 @@ func RenderStatus(tasks []task.Task) string {
 	})
 
 	var b strings.Builder
-	b.WriteString("# Factory status\n\n| Id | Title | State | Round | Agents | Last change |\n|---|---|---|---|---|---|\n")
+	b.WriteString("# sfy status\n\n| Id | Title | State | Round | Agents | Last change |\n|---|---|---|---|---|---|\n")
 	for _, t := range sorted {
 		changed := "-"
 		if !t.Updated.IsZero() {

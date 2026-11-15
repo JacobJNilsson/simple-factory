@@ -1,4 +1,4 @@
-// Package store keeps factory state in plain files.
+// Package store keeps sfy state in plain files.
 package store
 
 import (
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // ErrNotFound reports an unknown task id.
@@ -34,7 +34,7 @@ type Verdict struct {
 	Body  string
 }
 
-// Store holds tasks, verdicts and messages. The factory process is its only writer.
+// Store holds tasks, verdicts and messages. The sfy process is its only writer.
 type Store interface {
 	NextID() (string, error)
 	Create(task.Task) error

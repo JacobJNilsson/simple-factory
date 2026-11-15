@@ -1,4 +1,4 @@
-// Package cli turns factory's command line into a request for the factory process.
+// Package cli turns sfy's command line into a request for the sfy process.
 package cli
 
 import (
@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/protocol"
-	"github.com/JacobJNilsson/factory/internal/server"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/server"
 )
 
 // Exit codes of Run.
@@ -23,19 +23,19 @@ const (
 )
 
 const usage = `usage:
-  factory task new <file|->
-  factory task list
-  factory task show <id>
-  factory task edit <id> <file>
-  factory task queue <id>
-  factory task cancel <id>
-  factory send <agent> <text...>
-  factory report done|blocked|progress <text...>
-  factory verdict pass|fail <file>
-  factory inbox
-  factory escalate <id> <text...>
-  factory status
-  factory hook <event>
+  sfy task new <file|->
+  sfy task list
+  sfy task show <id>
+  sfy task edit <id> <file>
+  sfy task queue <id>
+  sfy task cancel <id>
+  sfy send <agent> <text...>
+  sfy report done|blocked|progress <text...>
+  sfy verdict pass|fail <file>
+  sfy inbox
+  sfy escalate <id> <text...>
+  sfy status
+  sfy hook <event>
 `
 
 // usageError reports a command line that matches none of the forms.
@@ -78,7 +78,7 @@ var forms = map[string]form{
 
 // parse builds the request for a command line. It reads a file argument, and reads stdin for "-" and for hooks.
 func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Request, error) {
-	req := protocol.Request{Caller: protocol.Caller{Agent: env("FACTORY_AGENT"), Task: env("FACTORY_TASK")}}
+	req := protocol.Request{Caller: protocol.Caller{Agent: env("SFY_AGENT"), Task: env("SFY_TASK")}}
 	name, f, ok := lookup(args)
 	if !ok {
 		return req, &usageError{"unknown or incomplete command"}
@@ -138,26 +138,26 @@ func readFile(path string, stdin io.Reader) (string, error) {
 	return string(b), err
 }
 
-// Run executes one factory command and returns the exit code.
+// Run executes one sfy command and returns the exit code.
 func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
 	req, err := parse(args, env, stdin)
 	var ue *usageError
 	if errors.As(err, &ue) {
-		_, _ = fmt.Fprintf(stderr, "factory: %s\n%s", ue.msg, usage)
+		_, _ = fmt.Fprintf(stderr, "sfy: %s\n%s", ue.msg, usage)
 		return exitUsage
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "factory: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed
 	}
-	ans, err := server.Call(filepath.Join(config.Home(env), "factory.sock"), req)
+	ans, err := server.Call(filepath.Join(config.Home(env), "sfy.sock"), req)
 	var nr *server.NotRunningError
 	if errors.As(err, &nr) {
-		_, _ = fmt.Fprintf(stderr, "factory: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitNotRunning
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "factory: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed
 	}
 	if !ans.OK {

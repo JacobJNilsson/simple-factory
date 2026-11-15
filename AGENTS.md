@@ -23,7 +23,7 @@ Read this file before the first commit.
 
 The anti-slop-go analyzers need Go 1.26 or newer. With the default `GOTOOLCHAIN=auto`, the go command downloads a newer toolchain.
 
-factory is a general tool. Describe the general need in code, docs, and commits. Never name a private project.
+sfy is a general tool. Describe the general need in code, docs, and commits. Never name a private project.
 
 ## Commits
 
