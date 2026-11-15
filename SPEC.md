@@ -28,7 +28,7 @@ Session names are `main`, `worker-<task>` and `review-<task>-<round>`.
 
 Only the main agent asks the operator questions. A worker or a reviewer with a question runs `sfy report blocked <question>`, and the main agent answers it or escalates it. So a worker or a reviewer that waits at its prompt always waits for a message.
 
-The provider adapter learns each session's state from the agent CLI's own hooks. For Claude Code, the `Stop` hook tells sfy that a turn ended. A provider without hooks relies on its prompt: the agent runs `sfy report` at the end of every turn.
+The provider adapter learns each session's state from the agent CLI's own hooks. For Claude Code, the `Stop` hook tells sfy that a turn ended. The `Notification` hook of type `idle_prompt` tells sfy that a session waits for input, and it never sends a reminder. An open permission dialog sends no `idle_prompt`, and an interrupt at a permission prompt fires neither hook (measured with Claude Code 2.1.325). A provider without hooks relies on its prompt: the agent runs `sfy report` at the end of every turn.
 
 sfy enforces the rule for workers and reviewers:
 

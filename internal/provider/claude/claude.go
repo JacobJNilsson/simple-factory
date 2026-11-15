@@ -36,7 +36,8 @@ type hook struct {
 }
 
 type hookGroup struct {
-	Hooks []hook `json:"hooks"`
+	Matcher string `json:"matcher,omitempty"`
+	Hooks   []hook `json:"hooks"`
 }
 
 type permissions struct {
@@ -95,6 +96,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 		Hooks: map[string][]hookGroup{
 			"Stop":              {{Hooks: []hook{a.hook("turn-ended")}}},
 			"PermissionRequest": {{Hooks: []hook{a.hook("permission")}}},
+			"Notification":      {{Matcher: "idle_prompt", Hooks: []hook{a.hook("idle")}}},
 		},
 	}
 	b, err := json.MarshalIndent(s, "", "  ")

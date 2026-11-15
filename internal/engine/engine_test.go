@@ -376,6 +376,17 @@ func waitingWorker(v env, t *testing.T) {
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
 }
 
+// sentTo lists what the fake launcher typed into one pane.
+func sentTo(v env, name string) []string {
+	var out []string
+	for _, s := range v.l.sent {
+		if strings.HasPrefix(s, name+": ") {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func TestTaskEditWithADeadWorkerSessionSucceeds(t *testing.T) {
 	v := newEnv(t)
 	waitingWorker(v, t)
@@ -1607,5 +1618,60 @@ func TestEngineLogsOnceWhenTheAliveCheckOfMainFails(t *testing.T) {
 
 	if got := strings.Count(log.String(), "alive check"); got != 1 || len(v.l.sent) != 1 {
 		t.Fatalf("log %q, sent %v", log.String(), v.l.sent)
+	}
+}
+
+func TestResumeNoteReachesAWorkerWhoseTurnEndedDuringTheEscalation(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	if len(v.l.sent) != 0 {
+		t.Fatalf("an escalated worker got a note: %v", v.l.sent)
+	}
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	if !slices.Equal(v.l.sent, []string{"worker-t1: " + note}) {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestIdleTypesTheNoteForUnreadMail(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
+
+	mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
+
+	if got := sentTo(v, "worker-t1"); !slices.Equal(got, []string{"worker-t1: " + note}) {
+		t.Fatalf("sent %v", got)
+	}
+}
+
+func TestIdleWithoutUnreadMailTypesNothing(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+}
+
+func TestIdleOfAnEscalatedWorkerTypesNothingButRecordsTheWait(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+
+	mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
+	if len(v.l.sent) != 0 {
+		t.Fatalf("sent %v", v.l.sent)
+	}
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	if got := sentTo(v, "worker-t1"); !slices.Equal(got, []string{"worker-t1: " + note}) {
+		t.Fatalf("sent %v", got)
 	}
 }
