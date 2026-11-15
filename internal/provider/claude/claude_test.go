@@ -24,9 +24,20 @@ type hookEntry struct {
 }
 
 type settings struct {
+	Sandbox *struct {
+		Enabled                  bool `json:"enabled"`
+		FailIfUnavailable        bool `json:"failIfUnavailable"`
+		AutoAllowBashIfSandboxed bool `json:"autoAllowBashIfSandboxed"`
+		AllowUnsandboxedCommands bool `json:"allowUnsandboxedCommands"`
+		Filesystem               struct {
+			DenyRead   []string `json:"denyRead"`
+			AllowWrite []string `json:"allowWrite"`
+		} `json:"filesystem"`
+	} `json:"sandbox"`
 	Permissions struct {
-		Allow []string `json:"allow"`
-		Deny  []string `json:"deny"`
+		DefaultMode string   `json:"defaultMode"`
+		Allow       []string `json:"allow"`
+		Deny        []string `json:"deny"`
 	} `json:"permissions"`
 	Hooks map[string][]struct {
 		Matcher string      `json:"matcher"`
@@ -38,6 +49,19 @@ func setup(t *testing.T, sfyBin string) (provider.Provider, string) {
 	t.Helper()
 	home := t.TempDir()
 	return claude.New(config.Config{Allow: []string{"git", "make"}}, home, sfyBin), home
+}
+
+// setupSandbox gives the adapter sandbox lists and a fresh HOME that holds the allow_write folders.
+func setupSandbox(t *testing.T) (provider.Provider, string) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	cfg := config.Config{
+		Allow:      []string{"git", "make"},
+		DenyRead:   []string{"~/.ssh", "~/.aws"},
+		AllowWrite: []string{"~/Library/Caches", "~/go/pkg/mod"},
+	}
+	return claude.New(cfg, home, bin), home
 }
 
 func command(t *testing.T, p provider.Provider, spec engine.SessionSpec) []string {
@@ -447,4 +471,76 @@ func TestWorkerSettingsHaveNoSfyHomeReadRule(t *testing.T) {
 			t.Errorf("worker allows %s", a)
 		}
 	}
+}
+
+// sandboxed returns the settings of a worker and a reviewer, keyed by session name.
+func sandboxed(t *testing.T) map[string]settings {
+	t.Helper()
+	out := map[string]settings{}
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		p, home := setupSandbox(t)
+		command(t, p, spec)
+		out[spec.Name] = readSettings(t, home, spec.Name)
+	}
+	return out
+}
+
+func TestWorkerAndReviewerSandboxFlagsFailClosed(t *testing.T) {
+	for name, s := range sandboxed(t) {
+		sb := s.Sandbox
+		if sb == nil || !sb.Enabled || !sb.FailIfUnavailable || !sb.AutoAllowBashIfSandboxed || sb.AllowUnsandboxedCommands {
+			t.Errorf("%s sandbox = %+v", name, sb)
+		}
+	}
+}
+
+func TestWorkerAndReviewerSandboxPathsComeFromConfig(t *testing.T) {
+	for name, s := range sandboxed(t) {
+		if !slices.Equal(s.Sandbox.Filesystem.DenyRead, []string{"~/.ssh", "~/.aws"}) {
+			t.Errorf("%s denyRead = %v", name, s.Sandbox.Filesystem.DenyRead)
+		}
+		if !slices.Equal(s.Sandbox.Filesystem.AllowWrite, []string{"~/Library/Caches", "~/go/pkg/mod"}) {
+			t.Errorf("%s allowWrite = %v", name, s.Sandbox.Filesystem.AllowWrite)
+		}
+	}
+}
+
+func TestWorkerAndReviewerAcceptEditsAndFetchAnyDomain(t *testing.T) {
+	for name, s := range sandboxed(t) {
+		if s.Permissions.DefaultMode != "acceptEdits" {
+			t.Errorf("%s defaultMode = %q", name, s.Permissions.DefaultMode)
+		}
+		if !slices.Contains(s.Permissions.Allow, "WebFetch(domain:*)") {
+			t.Errorf("%s allow lacks WebFetch: %v", name, s.Permissions.Allow)
+		}
+	}
+}
+
+func TestMainSettingsHaveNoSandbox(t *testing.T) {
+	p, home := setupSandbox(t)
+	command(t, p, mainSpec())
+
+	s := readSettings(t, home, "main")
+
+	if s.Sandbox != nil || slices.Contains(s.Permissions.Allow, "WebFetch(domain:*)") {
+		t.Fatalf("main got sandbox settings: %+v", s)
+	}
+}
+
+func TestCommandCreatesEachAllowWriteFolder(t *testing.T) {
+	p, _ := setupSandbox(t)
+	command(t, p, worker())
+
+	for _, rel := range []string{"Library/Caches", "go/pkg/mod"} {
+		home := os.Getenv("HOME")
+		if st, err := os.Stat(filepath.Join(home, rel)); err != nil || !st.IsDir() {
+			t.Errorf("%s not created: %v", rel, err)
+		}
+	}
+}
+
+func reviewerSpec() engine.SessionSpec {
+	spec := worker()
+	spec.Name, spec.Kind = "review-t1-1", "reviewer"
+	return spec
 }

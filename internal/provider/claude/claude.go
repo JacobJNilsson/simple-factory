@@ -40,12 +40,28 @@ type hookGroup struct {
 	Hooks   []hook `json:"hooks"`
 }
 
+type filesystem struct {
+	DenyRead   []string `json:"denyRead"`
+	AllowWrite []string `json:"allowWrite"`
+}
+
+// sandbox is Claude Code's sandbox block. Workers and reviewers get it, and the main agent does not.
+type sandbox struct {
+	Enabled                  bool       `json:"enabled"`
+	FailIfUnavailable        bool       `json:"failIfUnavailable"`
+	AutoAllowBashIfSandboxed bool       `json:"autoAllowBashIfSandboxed"`
+	AllowUnsandboxedCommands bool       `json:"allowUnsandboxedCommands"`
+	Filesystem               filesystem `json:"filesystem"`
+}
+
 type permissions struct {
-	Allow []string `json:"allow"`
-	Deny  []string `json:"deny"`
+	DefaultMode string   `json:"defaultMode,omitempty"`
+	Allow       []string `json:"allow"`
+	Deny        []string `json:"deny"`
 }
 
 type settings struct {
+	Sandbox     *sandbox               `json:"sandbox,omitempty"`
 	Permissions permissions            `json:"permissions"`
 	Hooks       map[string][]hookGroup `json:"hooks"`
 }
@@ -99,6 +115,11 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"Notification":      {{Matcher: "idle_prompt", Hooks: []hook{a.hook("idle")}}},
 		},
 	}
+	if spec.Kind != "main" {
+		if err := a.sandboxFor(&s); err != nil {
+			return "", err
+		}
+	}
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("claude: %w", err)
@@ -112,6 +133,42 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 		return "", fmt.Errorf("claude: %w", err)
 	}
 	return path, nil
+}
+
+// sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands.
+// A Linux sandbox ignores a write path that does not exist, so each one is created first.
+func (a adapter) sandboxFor(s *settings) error {
+	for _, p := range a.cfg.AllowWrite {
+		dir, err := expandHome(p)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("claude: %w", err)
+		}
+	}
+	s.Sandbox = &sandbox{
+		Enabled: true, FailIfUnavailable: true, AutoAllowBashIfSandboxed: true,
+		Filesystem: filesystem{
+			DenyRead:   append([]string{}, a.cfg.DenyRead...),
+			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
+		},
+	}
+	s.Permissions.DefaultMode = "acceptEdits"
+	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
+	return nil
+}
+
+func expandHome(p string) (string, error) {
+	rest, ok := strings.CutPrefix(p, "~/")
+	if !ok {
+		return p, nil
+	}
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("claude: %w", err)
+	}
+	return filepath.Join(h, rest), nil
 }
 
 // hook builds a command hook. Claude Code runs the command through a shell, so a binary path with spaces is quoted.
