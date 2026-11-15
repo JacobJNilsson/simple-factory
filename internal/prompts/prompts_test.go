@@ -54,7 +54,7 @@ var command = regexp.MustCompile("`sfy ([^`]*)`")
 
 func TestEachPromptNamesOnlyCommandsOfItsKind(t *testing.T) {
 	for kind, cmds := range allowed {
-		text, err := prompts.For(kind, t.TempDir())
+		text, err := prompts.Role(kind, t.TempDir(), true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,7 +86,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 		"main":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "send", "escalate", "inbox", "restart"},
 	}
 	for kind, cmds := range required {
-		text, err := prompts.For(kind, t.TempDir())
+		text, err := prompts.Role(kind, t.TempDir(), true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -113,5 +113,74 @@ func TestReviewerPromptGivesTheVerdictAsAnArgument(t *testing.T) {
 	}
 	if strings.Contains(text, "/tmp") {
 		t.Error("reviewer prompt names /tmp")
+	}
+}
+
+func TestWorkerPromptWithoutARepoHasNoGitSteps(t *testing.T) {
+	text, err := prompts.Role("worker", t.TempDir(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, word := range []string{"commit", "push", "branch", "rebase", "pull request"} {
+		if strings.Contains(strings.ToLower(text), word) {
+			t.Errorf("no-repo worker prompt contains %q", word)
+		}
+	}
+	if !strings.Contains(text, "`sfy report done") {
+		t.Error("no-repo worker prompt lacks `sfy report done`")
+	}
+}
+
+func TestWorkerPromptWithARepoHasBothParts(t *testing.T) {
+	home := t.TempDir()
+	base, err := prompts.Role("worker", home, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := prompts.Role("worker", home, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.HasPrefix(text, strings.TrimRight(base, "\n")) {
+		t.Error("repo prompt does not start with the common part")
+	}
+	for _, want := range []string{"git push -u origin", "`sfy report pushed", "gh pr create"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("repo prompt lacks %q", want)
+		}
+	}
+}
+
+func TestOnlyTheWorkerGetsTheRepoPart(t *testing.T) {
+	for _, kind := range []string{"main", "reviewer"} {
+		withRepo, err := prompts.Role(kind, t.TempDir(), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plain, _ := prompts.For(kind, t.TempDir())
+		if withRepo != plain {
+			t.Errorf("%s prompt changes with a repo", kind)
+		}
+	}
+}
+
+func TestEachWorkerPartCanBeOverridden(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, "prompts"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"worker.md": "common", "worker-repo.md": "repo"} {
+		if err := os.WriteFile(filepath.Join(home, "prompts", name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	with, _ := prompts.Role("worker", home, true)
+	without, _ := prompts.Role("worker", home, false)
+
+	if with != "common\n\nrepo" || without != "common" {
+		t.Fatalf("with %q, without %q", with, without)
 	}
 }

@@ -8,16 +8,35 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed defaults/*.md
 var defaults embed.FS
 
-// For returns the prompt for a kind of agent: "main", "worker" or "reviewer".
+// WorkerRepoPart is the kind of the worker prompt part that only a task with a repo gets.
+// A file <home>/prompts/worker-repo.md replaces its default.
+const WorkerRepoPart = "worker-repo"
+
+// Role returns the prompt for a session of kind. A worker on a task with a repo gets the
+// worker prompt followed by the repo part. Any other session gets the prompt of its kind only.
+func Role(kind, home string, hasRepo bool) (string, error) {
+	base, err := For(kind, home)
+	if err != nil || kind != "worker" || !hasRepo {
+		return base, err
+	}
+	part, err := For(WorkerRepoPart, home)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(base, "\n") + "\n\n" + part, nil
+}
+
+// For returns the prompt for a kind of agent: "main", "worker", "reviewer" or WorkerRepoPart.
 // A file <home>/prompts/<kind>.md replaces the default.
 func For(kind, home string) (string, error) {
 	switch kind {
-	case "main", "worker", "reviewer":
+	case "main", "worker", "reviewer", WorkerRepoPart:
 	default:
 		return "", fmt.Errorf("prompts: unknown kind %q", kind)
 	}
