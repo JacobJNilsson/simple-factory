@@ -163,6 +163,7 @@ A template set lives under `[multiplexers.<name>]` in `config.toml`. Each templa
 | `alive` | yes | Exits 0 if session `{name}` still runs. |
 | `stop` | yes | Ends session `{name}`. |
 | `notify` | no | Draws the operator's attention to session `{name}`, with `{text}` as the message. |
+| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start`. A failure goes to `sfy.log` and does not fail the start. |
 
 sfy does not ask the multiplexer whether an agent waits for input. The provider adapter tells it.
 

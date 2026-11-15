@@ -2,6 +2,7 @@ package up
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -57,7 +58,19 @@ func newParts(env func(string) string) (parts, error) {
 	if err != nil {
 		return parts{}, err
 	}
-	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin))}, nil
+	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
+}
+
+// logAppender appends to sfy.log on each write, so sfy up and sfy serve both log without holding the file open.
+type logAppender struct{ path string }
+
+func (l logAppender) Write(p []byte) (int, error) {
+	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	n, err := f.Write(p)
+	return n, errors.Join(err, f.Close())
 }
 
 // Serve runs the sfy process until ctx ends. It logs to stderr and to sfy.log in the sfy home.
