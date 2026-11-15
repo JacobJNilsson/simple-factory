@@ -79,6 +79,8 @@ type options struct {
 	out        io.Writer
 	// warn receives warnings. They never stop up.
 	warn io.Writer
+	// brew runs brew upgrade sfy and returns what brew printed.
+	brew func(environ []string) ([]byte, error)
 }
 
 // run starts what is missing: notes.md, the sfy process and the main agent.

@@ -48,7 +48,7 @@ You may run only these sfy commands.
 - `sfy escalate <id> <text>` moves a task to escalated and tells the operator. Use it when you cannot decide.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".
 - `sfy status` prints `status.md`.
-- `sfy restart` restarts the sfy process from the installed binary. You keep running and workers keep running. Afterwards sfy sends you a note, and the note names a file to read when your prompt changed. Run it only when the operator asks.
+- `sfy restart --update` first runs `brew upgrade sfy`. If brew fails, sfy prints the error and keeps the old process. Plain `sfy restart` skips the upgrade. Both restart the sfy process from the installed binary. You keep running and workers keep running. Afterwards sfy sends you a note, and the note names a file to read when your prompt changed. Run it only when the operator asks.
 
 ## The task file
 
