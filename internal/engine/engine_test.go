@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/protocol"
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 type fakeLauncher struct {
@@ -560,8 +560,8 @@ func TestTaskEditOfAQueuedTaskNamesTheStateItNeeds(t *testing.T) {
 }
 
 const (
-	reminder = "Your turn ended without a report. If you need an answer, run factory report blocked <question>."
-	note     = "New message. Run: factory inbox"
+	reminder = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
+	note     = "New message. Run: sfy inbox"
 )
 
 func TestTurnEndedFromAWorkerThatDidNotReportTypesTheReminder(t *testing.T) {

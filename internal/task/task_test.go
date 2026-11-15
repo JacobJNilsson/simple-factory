@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 func TestParseFailsNamingGoalWhenGoalIsMissing(t *testing.T) {

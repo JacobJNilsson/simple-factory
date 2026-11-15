@@ -31,7 +31,7 @@ type Task struct {
 	Repo        string
 	Check       string
 	Protected   []string
-	// Extra holds the sections that factory does not know, verbatim, so an extension can add its own.
+	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
 	Extra string
 
 	State State
@@ -40,7 +40,7 @@ type Task struct {
 	Source string
 	// Progress is the worker's latest progress report.
 	Progress string
-	// Dir is the task's workspace folder, empty until factory creates it.
+	// Dir is the task's workspace folder, empty until sfy creates it.
 	Dir     string
 	Updated time.Time
 }

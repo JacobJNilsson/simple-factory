@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
 )
 
-// fakeMux is one multiplexer for both the factory process and the agent sessions.
+// fakeMux is one multiplexer for both the sfy process and the agent sessions.
 type fakeMux struct {
 	alive map[string]bool
-	// serveAnswers makes the socket answer once the factory session starts.
+	// serveAnswers makes the socket answer once the sfy session starts.
 	serveAnswers bool
 	// sessionsDie makes a started session end at once.
 	sessionsDie bool
@@ -36,7 +36,7 @@ func (m *fakeMux) probe() bool {
 func (m *fakeMux) Start(name, dir string, command []string) error {
 	m.starts = append(m.starts, append([]string{name, dir}, command...))
 	m.alive[name] = !m.sessionsDie
-	if name == "factory" && m.serveAnswers {
+	if name == "sfy" && m.serveAnswers {
 		m.answering = true
 	}
 	return nil
@@ -76,7 +76,7 @@ func newRig(t *testing.T) *rig {
 	out := &bytes.Buffer{}
 	return &rig{m: m, l: l, out: out, o: options{
 		home: t.TempDir(), config: config.Config{Models: config.Models{Main: "opus"}},
-		bin: "/bin/factory", environ: []string{"PATH=/usr/bin"},
+		bin: "/bin/sfy", environ: []string{"PATH=/usr/bin"},
 		mux: m, launcher: l, answers: m.probe,
 		wait: time.Second, poll: time.Millisecond, out: out,
 	}}
@@ -87,10 +87,10 @@ func TestUpStartsServeAndMain(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.m.starts) != 1 || r.m.starts[0][0] != "factory" || r.m.starts[0][1] != r.o.home {
+	if len(r.m.starts) != 1 || r.m.starts[0][0] != "sfy" || r.m.starts[0][1] != r.o.home {
 		t.Fatalf("serve starts: %v", r.m.starts)
 	}
-	if got := strings.Join(r.m.starts[0][2:], " "); !strings.HasSuffix(got, "/bin/factory serve") || !strings.HasPrefix(got, "env -i ") {
+	if got := strings.Join(r.m.starts[0][2:], " "); !strings.HasSuffix(got, "/bin/sfy serve") || !strings.HasPrefix(got, "env -i ") {
 		t.Errorf("serve command: %q", got)
 	}
 	if len(r.l.specs) != 1 {
@@ -183,7 +183,7 @@ func TestUpFailsWhenSocketNeverAnswers(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	if len(r.l.specs) != 0 {
-		t.Error("main started without a factory process")
+		t.Error("main started without a sfy process")
 	}
 }
 
@@ -216,11 +216,11 @@ func TestServeEnvPassesOnlyTheAllowlist(t *testing.T) {
 	environ := []string{
 		"PATH=/usr/bin", "HOME=/h", "USER=u", "TMPDIR=/t", "SECRET=x", "AWS_KEY=y",
 		"ANTHROPIC_API_KEY=k", "CLAUDE_CONFIG_DIR=/c", "https_proxy=p", "NO_PROXY=n", "HTTP_PROXY=",
-		"FACTORY_HOME=/other", "LANG=C.UTF-8", "LC_ALL=C", "SHELL=/bin/sh", "LOGNAME=u",
+		"SFY_HOME=/other", "LANG=C.UTF-8", "LC_ALL=C", "SHELL=/bin/sh", "LOGNAME=u",
 		"SSH_AUTH_SOCK=/s", "GH_TOKEN=g", "GITHUB_TOKEN=h", "XDG_CONFIG_HOME=/x",
 	}
 	want := []string{
-		"FACTORY_HOME=/home", "PATH=/usr/bin", "HOME=/h", "USER=u", "TMPDIR=/t",
+		"SFY_HOME=/home", "PATH=/usr/bin", "HOME=/h", "USER=u", "TMPDIR=/t",
 		"ANTHROPIC_API_KEY=k", "CLAUDE_CONFIG_DIR=/c", "https_proxy=p", "NO_PROXY=n",
 		"LANG=C.UTF-8", "LC_ALL=C", "SHELL=/bin/sh", "LOGNAME=u",
 		"SSH_AUTH_SOCK=/s", "GH_TOKEN=g", "GITHUB_TOKEN=h", "XDG_CONFIG_HOME=/x",

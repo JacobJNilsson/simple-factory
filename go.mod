@@ -1,4 +1,4 @@
-module github.com/JacobJNilsson/factory
+module github.com/JacobJNilsson/simple-factory
 
 go 1.23.0
 

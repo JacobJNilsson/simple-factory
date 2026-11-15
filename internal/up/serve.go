@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/launcher"
-	"github.com/JacobJNilsson/factory/internal/mux"
-	"github.com/JacobJNilsson/factory/internal/provider/claude"
-	"github.com/JacobJNilsson/factory/internal/server"
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/workspace"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/launcher"
+	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/server"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 const (
@@ -22,15 +22,15 @@ const (
 	tickEvery = 2 * time.Second
 	// probeTimeout limits how long up waits for one answer from the socket.
 	probeTimeout = 2 * time.Second
-	// logName is the log file of the factory process, inside the factory home.
-	logName = "factory.log"
+	// logName is the log file of the sfy process, inside the sfy home.
+	logName = "sfy.log"
 )
 
 type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
 
-func socket(home string) string { return filepath.Join(home, "factory.sock") }
+func socket(home string) string { return filepath.Join(home, "sfy.sock") }
 
 // parts is what Serve and Command both build from the config.
 type parts struct {
@@ -58,7 +58,7 @@ func newParts(env func(string) string) (parts, error) {
 	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin))}, nil
 }
 
-// Serve runs the factory process until ctx ends. It logs to stderr and to factory.log in the factory home.
+// Serve runs the sfy process until ctx ends. It logs to stderr and to sfy.log in the sfy home.
 func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error {
 	p, err := newParts(env)
 	if err != nil {
@@ -76,7 +76,7 @@ func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, io.MultiWriter(stderr, logFile))
 }
 
-// Command runs factory up for the factory home that env names.
+// Command runs sfy up for the sfy home that env names.
 func Command(environ []string, env func(string) string, stdout io.Writer) error {
 	p, err := newParts(env)
 	if err != nil {

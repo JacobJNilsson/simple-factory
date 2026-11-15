@@ -1,4 +1,4 @@
-// Package claude starts Claude Code sessions with factory's hooks and permissions.
+// Package claude starts Claude Code sessions with sfy's hooks and permissions.
 package claude
 
 import (
@@ -9,28 +9,28 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/prompts"
-	"github.com/JacobJNilsson/factory/internal/provider"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/prompts"
+	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
 
 type adapter struct {
-	cfg        config.Config
-	home       string
-	factoryBin string
+	cfg    config.Config
+	home   string
+	sfyBin string
 }
 
-// New returns the adapter for Claude Code. The hooks in each session run factoryBin.
-// CONTRACT: the factory process picks an adapter by the provider setting, so New returns the interface.
-func New(cfg config.Config, home, factoryBin string) provider.Provider {
-	return adapter{cfg: cfg, home: home, factoryBin: factoryBin}
+// New returns the adapter for Claude Code. The hooks in each session run sfyBin.
+// CONTRACT: the sfy process picks an adapter by the provider setting, so New returns the interface.
+func New(cfg config.Config, home, sfyBin string) provider.Provider {
+	return adapter{cfg: cfg, home: home, sfyBin: sfyBin}
 }
 
 type hook struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
-	// Timeout is in seconds. A slow factory process must not stall the agent.
+	// Timeout is in seconds. A slow sfy process must not stall the agent.
 	Timeout int `json:"timeout"`
 }
 
@@ -68,13 +68,13 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	argv := []string{"env", "FACTORY_AGENT=" + spec.Name}
+	argv := []string{"env", "SFY_AGENT=" + spec.Name}
 	if spec.Task != "" {
-		argv = append(argv, "FACTORY_TASK="+spec.Task)
+		argv = append(argv, "SFY_TASK="+spec.Task)
 	}
 	return append(argv,
-		"FACTORY_HOME="+a.home,
-		"PATH="+filepath.Dir(a.factoryBin)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"SFY_HOME="+a.home,
+		"PATH="+filepath.Dir(a.sfyBin)+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"claude",
 		"--name", spec.Name,
 		"--model", spec.Model,
@@ -110,7 +110,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 
 // hook builds a command hook. Claude Code runs the command through a shell, so a binary path with spaces is quoted.
 func (a adapter) hook(event string) hook {
-	return hook{Type: "command", Command: shellWord(a.factoryBin) + " hook " + event, Timeout: 10}
+	return hook{Type: "command", Command: shellWord(a.sfyBin) + " hook " + event, Timeout: 10}
 }
 
 var safeWord = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
@@ -127,8 +127,8 @@ func (a adapter) allow() []string {
 	for _, c := range a.cfg.Allow {
 		rules = append(rules, "Bash("+c+" *)")
 	}
-	// Agents run factory by its name on the PATH, and the hooks run it by its full path.
-	return append(rules, "Bash("+a.factoryBin+" *)", "Bash(factory *)")
+	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
+	return append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
 }
 
 // deny returns the deny rules of a session. The main agent talks to the operator, so it denies nothing.

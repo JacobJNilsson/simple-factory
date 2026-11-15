@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
 )
 
 type fakeMux struct {

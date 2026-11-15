@@ -7,7 +7,7 @@ word="kny""ta"
 # The base ref defaults to origin/main.
 base="${1:-origin/main}"
 self="scripts/check-neutral.sh"
-hint="factory is a general tool. Describe the general need instead of a private project."
+hint="sfy is a general tool. Describe the general need instead of a private project."
 fails=0
 
 # die MESSAGE stops the check, because a failed git command must never read as a pass.

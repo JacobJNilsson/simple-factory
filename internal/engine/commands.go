@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/JacobJNilsson/factory/internal/protocol"
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 var errEmptyVerdict = errors.New("a verdict needs the file body, and the body is empty")
@@ -66,8 +66,8 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 		return "", err
 	}
 	if t.State == task.New {
-		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: factory task show %s", t.ID, t.Title, t.ID)
-		if err := e.message("main", "factory", note); err != nil {
+		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID)
+		if err := e.message("main", "sfy", note); err != nil {
 			return "", err
 		}
 	}
@@ -311,7 +311,7 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	note := fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run factory report done.\n\n%s", t.Round, t.ID, req.Body)
+	note := fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run sfy report done.\n\n%s", t.Round, t.ID, req.Body)
 	return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(reviewer))
 }
 
@@ -346,7 +346,7 @@ func (e *Engine) escalateTask(t task.Task, why string) error {
 	if err := e.save(t); err != nil {
 		return err
 	}
-	if err := e.message("main", "factory", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
+	if err := e.message("main", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
 		return err
 	}
 	return e.l.Notify("main", fmt.Sprintf("Task %s needs the operator. %s", t.ID, why))
@@ -363,7 +363,7 @@ func (e *Engine) status(protocol.Request) (string, error) {
 // maxReminders is how many turns in a row without a report get a reminder before main hears of it.
 const maxReminders = 2
 
-// runs reports whether a hook comes from a session that factory still counts as running.
+// runs reports whether a hook comes from a session that sfy still counts as running.
 func (e *Engine) runs(name string) bool {
 	return name == "main" || e.live(name) == nil
 }
@@ -398,7 +398,7 @@ func (e *Engine) remind(name string, s *agentState) error {
 		if s.reminders > maxReminders+1 {
 			return nil
 		}
-		return e.message("main", "factory", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
+		return e.message("main", "sfy", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
 	}
 	s.waiting, s.hookSince = false, false
 	return e.l.Send(name, noReportNote)

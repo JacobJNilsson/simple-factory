@@ -23,13 +23,13 @@ stop_hook() {
 	cmd=$(grep 'hook turn-ended' "$settings" | sed 's/.*"command": "\(.*\)",*$/\1/')
 	eval "$cmd" </dev/null
 }
-case "$FACTORY_AGENT" in
+case "$SFY_AGENT" in
 worker-*)
-	factory report done "done"
+	sfy report done "done"
 	stop_hook
 	;;
 review-*)
-	factory verdict pass - <<'VERDICT'
+	sfy verdict pass - <<'VERDICT'
 The result meets the goal.
 VERDICT
 	stop_hook
@@ -38,12 +38,12 @@ esac
 exec sleep 600
 `
 
-// runFactory runs the built binary as the named agent, with standard input, and returns its output.
-type runFactory func(agent, stdin string, args ...string) (string, error)
+// runSfy runs the built binary as the named agent, with standard input, and returns its output.
+type runSfy func(agent, stdin string, args ...string) (string, error)
 
 // newRig builds the binary and prepares a private home and a private tmux server.
 // It skips the test when tmux is missing.
-func newRig(t *testing.T) (home string, factory runFactory) {
+func newRig(t *testing.T) (home string, sfy runSfy) {
 	t.Helper()
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux is not on PATH")
@@ -61,7 +61,7 @@ func newRig(t *testing.T) (home string, factory runFactory) {
 			t.Fatal(err)
 		}
 	}
-	bin := filepath.Join(binDir, "factory")
+	bin := filepath.Join(binDir, "sfy")
 	if out, err := exec.CommandContext(context.Background(), "go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -69,7 +69,7 @@ func newRig(t *testing.T) (home string, factory runFactory) {
 		t.Fatal(err)
 	}
 
-	sock := fmt.Sprintf("factory-e2e-%d", rand.Uint32())
+	sock := fmt.Sprintf("sfy-e2e-%d", rand.Uint32())
 	// The -f /dev/null option keeps the operator's tmux.conf from loading.
 	tm := "tmux -f /dev/null -L " + sock
 	config := `multiplexer = "tmuxtest"
@@ -88,12 +88,12 @@ stop = "` + tm + ` kill-session -t ={name}"
 	})
 
 	env := append(os.Environ(),
-		"FACTORY_HOME="+home, "TMUX=",
+		"SFY_HOME="+home, "TMUX=",
 		"PATH="+fakeDir+string(os.PathListSeparator)+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
 	return home, func(agent, stdin string, args ...string) (string, error) {
 		cmd := exec.CommandContext(context.Background(), bin, args...)
-		cmd.Env = append(append([]string{}, env...), "FACTORY_AGENT="+agent)
+		cmd.Env = append(append([]string{}, env...), "SFY_AGENT="+agent)
 		cmd.Stdin = strings.NewReader(stdin)
 		out, err := cmd.CombinedOutput()
 		return string(out), err
@@ -102,35 +102,35 @@ stop = "` + tm + ` kill-session -t ={name}"
 
 func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	start := time.Now()
-	home, factory := newRig(t)
+	home, sfy := newRig(t)
 
-	if out, err := factory("", "", "up"); err != nil {
+	if out, err := sfy("", "", "up"); err != nil {
 		t.Fatalf("up: %v\n%s", err, out)
 	}
-	if out, err := factory("", "", "up"); err != nil || !strings.Contains(out, "Everything already runs.") {
+	if out, err := sfy("", "", "up"); err != nil || !strings.Contains(out, "Everything already runs.") {
 		t.Fatalf("second up: %v\n%s", err, out)
 	}
 	task := "# Write a note\n\n## Description\n\nWrite one line.\n\n## Goal\n\nA note exists.\n"
-	if out, err := factory("", task, "task", "new", "-"); err != nil {
+	if out, err := sfy("", task, "task", "new", "-"); err != nil {
 		t.Fatalf("task new: %v\n%s", err, out)
 	}
-	if out, err := factory("main", "", "task", "queue", "t1"); err != nil {
+	if out, err := sfy("main", "", "task", "queue", "t1"); err != nil {
 		t.Fatalf("task queue: %v\n%s", err, out)
 	}
 
 	var shown string
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		shown, _ = factory("", "", "task", "show", "t1")
+		shown, _ = sfy("", "", "task", "show", "t1")
 		if strings.Contains(shown, "State: done\n") && strings.Contains(shown, "## Verdict, round 1: pass") {
 			t.Logf("loop finished in %s", time.Since(start))
-			if _, err := os.Stat(filepath.Join(home, "factory.log")); err != nil {
-				t.Errorf("factory.log: %v", err)
+			if _, err := os.Stat(filepath.Join(home, "sfy.log")); err != nil {
+				t.Errorf("sfy.log: %v", err)
 			}
 			return
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	status, _ := factory("", "", "status")
+	status, _ := sfy("", "", "status")
 	t.Fatalf("task t1 did not finish in 30 seconds.\ntask show:\n%s\nstatus:\n%s", shown, status)
 }

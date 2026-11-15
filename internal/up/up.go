@@ -1,4 +1,4 @@
-// Package up starts the factory process and the main agent, and runs the factory process.
+// Package up starts the sfy process and the main agent, and runs the sfy process.
 package up
 
 import (
@@ -10,28 +10,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/engine"
-	"github.com/JacobJNilsson/factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/mux"
 )
 
-// ErrNotAnswering reports that the factory process did not answer in time after it started.
-var ErrNotAnswering = errors.New("the factory process did not answer on its socket in time")
+// ErrNotAnswering reports that the sfy process did not answer in time after it started.
+var ErrNotAnswering = errors.New("the sfy process did not answer on its socket in time")
 
-// ErrServeExited reports that the factory process's session ended while up waited for it.
-var ErrServeExited = errors.New("the factory process exited, see factory.log in the factory home")
+// ErrServeExited reports that the sfy process's session ended while up waited for it.
+var ErrServeExited = errors.New("the sfy process exited, see sfy.log in the sfy home")
 
-// mainFailedError reports a main agent that failed to start after the factory process started.
+// mainFailedError reports a main agent that failed to start after the sfy process started.
 type mainFailedError struct{ err error }
 
 func (e *mainFailedError) Error() string {
-	return "factory process started, main agent failed: " + e.err.Error()
+	return "sfy process started, main agent failed: " + e.err.Error()
 }
 
 func (e *mainFailedError) Unwrap() error { return e.err }
 
-// serveSession is the multiplexer session that runs the factory process.
-const serveSession = "factory"
+// serveSession is the multiplexer session that runs the sfy process.
+const serveSession = "sfy"
 
 const mainPrompt = "Read notes.md and status.md in your folder. Then wait for the operator."
 
@@ -39,21 +39,21 @@ const mainPrompt = "Read notes.md and status.md in your folder. Then wait for th
 type options struct {
 	home   string
 	config config.Config
-	// bin is the absolute path of the factory binary.
+	// bin is the absolute path of the sfy binary.
 	bin string
-	// environ is the environment of the host, as KEY=VALUE entries. The factory process gets part of it.
+	// environ is the environment of the host, as KEY=VALUE entries. The sfy process gets part of it.
 	environ []string
-	// mux runs the factory process, and launcher starts the main agent.
+	// mux runs the sfy process, and launcher starts the main agent.
 	mux      mux.Mux
 	launcher engine.Launcher
-	// answers reports whether a factory process answers on its socket.
+	// answers reports whether a sfy process answers on its socket.
 	answers func() bool
 	// wait limits how long run waits for the socket, and poll sets the pause between checks.
 	wait, poll time.Duration
 	out        io.Writer
 }
 
-// run starts what is missing: notes.md, the factory process and the main agent.
+// run starts what is missing: notes.md, the sfy process and the main agent.
 func run(o options) error {
 	if err := os.MkdirAll(o.home, 0o700); err != nil {
 		return err
@@ -68,7 +68,7 @@ func run(o options) error {
 			return err
 		}
 		serveStarted = true
-		started = append(started, "the factory process")
+		started = append(started, "the sfy process")
 	}
 	alive, err := o.launcher.Alive("main")
 	if err != nil {
@@ -114,7 +114,7 @@ func ensureNotes(path string) error {
 	return f.Close()
 }
 
-// startServe starts the factory process in its session, unless the session exists, and waits for the socket.
+// startServe starts the sfy process in its session, unless the session exists, and waits for the socket.
 func (o options) startServe() error {
 	alive, err := o.mux.Alive(serveSession)
 	if err != nil {
@@ -144,10 +144,10 @@ func (o options) startServe() error {
 	return nil
 }
 
-// serveEnv picks the entries of environ that the factory process may see, and sets FACTORY_HOME.
+// serveEnv picks the entries of environ that the sfy process may see, and sets SFY_HOME.
 // It passes the identity, locale, ssh and token variables, every ANTHROPIC_, CLAUDE_, LC_ and XDG_ variable, and the proxy variables.
 func serveEnv(environ []string, home string) []string {
-	out := []string{"FACTORY_HOME=" + home}
+	out := []string{"SFY_HOME=" + home}
 	for _, entry := range environ {
 		key, value, ok := strings.Cut(entry, "=")
 		if !ok || value == "" || !passes(key) {

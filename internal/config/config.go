@@ -1,4 +1,4 @@
-// Package config loads config.toml from the factory home folder.
+// Package config loads config.toml from the sfy home folder.
 package config
 
 import (
@@ -30,10 +30,10 @@ type Config struct {
 	Multiplexers map[string]map[string]string `toml:"multiplexers"`
 }
 
-// SettingError reports a setting with a value that factory cannot use.
+// SettingError reports a setting with a value that sfy cannot use.
 type SettingError struct {
 	Setting string
-	// Unknown is true when factory does not know the setting, and false when its value is too low.
+	// Unknown is true when sfy does not know the setting, and false when its value is too low.
 	Unknown bool
 }
 
@@ -78,10 +78,10 @@ func Load(home string) (Config, error) {
 	return c, nil
 }
 
-// Home returns the state folder: FACTORY_HOME, or .factory in the user's home folder.
+// Home returns the state folder: SFY_HOME, or .sfy in the user's home folder.
 func Home(env func(string) string) string {
-	if h := env("FACTORY_HOME"); h != "" {
+	if h := env("SFY_HOME"); h != "" {
 		return h
 	}
-	return filepath.Join(env("HOME"), ".factory")
+	return filepath.Join(env("HOME"), ".sfy")
 }

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/JacobJNilsson/factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
 )
 
 func writeConfig(t *testing.T, body string) string {
@@ -88,13 +88,13 @@ func TestLoadFailsNamingMaxWorkersBelowOne(t *testing.T) {
 	assertSetting(t, err, "max_workers")
 }
 
-func TestHomeUsesFactoryHomeOtherwiseDotFactory(t *testing.T) {
+func TestHomeUsesSfyHomeOtherwiseDotSfy(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
-	set := config.Home(env(map[string]string{"FACTORY_HOME": "/x", "HOME": "/h"}))
+	set := config.Home(env(map[string]string{"SFY_HOME": "/x", "HOME": "/h"}))
 	unset := config.Home(env(map[string]string{"HOME": "/h"}))
 
-	if set != "/x" || unset != filepath.Join("/h", ".factory") {
+	if set != "/x" || unset != filepath.Join("/h", ".sfy") {
 		t.Fatalf("got %q and %q", set, unset)
 	}
 }

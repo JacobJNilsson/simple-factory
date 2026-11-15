@@ -1,4 +1,4 @@
-// Command factory runs coding agents as interactive sessions in terminal panes.
+// Command sfy runs coding agents as interactive sessions in terminal panes.
 package main
 
 import (
@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/JacobJNilsson/factory/internal/cli"
-	"github.com/JacobJNilsson/factory/internal/up"
+	"github.com/JacobJNilsson/simple-factory/internal/cli"
+	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
 
 func main() {
@@ -36,7 +36,7 @@ func run(args []string) int {
 
 func report(err error) int {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "factory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sfy: %v\n", err)
 		return 1
 	}
 	return 0

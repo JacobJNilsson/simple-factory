@@ -1,4 +1,4 @@
-// Package engine runs factory's commands and moves tasks between states.
+// Package engine runs sfy's commands and moves tasks between states.
 // It does no I/O of its own and reaches the world through the interfaces below.
 package engine
 
@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/config"
-	"github.com/JacobJNilsson/factory/internal/protocol"
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // SessionSpec describes an agent session to start. Kind is "main", "worker" or "reviewer".
@@ -54,7 +54,7 @@ type Engine struct {
 
 	mu      sync.Mutex
 	counter int
-	// agents holds what factory knows of each session, in memory only.
+	// agents holds what sfy knows of each session, in memory only.
 	agents map[string]*agentState
 	// startFails counts the failed starts in a row of each task.
 	startFails map[string]int
@@ -62,7 +62,7 @@ type Engine struct {
 
 // agentState tracks when a session may take a note.
 type agentState struct {
-	// waiting is true after a turn ended and until factory types into the pane.
+	// waiting is true after a turn ended and until sfy types into the pane.
 	waiting bool
 	// reported is true when the agent ran report or verdict in its current turn.
 	reported bool
@@ -71,7 +71,7 @@ type agentState struct {
 	// reminders counts the turns in a row that ended without a report.
 	reminders int
 	lastNote  time.Time
-	// gone is true after factory told main that the session no longer runs.
+	// gone is true after sfy told main that the session no longer runs.
 	gone bool
 }
 

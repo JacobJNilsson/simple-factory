@@ -3,8 +3,8 @@ package engine
 import (
 	"fmt"
 
-	"github.com/JacobJNilsson/factory/internal/store"
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // save stamps and writes a task, then rewrites status.md.
@@ -41,8 +41,8 @@ func (e *Engine) message(to, from, body string) error {
 }
 
 const (
-	newMessageNote = "New message. Run: factory inbox"
-	noReportNote   = "Your turn ended without a report. If you need an answer, run factory report blocked <question>."
+	newMessageNote = "New message. Run: sfy inbox"
+	noReportNote   = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
 )
 
 // typeNote types the new-message note into a pane. The agent is busy until its next turn ends.

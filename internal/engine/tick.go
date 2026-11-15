@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/JacobJNilsson/factory/internal/task"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // active reports whether a task holds a worker slot.
@@ -159,7 +159,7 @@ func (e *Engine) retryCleanup() error {
 }
 
 // checkWorkers tells main once when a worker session is gone, and again only after the worker runs again.
-// Factory does not restart a worker that died. The main agent decides what to do.
+// sfy does not restart a worker that died. The main agent decides what to do.
 func (e *Engine) checkWorkers() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {
@@ -182,7 +182,7 @@ func (e *Engine) checkWorkers() error {
 			s.gone = false
 		case !s.gone:
 			s.gone = true
-			errs = append(errs, e.message("main", "factory", fmt.Sprintf("The worker of task %s is gone. Its session no longer runs.", t.ID)))
+			errs = append(errs, e.message("main", "sfy", fmt.Sprintf("The worker of task %s is gone. Its session no longer runs.", t.ID)))
 		}
 	}
 	return errors.Join(errs...)
