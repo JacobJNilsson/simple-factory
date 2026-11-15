@@ -10,6 +10,7 @@ You are a worker in sfy. You do one task.
 - Change files with the Edit and Write tools, not with shell scripts or here-documents. Formatters and build tools may still write files.
 - Do only what the task asks. Another agent checks your result against the task's goal.
 - Never edit a protected path. The task file lists them, and your settings deny them.
+- A denied tool call carries a reason. Run `sfy report blocked <what and why>` for anything that needs the operator.
 
 ## Commands
 

@@ -104,7 +104,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |
 | `sfy send <agent> <text>` | main agent | Sends a message to an agent. |
 | `sfy report done <text>` | worker | Reports the result and starts the review. |
-| `sfy report blocked <text>` | worker | Tells the main agent that the worker cannot go on. |
+| `sfy report blocked <text>` | worker, reviewer | Tells the main agent that the agent cannot go on. |
 | `sfy report progress <text>` | worker | Records progress in the task's state. |
 | `sfy verdict pass\|fail <file>` | reviewer | Records the verdict that the file holds. `-` reads it from standard input. |
 | `sfy inbox` | any agent | Prints unread messages and marks them read. |

@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -922,22 +923,110 @@ func TestTheErrorForAForbiddenCommandListsNoHookCommand(t *testing.T) {
 	}
 }
 
-func TestPermissionFromAWorkerGivesMainAMessageNamingTheTask(t *testing.T) {
+func TestPermissionFromAWorkerWritesNothingToMainsInboxAndLogsTheCall(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
 
-	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Run rm -rf build?"))
+	mustOK(t, v.run("worker-t1", "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`))
+
+	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
+		t.Fatalf("main got %+v", msgs)
+	}
+	if len(v.l.sent) != 0 {
+		t.Fatalf("typed notes %v", v.l.sent)
+	}
+	for _, want := range []string{"worker-t1", "Bash", "rm -rf build"} {
+		if !strings.Contains(log.String(), want) {
+			t.Errorf("log lacks %q: %q", want, log.String())
+		}
+	}
+}
+
+func TestPermissionHookDeniesAWorkerAndAReviewerWithAReason(t *testing.T) {
+	for _, c := range []struct {
+		agent string
+		state task.State
+	}{{"worker-t1", task.Working}, {"review-t1-1", task.Review}} {
+		v := newEnv(t)
+		v.seed(t, c.state, 1)
+
+		a := v.run(c.agent, "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+
+		mustOK(t, a)
+		var got struct {
+			Out struct {
+				Event    string `json:"hookEventName"`
+				Decision struct {
+					Behavior string `json:"behavior"`
+					Message  string `json:"message"`
+				} `json:"decision"`
+			} `json:"hookSpecificOutput"`
+		}
+		if err := json.Unmarshal([]byte(a.Text), &got); err != nil {
+			t.Fatalf("%s reply %q: %v", c.agent, a.Text, err)
+		}
+		d := got.Out.Decision
+		if got.Out.Event != "PermissionRequest" || d.Behavior != "deny" || !strings.Contains(d.Message, "sfy report blocked") {
+			t.Errorf("%s reply %q", c.agent, a.Text)
+		}
+	}
+}
+
+func TestReviewerReportBlockedTellsMain(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Review, 1)
+
+	mustOK(t, v.run("review-t1-1", "t1", "report blocked", "", "needs", "network"))
 
 	msgs := v.inbox(t, "main")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "worker-t1") || !strings.Contains(msgs[0].Body, "t1") || !strings.Contains(msgs[0].Body, "rm -rf build") {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "needs network") {
 		t.Fatalf("got %+v", msgs)
+	}
+	if got := v.state(t, "t1").State; got != task.Review {
+		t.Fatalf("task state after the report is %s, want review", got)
+	}
+}
+
+func TestPermissionDenialLeavesTheResendOfAnUnreadNoteRunning(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hello"))
+	mustOK(t, v.run("worker-t1", "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`))
+	before := len(v.l.sent)
+
+	v.clock.now = v.clock.now.Add(5 * time.Minute)
+	v.tick(t)
+
+	if len(v.l.sent) != before+1 || !strings.HasPrefix(v.l.sent[before], "worker-t1: ") {
+		t.Fatalf("sent %v, before %d", v.l.sent, before)
+	}
+}
+
+func TestPermissionFromAStaleWorkerIsDeniedAndNotLogged(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Cancelled, 0)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+
+	a := v.run("worker-t1", "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+
+	mustOK(t, a)
+	if !strings.Contains(a.Text, `"behavior":"deny"`) || log.Len() != 0 {
+		t.Fatalf("reply %q, log %q", a.Text, log.String())
 	}
 }
 
 func TestPermissionFromMainNotifiesTheOperator(t *testing.T) {
 	v := newEnv(t)
 
-	mustOK(t, v.run("main", "", "hook permission", "Run make?"))
+	a := v.run("main", "", "hook permission", "Run make?")
+
+	mustOK(t, a)
+	if a.Text != "" {
+		t.Fatalf("main got reply %q", a.Text)
+	}
 
 	if len(v.l.notified) != 1 || !strings.Contains(v.l.notified[0], "Run make?") {
 		t.Fatalf("notified %v", v.l.notified)
@@ -1528,7 +1617,7 @@ func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.
 	}
 }
 
-func TestPermissionMessageNamesTheToolAndItsMainInput(t *testing.T) {
+func TestPermissionLogLineNamesTheToolAndItsMainInput(t *testing.T) {
 	const ids = `"session_id":"s1","transcript_path":"/x/y.jsonl"`
 	cases := map[string]struct{ body, want string }{
 		"bash":                 {`{` + ids + `,"tool_name":"Bash","tool_input":{"command":"ls -la","description":"d"}}`, "Tool: Bash. Command: ls -la"},
@@ -1543,13 +1632,13 @@ func TestPermissionMessageNamesTheToolAndItsMainInput(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			v := newEnv(t)
 			v.seed(t, task.Working, 0)
+			var log bytes.Buffer
+			v.e.SetLog(&log)
 
 			mustOK(t, v.run("worker-t1", "t1", "hook permission", c.body))
 
-			msgs := v.inbox(t, "main")
-			want := "worker-t1 waits at a permission prompt for task t1. " + c.want
-			if len(msgs) != 1 || msgs[0].Body != want {
-				t.Fatalf("got %+v, want %q", msgs, want)
+			if !strings.Contains(log.String(), "worker-t1") || !strings.Contains(log.String(), c.want) {
+				t.Fatalf("log %q lacks %q", log.String(), c.want)
 			}
 		})
 	}
