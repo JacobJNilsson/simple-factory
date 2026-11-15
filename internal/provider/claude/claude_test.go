@@ -30,6 +30,7 @@ type settings struct {
 		AutoAllowBashIfSandboxed bool     `json:"autoAllowBashIfSandboxed"`
 		AllowUnsandboxedCommands bool     `json:"allowUnsandboxedCommands"`
 		ExcludedCommands         []string `json:"excludedCommands"`
+		WeakerNetworkIsolation   bool     `json:"enableWeakerNetworkIsolation"`
 		Filesystem               struct {
 			DenyRead   []string `json:"denyRead"`
 			AllowWrite []string `json:"allowWrite"`
@@ -552,6 +553,21 @@ func TestWorkerAndReviewerAcceptEditsAndFetchAnyDomain(t *testing.T) {
 		}
 		if !slices.Contains(s.Permissions.Allow, "WebFetch(domain:*)") {
 			t.Errorf("%s allow lacks WebFetch: %v", name, s.Permissions.Allow)
+		}
+	}
+}
+
+func TestSandboxReachesTLSTrustServiceOnMacOnly(t *testing.T) {
+	for goos, want := range map[string]bool{"darwin": true, "linux": false} {
+		for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+			t.Setenv("HOME", t.TempDir())
+			home := t.TempDir()
+			p := claude.NewForOS(config.Config{}, home, bin, goos)
+			command(t, p, spec)
+			s := readSettings(t, home, spec.Name)
+			if s.Sandbox.WeakerNetworkIsolation != want {
+				t.Errorf("%s on %s: enableWeakerNetworkIsolation = %v, want %v", spec.Name, goos, s.Sandbox.WeakerNetworkIsolation, want)
+			}
 		}
 	}
 }

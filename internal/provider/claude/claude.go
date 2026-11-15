@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -22,12 +23,13 @@ type adapter struct {
 	cfg    config.Config
 	home   string
 	sfyBin string
+	goos   string
 }
 
 // New returns the adapter for Claude Code. The hooks in each session run sfyBin.
 // CONTRACT: the sfy process picks an adapter by the provider setting, so New returns the interface.
 func New(cfg config.Config, home, sfyBin string) provider.Provider {
-	return adapter{cfg: cfg, home: home, sfyBin: sfyBin}
+	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: runtime.GOOS}
 }
 
 type hook struct {
@@ -55,6 +57,8 @@ type sandbox struct {
 	AllowUnsandboxedCommands bool       `json:"allowUnsandboxedCommands"`
 	Filesystem               filesystem `json:"filesystem"`
 	ExcludedCommands         []string   `json:"excludedCommands"`
+	// WeakerNetworkIsolation lets macOS commands reach the system TLS trust service, which Go tools need.
+	WeakerNetworkIsolation bool `json:"enableWeakerNetworkIsolation,omitempty"`
 }
 
 type permissions struct {
@@ -185,6 +189,7 @@ func (a adapter) sandboxFor(s *settings) error {
 	}
 	// gh and git push fail inside the macOS sandbox, and the sandbox blocks the sfy socket. The allow rules keep the excluded calls narrow.
 	// allowUnixSockets would open the socket on macOS only.
+	s.Sandbox.WeakerNetworkIsolation = a.goos == "darwin"
 	s.Sandbox.ExcludedCommands = []string{"gh *", "git push *", "sfy *"}
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
