@@ -630,9 +630,9 @@ func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
 	}
 }
 
-func TestWorkerAndReviewerSandboxExcludesGhAndGitPush(t *testing.T) {
+func TestWorkerAndReviewerSandboxExcludesGhGitPushAndSfy(t *testing.T) {
 	for name, s := range sandboxed(t) {
-		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"gh *", "git push *"}) {
+		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"gh *", "git push *", "sfy *"}) {
 			t.Errorf("%s excludedCommands = %v", name, got)
 		}
 	}

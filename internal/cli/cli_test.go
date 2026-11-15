@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -73,6 +74,35 @@ func TestParseCaller(t *testing.T) {
 	}
 	if got.Caller != (protocol.Caller{Agent: "worker-t1", Task: "t1"}) {
 		t.Fatalf("caller %+v", got.Caller)
+	}
+}
+
+// The path does not exist. A refusal that comes before any read is a usage error, and a read would fail with another error.
+func TestParseRefusesAFilePathFromAWorkerOrReviewer(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "secret")
+	for _, agent := range []string{"worker-t1", "review-t1-1"} {
+		for _, args := range [][]string{{"verdict", "pass", missing}, {"verdict", "fail", missing}, {"task", "new", missing}, {"task", "edit", "t1", missing}} {
+			_, err := parse(args, envOf(map[string]string{"SFY_AGENT": agent}), strings.NewReader(""))
+			var ue *usageError
+			if !errors.As(err, &ue) || !strings.Contains(ue.msg, "standard input") {
+				t.Errorf("%s %v: err = %v", agent, args, err)
+			}
+		}
+	}
+}
+
+func TestParseReadsStdinForAWorkerAndAFileForMain(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "t.md")
+	if err := os.WriteFile(file, []byte("FILE"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, err := parse([]string{"verdict", "pass", "-"}, envOf(map[string]string{"SFY_AGENT": "review-t1-1"}), strings.NewReader("IN"))
+	if err != nil || w.Body != "IN" {
+		t.Fatalf("reviewer: %+v, %v", w, err)
+	}
+	m, err := parse([]string{"task", "new", file}, envOf(map[string]string{"SFY_AGENT": "main"}), strings.NewReader(""))
+	if err != nil || m.Body != "FILE" {
+		t.Fatalf("main: %+v, %v", m, err)
 	}
 }
 

@@ -19,6 +19,7 @@ You are a reviewer in sfy. You check one result and give a verdict.
 
 You may run only these sfy commands.
 
+- Run each sfy command on its own. Never chain it with cd, &&, ;, a pipe or $(...), because a chained call stays in the sandbox and fails.
 - `sfy verdict pass -` records a pass. The verdict is the standard input.
 - `sfy verdict fail -` records a fail. The verdict is the standard input.
 - `sfy report blocked <what and why>` tells the main agent that you cannot go on.
