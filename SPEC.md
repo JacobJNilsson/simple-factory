@@ -65,7 +65,7 @@ A task moves through these states:
 - A task that the main agent creates starts in `queued`.
 - sfy starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
-- When the reviewer's verdict is `pass`, the task moves to `approved`. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent: "Task <id> is approved. Merge the pull request of branch <branch>, then run: sfy task complete <id>". A task with no repo gets a note that says it has no pull request.. A task without a pull request, for example a report, is completed the same way. The main agent checks the result and runs the command.
+- When the reviewer's verdict is `pass` on a task with no repo, the task moves to `approved`. On a task with a repo, it moves to `approved` after the worker reports that it pushed, as the push rules below describe. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent: "Task <id> is approved. Merge the pull request of branch <branch>, then run: sfy task complete <id>". A task with no repo gets a note that says it has no pull request.. A task without a pull request, for example a report, is completed the same way. The main agent checks the result and runs the command.
 - `sfy task feedback` sends feedback on a task in any state to the task's worker and records it on the task. The round and the `review_rounds` limit stay as they are, and the feedback does not count as a failed review. What happens depends on the state:
   - In `new` and `queued`, the state stays. The first message of the task's worker holds the feedback after the task file.
   - In `working` and `feedback`, the state stays. sfy sends the feedback to the running worker as a message.
@@ -73,9 +73,9 @@ A task moves through these states:
   - In `escalated`, the state stays. When `sfy task resume` returns the task, its worker gets the feedback with the note to go on. A task that resumes in `new` or `queued` gives it to its first worker.
   - In `approved`, `done` and `cancelled`, the task reopens and moves to `queued`. An archived task stops being archived. When a worker slot is free, sfy starts a new worker in the task's workspace. If sfy removed the workspace, sfy creates it again from the task's branch, or as a new empty folder for a task with no repo. The worker's first message holds the task file and the feedback. It says that the workspace and branch hold the earlier work, and that the branch may already have a pull request.
   - The worker then goes through the normal flow. The next reviewer gets the feedback text too and checks that the worker addressed it.
-- A task that did work before its feedback pushes only after a review passes. A task in `new` or `queued` keeps the first-round flow, where the worker pushes and opens the pull request before the review.
-  - After feedback, the worker commits its changes on the task branch and does not push. It reports `done`, and a reviewer checks the committed branch. A failed review goes back to the worker as usual.
-  - When the review passes, sfy keeps the worker running and tells it to push now. The task stays in `review` until the worker runs `sfy report pushed`. Then the task moves to `approved`, sfy tells the main agent, and sfy ends the sessions.
+- A task with a repo pushes only after a review passes, in every round. A task with no repo has nothing to push and moves to `approved` on a passed review.
+  - In every round, the worker commits its work on the task branch and does not push. It reports `done`, and a reviewer checks the committed branch, not a pull request. A failed review goes back to the worker as usual.
+  - When the review passes, sfy keeps the worker running and tells it to push now and to open the pull request when the task file asks for one. The task stays in `review` until the worker runs `sfy report pushed`. Then the task moves to `approved`, sfy tells the main agent, and sfy ends the sessions.
   - The worker pushes to the branch and opens no second pull request while the task's pull request is open. When the pull request is merged or closed, or the task never had one, the worker opens a new one from the same branch.
   - Feedback that arrives while the worker waits to push ends the wait. The task moves to `feedback`.
 - When the main agent runs `sfy task complete`, the task moves to `done`. The main agent merges, and a merge completes a task.
@@ -126,7 +126,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy report done <text>` | worker | Reports the result and starts the review. |
 | `sfy report blocked <text>` | worker, reviewer | Tells the main agent that the agent cannot go on. |
 | `sfy report progress <text>` | worker | Records progress in the task's state. |
-| `sfy report pushed <text>` | worker | Reports that the worker pushed the branch after a passed review of a task with feedback. Moves the task to `approved`. Fails when sfy asked for no push. |
+| `sfy report pushed <text>` | worker | Reports that the worker pushed the branch after a passed review of a task with a repo. Moves the task to `approved`. Fails when sfy asked for no push. |
 | `sfy verdict pass\|fail <text...>` | reviewer | Records the verdict. The verdict is the text after `pass` or `fail`, or standard input with `-`. |
 | `sfy inbox` | any agent | Prints unread messages and marks them read. |
 | `sfy escalate <id> <text>` | main agent | Moves a task to `escalated` and tells the operator. |

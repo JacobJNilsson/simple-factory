@@ -153,7 +153,7 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	}
 	edited.ID, edited.State, edited.Round, edited.Source = t.ID, t.State, t.Round, t.Source
 	edited.Progress, edited.Dir, edited.Pending, edited.Reopened = t.Progress, t.Dir, t.Pending, t.Reopened
-	edited.PushAfterReview, edited.Pushing = t.PushAfterReview, t.Pushing
+	edited.Pushing = t.Pushing
 	if err := e.save(edited); err != nil {
 		return "", err
 	}
@@ -236,12 +236,8 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 	if from == "" {
 		from = "operator"
 	}
-	// A task that did no work keeps today's flow. After that, the worker pushes only once a review passes.
-	if t.State != task.New && t.State != task.Queued && (t.State != task.Escalated || (t.Before != task.New && t.Before != task.Queued)) {
-		t.PushAfterReview = true
-	}
 	note := fmt.Sprintf("Feedback on task %s. Address it, then run sfy report done.", t.ID)
-	if t.PushAfterReview {
+	if t.Repo != "" {
 		note += " " + holdPush
 	}
 	note += "\n\n" + body
@@ -308,7 +304,7 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	note := fmt.Sprintf("Task %s is resumed. Go on, and report as usual.", t.ID)
-	if len(pending) > 0 && t.PushAfterReview {
+	if len(pending) > 0 && t.Repo != "" {
 		note += " " + holdPush
 	}
 	for _, f := range pending {
@@ -485,8 +481,8 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 	if err := e.st.AddVerdict(t.ID, t.Round, true, req.Body); err != nil {
 		return "", err
 	}
-	if t.PushAfterReview {
-		// The worker has not pushed the feedback changes. It keeps running, pushes now, and reports before the task is approved.
+	if t.Repo != "" {
+		// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
 		t.Pushing = true
 		if err := e.save(t); err != nil {
 			return "", err
@@ -527,8 +523,8 @@ func (e *Engine) approve(t task.Task, from string) error {
 	return e.endSessions(t)
 }
 
-// holdPush tells a worker how to treat the changes that feedback asked for.
-const holdPush = "Commit the changes on the task branch and do not push. sfy tells you to push after the review passes."
+// holdPush tells the worker of a task with a repo when to push.
+const holdPush = "Commit the work on the task branch and do not push. sfy tells you to push after the review passes."
 
 func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	t, err := e.reviewing(req)

@@ -8,10 +8,30 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-// reviewing seeds an approved task, sends feedback, and runs the worker to a review of the next round.
+// seedRepo seeds a task that has a repo.
+func (v env) seedRepo(t *testing.T, state task.State, round int) {
+	t.Helper()
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", Repo: "some/repo", State: state, Round: round, Source: "main"}
+	if state != task.New && state != task.Queued {
+		tk.Dir = "/work/t1"
+	}
+	if err := v.st.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// firstReview seeds a task with a repo in its first round and runs its worker to a review.
+func (v env) firstReview(t *testing.T) {
+	t.Helper()
+	v.seedRepo(t, task.Queued, 0)
+	v.tick(t)
+	mustOK(t, v.run("worker-t1", "t1", "report done", "Committed."))
+}
+
+// reviewing seeds an approved task with a repo, sends feedback, and runs the worker to a review of the next round.
 func (v env) reviewing(t *testing.T) {
 	t.Helper()
-	v.seed(t, task.Approved, 1)
+	v.seedRepo(t, task.Approved, 1)
 	v.feedback(t, fix)
 	v.tick(t)
 	mustOK(t, v.run("worker-t1", "t1", "report done", "Committed."))
@@ -30,7 +50,7 @@ func (v env) pushNotes(t *testing.T) []string {
 
 func TestFeedbackTellsTheWorkerToCommitAndNotPush(t *testing.T) {
 	v := newEnv(t)
-	v.seed(t, task.Approved, 1)
+	v.seedRepo(t, task.Approved, 1)
 	v.feedback(t, fix)
 
 	v.tick(t)
@@ -39,7 +59,7 @@ func TestFeedbackTellsTheWorkerToCommitAndNotPush(t *testing.T) {
 		t.Fatalf("first message lacks the push rule:\n%s", p)
 	}
 	w := newEnv(t)
-	w.seed(t, task.Working, 1)
+	w.seedRepo(t, task.Working, 1)
 	w.feedback(t, fix)
 	if got := w.workerBodies(t); len(got) != 1 || !strings.Contains(got[0], "do not push") {
 		t.Fatalf("worker got %v", got)
@@ -138,13 +158,65 @@ func TestFeedbackWhileTheWorkerPushesEndsTheWait(t *testing.T) {
 	}
 }
 
-func TestATaskWithoutFeedbackKeepsTheFirstRoundFlow(t *testing.T) {
+func TestTheFirstRoundWorkerOfARepoTaskIsToldNotToPush(t *testing.T) {
+	v := newEnv(t)
+	v.seedRepo(t, task.Queued, 0)
+
+	v.tick(t)
+
+	if p := v.l.started[0].Prompt; !strings.Contains(p, "do not push") {
+		t.Fatalf("first message lacks the push rule:\n%s", p)
+	}
+	if got := v.pushNotes(t); len(got) != 0 {
+		t.Fatalf("worker got a push note before a review: %v", got)
+	}
+}
+
+func TestAPassedFirstReviewTellsTheWorkerToPushAndApprovesAfterTheReport(t *testing.T) {
+	v := newEnv(t)
+	v.firstReview(t)
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
+
+	if got := v.pushNotes(t); len(got) != 1 {
+		t.Fatalf("worker got %v", v.workerBodies(t))
+	}
+	if tk := v.state(t, "t1"); tk.State != task.Review || !tk.Pushing {
+		t.Fatalf("got %+v", tk)
+	}
+	if got := v.inbox(t, "main"); len(got) != 0 {
+		t.Fatalf("main heard of an approval before the push: %v", got)
+	}
+	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed and opened the pull request."))
+	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
+		t.Fatalf("got %+v", tk)
+	}
+	if got := v.inbox(t, "main"); len(got) != 1 || !strings.Contains(got[0].Body, "task complete t1") {
+		t.Fatalf("main got %v", got)
+	}
+}
+
+func TestAFailedFirstReviewGoesBackToTheWorker(t *testing.T) {
+	v := newEnv(t)
+	v.firstReview(t)
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict fail", "Not yet."))
+
+	if tk := v.state(t, "t1"); tk.State != task.Feedback || tk.Pushing {
+		t.Fatalf("got %+v", tk)
+	}
+	if got := v.pushNotes(t); len(got) != 0 {
+		t.Fatalf("the worker got a push note after a failed review: %v", got)
+	}
+}
+
+func TestATaskWithoutARepoIsApprovedOnAPassedReview(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
 
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
 
-	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.PushAfterReview {
+	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
 	if got := v.pushNotes(t); len(got) != 0 {
@@ -152,7 +224,7 @@ func TestATaskWithoutFeedbackKeepsTheFirstRoundFlow(t *testing.T) {
 	}
 }
 
-func TestFeedbackOnAQueuedTaskKeepsTheFirstRoundFlow(t *testing.T) {
+func TestAWorkerOfATaskWithoutARepoIsNotToldNotToPush(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
 	v.feedback(t, fix)
@@ -160,7 +232,7 @@ func TestFeedbackOnAQueuedTaskKeepsTheFirstRoundFlow(t *testing.T) {
 	v.tick(t)
 
 	if p := v.l.started[0].Prompt; strings.Contains(p, "do not push") {
-		t.Fatalf("first-round worker told not to push:\n%s", p)
+		t.Fatalf("worker told not to push:\n%s", p)
 	}
 }
 

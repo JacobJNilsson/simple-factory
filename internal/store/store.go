@@ -71,10 +71,9 @@ type stateFile struct {
 	Dir      string     `json:"dir,omitempty"`
 	Pending  []string   `json:"pending,omitempty"`
 	Reopened bool       `json:"reopened,omitempty"`
-	// PushAfterReview and Pushing are the task's flags of the same name.
-	PushAfterReview bool      `json:"push_after_review,omitempty"`
-	Pushing         bool      `json:"pushing,omitempty"`
-	Updated         time.Time `json:"updated"`
+	// Pushing is the task's flag of the same name.
+	Pushing bool      `json:"pushing,omitempty"`
+	Updated time.Time `json:"updated"`
 }
 
 var (
@@ -241,7 +240,7 @@ func writeTask(dir string, t task.Task) error {
 	if err := writeFile(filepath.Join(dir, "task.md"), []byte(t.Markdown())); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Pending, t.Reopened, t.PushAfterReview, t.Pushing, t.Updated}, "", "  ")
+	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Updated}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -270,7 +269,7 @@ func (f files) Task(id string) (task.Task, error) {
 		return task.Task{}, fmt.Errorf("store: task %s state: %w", id, err)
 	}
 	t.ID, t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Updated = id, st.State, st.Before, st.Round, st.Archived, st.Source, st.Progress, st.Dir, st.Updated
-	t.Pending, t.Reopened, t.PushAfterReview, t.Pushing = st.Pending, st.Reopened, st.PushAfterReview, st.Pushing
+	t.Pending, t.Reopened, t.Pushing = st.Pending, st.Reopened, st.Pushing
 	return t, nil
 }
 
