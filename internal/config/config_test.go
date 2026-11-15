@@ -176,3 +176,20 @@ func TestLoadKeepsAnEmptySandboxListEmpty(t *testing.T) {
 		t.Fatalf("got deny_read %v, allow_write %v, want both empty", got.DenyRead, got.AllowWrite)
 	}
 }
+
+func TestLoadReadsPassEnvAndDefaultsToNone(t *testing.T) {
+	got, err := config.Load(writeConfig(t, "pass_env = [\"HTTPS_PROXY\"]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.PassEnv, []string{"HTTPS_PROXY"}) {
+		t.Fatalf("pass_env = %v", got.PassEnv)
+	}
+	def, err := config.Load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(def.PassEnv) != 0 {
+		t.Fatalf("default pass_env = %v", def.PassEnv)
+	}
+}

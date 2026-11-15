@@ -256,13 +256,52 @@ func TestMainSettingsKeepQuestionsAndEdits(t *testing.T) {
 	}
 }
 
-func TestArgvIsASfyRunCommandWithoutTheCleanFlag(t *testing.T) {
+func TestWorkerAndReviewerArgvUseTheCleanFlag(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		p, _ := setup(t, bin)
+
+		c := envruntest.Parse(t, command(t, p, spec))
+
+		if c.Bin != bin || !c.Clean {
+			t.Errorf("%s: bin %q, clean %v", spec.Kind, c.Bin, c.Clean)
+		}
+	}
+}
+
+func TestMainArgvKeepsTheInheritedEnvironment(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	c := envruntest.Parse(t, command(t, p, worker()))
+	c := envruntest.Parse(t, command(t, p, mainSpec()))
 
 	if c.Bin != bin || c.Clean {
 		t.Errorf("bin %q, clean %v", c.Bin, c.Clean)
+	}
+}
+
+func TestWorkerEnvKeepsListedVariablesAndDropsSecrets(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "secret")
+	t.Setenv("ANTHROPIC_API_KEY", "secret")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "secret")
+	t.Setenv("MY_PASS", "kept")
+	t.Setenv("LC_ALL", "C")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/cfg")
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+	t.Setenv("HOME", "/h")
+	p := claude.New(config.Config{PassEnv: []string{"MY_PASS"}}, t.TempDir(), bin)
+
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		c := envruntest.Parse(t, command(t, p, spec))
+
+		for _, e := range c.Env {
+			if strings.HasSuffix(e, "=secret") {
+				t.Errorf("%s env holds %q", spec.Kind, e)
+			}
+		}
+		for _, want := range []string{"MY_PASS=kept", "LC_ALL=C", "CLAUDE_CONFIG_DIR=/cfg", "SSH_AUTH_SOCK=/tmp/agent.sock", "HOME=/h"} {
+			if !slices.Contains(c.Env, want) {
+				t.Errorf("%s env lacks %s: %v", spec.Kind, want, c.Env)
+			}
+		}
 	}
 }
 
