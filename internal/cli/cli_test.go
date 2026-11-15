@@ -41,6 +41,8 @@ func TestParse(t *testing.T) {
 		{"task edit", []string{"task", "edit", "t1", file}, protocol.Request{Command: "task edit", Args: []string{"t1"}, Body: "FILE"}},
 		{"task queue", []string{"task", "queue", "t1"}, protocol.Request{Command: "task queue", Args: []string{"t1"}}},
 		{"task cancel", []string{"task", "cancel", "t1"}, protocol.Request{Command: "task cancel", Args: []string{"t1"}}},
+		{"task archive", []string{"task", "archive", "t1"}, protocol.Request{Command: "task archive", Args: []string{"t1"}}},
+		{"task list archived", []string{"task", "list", "--archived"}, protocol.Request{Command: "task list", Args: []string{"--archived"}}},
 		{"task resume", []string{"task", "resume", "t1"}, protocol.Request{Command: "task resume", Args: []string{"t1"}}},
 		{"task complete", []string{"task", "complete", "t1"}, protocol.Request{Command: "task complete", Args: []string{"t1"}}},
 		{"send", []string{"send", "worker-t1", "hello", "there"}, protocol.Request{Command: "send", Args: []string{"worker-t1", "hello", "there"}}},

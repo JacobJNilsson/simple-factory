@@ -514,3 +514,29 @@ func TestTaskKeepsTheStateBeforeAnEscalation(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestTaskKeepsTheArchivedFlag(t *testing.T) {
+	s := store.Files(t.TempDir())
+	in := sample("t1", task.Done)
+	in.Archived = true
+	if err := s.Create(in); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Task("t1")
+
+	if err != nil || !got.Archived || got.State != task.Done {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestRenderStatusLeavesOutAnArchivedTask(t *testing.T) {
+	gone := sample("t1", task.Done)
+	gone.Archived = true
+
+	out := store.RenderStatus([]task.Task{gone, sample("t2", task.Queued)})
+
+	if strings.Contains(out, "t1") || !strings.Contains(out, "t2") {
+		t.Fatalf("got:\n%s", out)
+	}
+}

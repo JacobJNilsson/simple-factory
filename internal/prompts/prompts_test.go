@@ -46,7 +46,7 @@ func TestForRejectsAnUnknownKind(t *testing.T) {
 var allowed = map[string][]string{
 	"worker":   {"report done", "report blocked", "report progress", "inbox", "task list", "task show", "status"},
 	"reviewer": {"verdict pass", "verdict fail", "report blocked", "inbox", "task list", "task show", "status"},
-	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task complete",
+	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task complete", "task archive",
 		"send", "escalate", "inbox", "status"},
 }
 

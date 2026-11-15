@@ -39,6 +39,8 @@ type Task struct {
 	// Before is the state that an escalated task had before it escalated, and is empty in every other state.
 	Before State
 	Round  int
+	// Archived hides a done or cancelled task from the default views. The task keeps its state.
+	Archived bool
 	// Source is "main" for the main agent, otherwise the creator's name.
 	Source string
 	// Progress is the worker's latest progress report.

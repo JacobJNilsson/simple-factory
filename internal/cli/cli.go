@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -24,13 +25,14 @@ const (
 
 const usage = `usage:
   sfy task new <file|->
-  sfy task list
+  sfy task list [--archived]
   sfy task show <id>
   sfy task edit <id> <file>
   sfy task queue <id>
   sfy task cancel <id>
   sfy task resume <id>
   sfy task complete <id>
+  sfy task archive <id>
   sfy send <agent> <text...>
   sfy report done|blocked|progress <text...>
   sfy verdict pass|fail <text...|->
@@ -53,6 +55,8 @@ type form struct {
 	ids int
 	// file is true when the last fixed argument is a file that becomes the Body.
 	file bool
+	// flags lists the flags that may follow the fixed arguments.
+	flags []string
 	// text is true when the rest of the line is free text.
 	text bool
 	// stdin is true when the Body comes from standard input.
@@ -63,13 +67,14 @@ type form struct {
 
 var forms = map[string]form{
 	"task new":        {words: 2, ids: 1, file: true},
-	"task list":       {words: 2},
+	"task list":       {words: 2, flags: []string{"--archived"}},
 	"task show":       {words: 2, ids: 1},
 	"task edit":       {words: 2, ids: 2, file: true},
 	"task queue":      {words: 2, ids: 1},
 	"task cancel":     {words: 2, ids: 1},
 	"task resume":     {words: 2, ids: 1},
 	"task complete":   {words: 2, ids: 1},
+	"task archive":    {words: 2, ids: 1},
 	"send":            {words: 1, ids: 1, text: true},
 	"report done":     {words: 2, text: true},
 	"report blocked":  {words: 2, text: true},
@@ -93,6 +98,10 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 	need := f.ids
 	if f.verdict {
 		return parseVerdict(req, name, rest, stdin)
+	}
+	if len(f.flags) > 0 && len(rest) == need+1 && slices.Contains(f.flags, rest[need]) {
+		req.Command, req.Args = name, rest[need:]
+		return req, nil
 	}
 	if len(rest) < need || (!f.text && len(rest) != need) || (f.text && len(rest) < need+1) {
 		return req, &usageError{fmt.Sprintf("wrong arguments for %q", name)}

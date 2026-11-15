@@ -88,13 +88,17 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 	return t.ID, nil
 }
 
-func (e *Engine) taskList(protocol.Request) (string, error) {
+func (e *Engine) taskList(req protocol.Request) (string, error) {
 	tasks, err := e.st.Tasks()
 	if err != nil {
 		return "", err
 	}
+	archived := len(req.Args) > 0 && req.Args[0] == "--archived"
 	var b strings.Builder
 	for _, t := range tasks {
+		if t.Archived != archived {
+			continue
+		}
 		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, t.State, t.Title)
 	}
 	return b.String(), nil
@@ -110,7 +114,11 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "State: %s\nRound: %d\nProgress: %s\n\n%s", t.State, t.Round, t.Progress, t.Markdown())
+	fmt.Fprintf(&b, "State: %s\n", t.State)
+	if t.Archived {
+		b.WriteString("Archived: yes\n")
+	}
+	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n\n%s", t.Round, t.Progress, t.Markdown())
 	for _, v := range verdicts {
 		result := "fail"
 		if v.Pass {
@@ -203,6 +211,22 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 		return "", err
 	}
 	return "", e.cleanup(t)
+}
+
+// taskArchive hides a done or cancelled task from the default views. The task keeps its state, files and id.
+func (e *Engine) taskArchive(req protocol.Request) (string, error) {
+	t, err := e.load(req)
+	if err != nil {
+		return "", err
+	}
+	if t.Archived {
+		return "", fmt.Errorf("task %s is already archived", t.ID)
+	}
+	if err := need(t, task.Done, task.Cancelled); err != nil {
+		return "", err
+	}
+	t.Archived = true
+	return "", e.save(t)
 }
 
 // resume returns an escalated task to the state it had before, and keeps its round.

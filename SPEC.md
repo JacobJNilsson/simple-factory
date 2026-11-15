@@ -77,7 +77,7 @@ A task moves through these states:
 - The state folder is `~/.sfy` by default. `SFY_HOME` overrides it.
 - The store is plain files behind one Go interface, so another store can replace it later.
 - Each task has a folder, `tasks/<id>/`, with `task.md`, its state, its verdicts and its messages. The state includes the task's workspace folder, which is empty after sfy removed or kept the workspace, and the worker's last progress report.
-- sfy rewrites `status.md` on every state change. It lists each task with its title, state, round, agents and the time of its last change. Escalations stand at the top.
+- sfy rewrites `status.md` on every state change. It lists each task with its title, state, round, agents and the time of its last change. Escalations stand at the top. It leaves out archived tasks.
 - The main agent keeps `notes.md` for information that spans tasks, such as goals, the operator's decisions, open questions and lessons. The main agent is its only writer, and it edits the file directly. Workers and reviewers do not read it. The main agent copies what a task needs into the task file.
 - When the main agent starts, it reads `notes.md` and `status.md` first. Its context holds nothing that these files lack, so sfy can restart it at any time.
 - The socket file is readable only by the operator's user. It keeps other users out, but it does not separate the operator's own agents from each other, since they all run as that user.
@@ -100,9 +100,10 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task new` | main agent, operator, programs | Creates a task from a description, a goal and the optional fields. Prints the task id. A warning about an untrusted folder goes to standard error. |
 | `sfy task edit <id> <file>` | main agent | Replaces the file of a task in any state except `approved`, `done` and `cancelled`. The task keeps its id, state, round, source, progress and folder. Once the task has a workspace, an edit may not change `## Repo` or `## Protected`. A running worker gets a message to read the new file. A running reviewer keeps the old file, and the next round reads the new one. |
 | `sfy task queue <id>` | main agent | Moves a `new` task to `queued`. |
-| `sfy task list` | anyone | Lists the tasks and their states. |
+| `sfy task list [--archived]` | anyone | Lists the tasks and their states, without archived tasks. With `--archived`, lists only the archived tasks. |
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
 | `sfy task complete <id>` | main agent, operator | Moves an `approved` task to `done` and cleans up. Fails for a task in any other state. |
+| `sfy task archive <id>` | main agent, operator | Archives a `done` or `cancelled` task. The task keeps its state, files, verdicts and id, and its workspace and branch stay. Fails for any other state and for an archived task. `sfy task show` still prints it and says that it is archived. |
 | `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. Works in any state except `done` and `cancelled`. |
 | `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |
 | `sfy send <agent> <text>` | main agent | Sends a message to an agent. |
