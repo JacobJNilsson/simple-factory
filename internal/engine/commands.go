@@ -345,7 +345,7 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	t.State = task.Feedback
 	if t.Round >= e.cfg.ReviewRounds {
 		msgErr := e.message("worker-"+t.ID, req.Caller.Agent, note)
-		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round))
+		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round), true)
 		return "", errors.Join(msgErr, err, e.stop(reviewer))
 	}
 	if err := e.save(t); err != nil {
@@ -376,17 +376,20 @@ func (e *Engine) escalate(req protocol.Request) (string, error) {
 	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback); err != nil {
 		return "", err
 	}
-	return "", e.escalateTask(t, text(req, req.Args[1:]))
+	return "", e.escalateTask(t, text(req, req.Args[1:]), false)
 }
 
-// escalateTask moves a task to escalated, tells main and draws the operator's attention.
-func (e *Engine) escalateTask(t task.Task, why string) error {
+// escalateTask moves a task to escalated and draws the operator's attention.
+// It also tells main, unless main escalated the task itself and already knows.
+func (e *Engine) escalateTask(t task.Task, why string, tellMain bool) error {
 	t.Before, t.State = t.State, task.Escalated
 	if err := e.save(t); err != nil {
 		return err
 	}
-	if err := e.message("main", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
-		return err
+	if tellMain {
+		if err := e.message("main", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
+			return err
+		}
 	}
 	return e.l.Notify("main", fmt.Sprintf("Task %s needs the operator. %s", t.ID, why))
 }

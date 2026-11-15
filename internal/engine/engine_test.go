@@ -1266,3 +1266,17 @@ func TestCancelOfAnEscalatedTaskClearsTheStateBefore(t *testing.T) {
 		t.Fatalf("got %+v", tk)
 	}
 }
+
+func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "need", "a", "decision"))
+
+	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
+		t.Fatalf("got %+v", msgs)
+	}
+	if len(v.l.notified) != 1 {
+		t.Fatalf("notified %v", v.l.notified)
+	}
+}
