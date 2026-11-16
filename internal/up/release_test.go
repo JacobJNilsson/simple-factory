@@ -39,10 +39,14 @@ func tarball(t *testing.T, name, content string) []byte {
 	return buf.Bytes()
 }
 
+// fakeTag is the tag that fakeRelease publishes as the latest release.
+const fakeTag = "v0.2.0"
+
 // fakeRelease serves the latest-release redirect, the archive and the checksums.
 // sum overrides the checksum of the archive when it is not empty.
-func fakeRelease(t *testing.T, tag, binary, sum string) *httptest.Server {
+func fakeRelease(t *testing.T, binary, sum string) *httptest.Server {
 	t.Helper()
+	tag := fakeTag
 	version := strings.TrimPrefix(tag, "v")
 	name := fmt.Sprintf("sfy_%s_linux_amd64.tar.gz", version)
 	archive := tarball(t, "sfy", binary)
@@ -87,7 +91,7 @@ func content(t *testing.T, path string) string {
 }
 
 func TestReleaseUpdateSaysAlreadyNewest(t *testing.T) {
-	r, out := releaseFor(t, fakeRelease(t, "v0.2.0", "new", ""), "0.2.0")
+	r, out := releaseFor(t, fakeRelease(t, "new", ""), "0.2.0")
 	if err := r.update(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +104,7 @@ func TestReleaseUpdateSaysAlreadyNewest(t *testing.T) {
 }
 
 func TestReleaseUpdateInstallsTheNewestRelease(t *testing.T) {
-	r, out := releaseFor(t, fakeRelease(t, "v0.2.0", "new binary", ""), "0.1.0")
+	r, out := releaseFor(t, fakeRelease(t, "new binary", ""), "0.1.0")
 	if err := r.update(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +125,7 @@ func TestReleaseUpdateInstallsTheNewestRelease(t *testing.T) {
 }
 
 func TestReleaseUpdateKeepsTheOldBinaryOnAChecksumMismatch(t *testing.T) {
-	r, out := releaseFor(t, fakeRelease(t, "v0.2.0", "new binary", strings.Repeat("a", 64)), "0.1.0")
+	r, out := releaseFor(t, fakeRelease(t, "new binary", strings.Repeat("a", 64)), "0.1.0")
 	err := r.update(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("err = %v", err)
@@ -150,7 +154,7 @@ func TestReleaseUpdateNamesTheOperatorCommandWhenTheFolderIsNotWritable(t *testi
 	if os.Geteuid() == 0 {
 		t.Skip("root can write every folder")
 	}
-	r, out := releaseFor(t, fakeRelease(t, "v0.2.0", "new binary", ""), "0.1.0")
+	r, out := releaseFor(t, fakeRelease(t, "new binary", ""), "0.1.0")
 	dir := filepath.Dir(r.target)
 	if err := os.Chmod(dir, 0o500); err != nil { //nolint:gosec // The test needs a folder that it cannot write.
 		t.Fatal(err)
@@ -183,12 +187,12 @@ func TestBrewManagedDetectsABrewPath(t *testing.T) {
 	if err := os.MkdirAll(cask, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	real := filepath.Join(cask, "sfy")
-	if err := os.WriteFile(real, nil, 0o600); err != nil {
+	caskBinary := filepath.Join(cask, "sfy")
+	if err := os.WriteFile(caskBinary, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(root, "bin-sfy")
-	if err := os.Symlink(real, link); err != nil {
+	if err := os.Symlink(caskBinary, link); err != nil {
 		t.Fatal(err)
 	}
 	plain := filepath.Join(root, "local", "bin", "sfy")
@@ -198,7 +202,7 @@ func TestBrewManagedDetectsABrewPath(t *testing.T) {
 	if err := os.WriteFile(plain, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for path, want := range map[string]bool{real: true, link: true, plain: false, "/opt/homebrew/Cellar/sfy/1/bin/sfy": true, "/usr/local/bin/sfy": false} {
+	for path, want := range map[string]bool{caskBinary: true, link: true, plain: false, "/opt/homebrew/Cellar/sfy/1/bin/sfy": true, "/usr/local/bin/sfy": false} {
 		if got := brewManaged(path); got != want {
 			t.Errorf("brewManaged(%q) = %v, want %v", path, got, want)
 		}
