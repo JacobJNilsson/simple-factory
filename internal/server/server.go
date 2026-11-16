@@ -35,8 +35,8 @@ var ErrAlreadyRunning = errors.New("a sfy process already runs")
 // ErrNotOwner reports that the socket folder belongs to another user.
 var ErrNotOwner = errors.New("the socket folder is not yours")
 
-// maxLine limits the size of one request or answer line.
-var maxLine = 16 << 20
+// defaultMaxLine limits the size of one request or answer line.
+const defaultMaxLine = 16 << 20
 
 const (
 	// readTimeout limits how long a client may take to send its request line.
@@ -49,11 +49,11 @@ const (
 
 // Serve answers requests on the Unix socket until ctx ends, and calls eng.Tick every tick.
 func Serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Duration, log io.Writer) error {
-	return serve(ctx, socket, eng, tick, log, nil)
+	return serve(ctx, socket, eng, tick, log, defaultMaxLine, nil)
 }
 
-// serve is Serve with a seam for tests. A non-nil wrap replaces the listener after it starts.
-func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Duration, log io.Writer, wrap func(net.Listener) net.Listener) error {
+// serve is Serve with a seam for tests. It sets the request size limit. A non-nil wrap replaces the listener after it starts.
+func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Duration, log io.Writer, maxLine int, wrap func(net.Listener) net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	dir := filepath.Dir(socket)
@@ -124,7 +124,7 @@ func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Dur
 		go func() {
 			defer wg.Done()
 			defer conns.remove(conn)
-			handle(conn, eng)
+			handle(conn, eng, maxLine)
 			// The answer is written, so the connection can close with the process.
 			if eng.Stopping() {
 				cancel()
@@ -263,13 +263,13 @@ func safeHandle(eng *engine.Engine, req protocol.Request) (ans protocol.Answer) 
 
 var errTooLarge = errors.New("request too large")
 
-func handle(conn net.Conn, eng *engine.Engine) {
+func handle(conn net.Conn, eng *engine.Engine, maxLine int) {
 	defer func() { _ = conn.Close() }()
 	// The deadline covers the request only. The engine may take minutes to answer.
 	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 	var req protocol.Request
 	var ans protocol.Answer
-	line, err := readLine(conn)
+	line, err := readLine(conn, maxLine)
 	if err == nil {
 		err = json.Unmarshal(line, &req)
 	}
@@ -291,7 +291,7 @@ func handle(conn net.Conn, eng *engine.Engine) {
 }
 
 // readLine reads one line of at most maxLine bytes.
-func readLine(r io.Reader) ([]byte, error) {
+func readLine(r io.Reader, maxLine int) ([]byte, error) {
 	br := bufio.NewReaderSize(io.LimitReader(r, int64(maxLine)+1), 64<<10)
 	line, err := br.ReadBytes('\n')
 	if len(line) > maxLine {
@@ -333,7 +333,7 @@ func call(socket string, req protocol.Request, timeout time.Duration) (protocol.
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return protocol.Answer{}, err
 	}
-	line, err := readLine(conn)
+	line, err := readLine(conn, defaultMaxLine)
 	if err != nil {
 		return protocol.Answer{}, fmt.Errorf("read answer: %w", err)
 	}
