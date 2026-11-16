@@ -89,8 +89,9 @@ type options struct {
 	brew func(environ []string, args ...string) ([]byte, error)
 	// whoami returns the address of the terminal that sfy runs in. An empty address means that the set has no whoami template.
 	whoami func() (string, error)
-	// exec replaces the sfy process with argv. It returns only when the replacement fails.
-	exec func(argv []string) error
+	// exec runs argv in the folder dir in place of the sfy process, as a started session runs in its folder.
+	// It returns only when it fails.
+	exec func(dir string, argv []string) error
 }
 
 // mainAddressPath is the file that records the address of a main agent that runs in the operator's terminal.
@@ -212,7 +213,7 @@ func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, 
 		}
 	}
 	_, _ = fmt.Fprintln(o.out, "Starting the main agent in this terminal.")
-	if err := o.exec(argv); err != nil {
+	if err := o.exec(spec.Dir, argv); err != nil {
 		_, _ = fmt.Fprintln(o.warn, "sfy: warning: could not start the main agent in this terminal, so it starts through the set: "+err.Error())
 		return false, os.Remove(path)
 	}
