@@ -75,6 +75,9 @@ func brewManaged(binary string) bool {
 	return false
 }
 
+// errChecksumMismatch marks an archive whose SHA-256 differs from checksums.txt.
+var errChecksumMismatch = errors.New("checksum mismatch")
+
 // notWritableError reports a target folder that the user cannot write.
 // The verified binary stays in staged, so the operator can install it with the printed command.
 type notWritableError struct {
@@ -83,8 +86,13 @@ type notWritableError struct {
 }
 
 func (e *notWritableError) Error() string {
-	return fmt.Sprintf("cannot write %s: %v. sfy keeps running on the old binary. The new binary is at %s. Install it with:\n  sudo install -m 0755 %s %s",
-		filepath.Dir(e.target), e.err, e.staged, e.staged, e.target)
+	return fmt.Sprintf("cannot write %s: %v. sfy keeps running on the old binary. The new binary is at %s. Install it with:\n  %s",
+		filepath.Dir(e.target), e.err, e.staged, e.installCommand())
+}
+
+// installCommand returns the command that the operator runs to install the staged binary.
+func (e *notWritableError) installCommand() string {
+	return "sudo install -m 0755 " + e.staged + " " + e.target
 }
 
 func (e *notWritableError) Unwrap() error { return e.err }
@@ -161,7 +169,7 @@ func (r release) fetch(ctx context.Context, tag, version string) (string, error)
 		return "", err
 	}
 	if sum := sha256.Sum256(archive); hex.EncodeToString(sum[:]) != want {
-		return "", fmt.Errorf("checksum mismatch for %s, sfy keeps the old binary", name)
+		return "", fmt.Errorf("%w for %s, sfy keeps the old binary", errChecksumMismatch, name)
 	}
 	work, err := os.MkdirTemp("", "sfy-update-")
 	if err != nil {

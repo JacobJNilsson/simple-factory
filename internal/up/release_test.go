@@ -127,7 +127,7 @@ func TestReleaseUpdateInstallsTheNewestRelease(t *testing.T) {
 func TestReleaseUpdateKeepsTheOldBinaryOnAChecksumMismatch(t *testing.T) {
 	r, out := releaseFor(t, fakeRelease(t, "new binary", strings.Repeat("a", 64)), "0.1.0")
 	err := r.update(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+	if !errors.Is(err, errChecksumMismatch) {
 		t.Fatalf("err = %v", err)
 	}
 	if got := content(t, r.target); got != "old" {
@@ -166,8 +166,8 @@ func TestReleaseUpdateNamesTheOperatorCommandWhenTheFolderIsNotWritable(t *testi
 		t.Fatalf("err = %v", err)
 	}
 	want := "sudo install -m 0755 " + nw.staged + " " + r.target
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("error %q lacks %q", err, want)
+	if got := nw.installCommand(); got != want {
+		t.Fatalf("install command = %q, want %q", got, want)
 	}
 	if got := content(t, nw.staged); got != "new binary" {
 		t.Fatalf("staged binary = %q", got)
@@ -235,14 +235,16 @@ func TestUpdateAndRestartPicksTheInstallMethod(t *testing.T) {
 	}
 }
 
+var errOffline = errors.New("offline")
+
 func TestUpdateAndRestartKeepsTheProcessWhenTheReleaseUpdateFails(t *testing.T) {
 	u := updater{
 		brewInstalled: func() bool { return false },
-		release:       func(context.Context, io.Writer) (string, error) { return "", errors.New("offline") },
+		release:       func(context.Context, io.Writer) (string, error) { return "", errOffline },
 		rerun:         func(string, []string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil },
 	}
 	var out, errOut strings.Builder
-	if err := u.updateAndRestart(nil, &out, &errOut); err == nil || err.Error() != "offline" {
+	if err := u.updateAndRestart(nil, &out, &errOut); !errors.Is(err, errOffline) {
 		t.Fatalf("err = %v", err)
 	}
 }
