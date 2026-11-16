@@ -7,6 +7,8 @@ type Caller struct {
 	Agent string
 	// Task is the task id for workers and reviewers.
 	Task string
+	// Token is the secret of the session that runs the command. The operator has none.
+	Token string
 }
 
 // Request is one command from the CLI.

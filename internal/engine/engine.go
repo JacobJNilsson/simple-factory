@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -97,6 +98,7 @@ type Engine struct {
 
 	log     io.Writer
 	reg     Registration
+	auth    func(token string) (string, bool)
 	mu      sync.Mutex
 	counter int
 	// agents holds what sfy knows of each session, in memory only.
@@ -170,6 +172,35 @@ func (e *Engine) SetRegistration(r Registration) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.reg = r
+}
+
+// SetAuth makes the engine take the caller's identity from the session token in each request.
+// auth returns the session name that owns a token. Without it, the engine trusts the name in the request.
+func (e *Engine) SetAuth(auth func(token string) (string, bool)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.auth = auth
+}
+
+// authenticate returns the request with the caller's name taken from its token.
+// A named caller needs the token of that session. A request with neither name nor token comes from the operator.
+func (e *Engine) authenticate(req protocol.Request) (protocol.Request, error) {
+	if e.auth == nil {
+		return req, nil
+	}
+	claimed := req.Caller.Agent
+	if req.Caller.Token == "" {
+		if claimed != "" {
+			return req, errors.New("missing session token. Run sfy from the session that sfy started")
+		}
+		return req, nil
+	}
+	name, ok := e.auth(req.Caller.Token)
+	if !ok || (claimed != "" && claimed != name) {
+		return req, errors.New("bad session token")
+	}
+	req.Caller.Agent = name
+	return req, nil
 }
 
 // registeredMain reports whether the main agent is a session that registered itself.
@@ -269,6 +300,10 @@ func (e *Engine) Handle(req protocol.Request) protocol.Answer {
 	cmd, ok := commands[req.Command]
 	if !ok {
 		return protocol.Answer{Error: fmt.Sprintf("unknown command %q", req.Command)}
+	}
+	req, err := e.authenticate(req)
+	if err != nil {
+		return protocol.Answer{Error: err.Error()}
 	}
 	k, known := kindOf(req.Caller.Agent)
 	if !known {

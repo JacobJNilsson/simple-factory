@@ -613,7 +613,9 @@ func TestWorkerAndReviewerSandboxFlagsFailClosed(t *testing.T) {
 
 func TestWorkerAndReviewerSandboxPathsComeFromConfig(t *testing.T) {
 	for name, s := range sandboxed(t) {
-		if !slices.Equal(s.Sandbox.Filesystem.DenyRead, []string{"~/.ssh", "~/.aws"}) {
+		// The first entry hides the session folders, which hold every session's token.
+		deny := s.Sandbox.Filesystem.DenyRead
+		if len(deny) == 0 || filepath.Base(deny[0]) != "sessions" || !slices.Equal(deny[1:], []string{"~/.ssh", "~/.aws"}) {
 			t.Errorf("%s denyRead = %v", name, s.Sandbox.Filesystem.DenyRead)
 		}
 		if !slices.Equal(s.Sandbox.Filesystem.AllowWrite, []string{"~/Library/Caches", "~/go/pkg/mod"}) {
@@ -710,14 +712,14 @@ func bashRules(allow []string) []string {
 // TestWorkerAndReviewerBashRulesAreExact pins the whole Bash allow set. A broad git rule, a rule from config allow,
 // or a second push form would fail it.
 func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
-	sfy := []string{"Bash(/opt/sfy/sfy *)", "Bash(sfy *)"}
-	workerWant := append(slices.Clone(sfy), "Bash(git push -u origin sfy/t1)", "Bash(git push --force-with-lease origin sfy/t1)")
+	workerWant := []string{"Bash(sfy report *)", "Bash(sfy inbox)", "Bash(git push -u origin sfy/t1)", "Bash(git push --force-with-lease origin sfy/t1)"}
+	reviewerWant := []string{"Bash(sfy verdict *)", "Bash(sfy report blocked *)", "Bash(sfy inbox)"}
 	cases := map[string]struct {
 		spec engine.SessionSpec
 		want []string
 	}{
 		"worker":   {worker(), workerWant},
-		"reviewer": {reviewerSpec(), sfy},
+		"reviewer": {reviewerSpec(), reviewerWant},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -739,9 +741,45 @@ func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
 
 func TestWorkerAndReviewerSandboxExcludesGitPushAndSfy(t *testing.T) {
 	for name, s := range sandboxed(t) {
-		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"git push *", "sfy *"}) {
-			t.Errorf("%s excludedCommands = %v", name, got)
+		want := []string{"git push *", "sfy report *", "sfy inbox"}
+		if name == "review-t1-1" {
+			want = []string{"git push *", "sfy verdict *", "sfy report blocked *", "sfy inbox"}
 		}
+		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, want) {
+			t.Errorf("%s excludedCommands = %v, want %v", name, got, want)
+		}
+		if slices.Contains(s.Sandbox.ExcludedCommands, "sfy *") || slices.Contains(s.Permissions.Allow, "Bash(sfy *)") {
+			t.Errorf("%s has the wide sfy rule", name)
+		}
+	}
+}
+
+func TestEachSessionGetsItsOwnTokenFile(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+	command(t, p, reviewerSpec())
+
+	workerToken := claude.ReadToken(home, "worker-t1")
+	reviewToken := claude.ReadToken(home, "review-t1-1")
+	info, err := os.Stat(claude.TokenPath(home, "worker-t1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("token file mode = %v", info.Mode().Perm())
+	}
+	if len(workerToken) < 32 || workerToken == reviewToken {
+		t.Errorf("tokens %q and %q are not distinct secrets", workerToken, reviewToken)
+	}
+	if got, ok := claude.AgentForToken(home, workerToken); !ok || got != "worker-t1" {
+		t.Errorf("AgentForToken = %q, %v", got, ok)
+	}
+	if got, ok := claude.AgentForToken(home, "guess"); ok {
+		t.Errorf("a wrong token named %q", got)
+	}
+	if got, ok := claude.AgentForToken(home, ""); ok {
+		t.Errorf("an empty token named %q", got)
 	}
 }
 
@@ -761,7 +799,7 @@ func TestSessionRulesAddAllowRulesAndExcludedCommandsForOneKind(t *testing.T) {
 	if !slices.Contains(ws.Permissions.Allow, "Bash(tool open *)") {
 		t.Errorf("worker allow lacks the extra rule: %v", ws.Permissions.Allow)
 	}
-	if got := ws.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"git push *", "sfy *", "tool *"}) {
+	if got := ws.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"git push *", "sfy report *", "sfy inbox", "tool *"}) {
 		t.Errorf("worker excludedCommands = %v", got)
 	}
 	if slices.Contains(rs.Permissions.Allow, "Bash(tool open *)") || slices.Contains(rs.Sandbox.ExcludedCommands, "tool *") {
@@ -832,8 +870,8 @@ func TestSessionSettingsReachOnlyTheirKind(t *testing.T) {
 }
 
 func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
+	home := t.TempDir()
 	read := func(cfg config.Config) []byte {
-		home := t.TempDir()
 		command(t, claude.New(cfg, home, bin), worker())
 		b, err := os.ReadFile(settingsPath(home, worker().Name))
 		if err != nil {

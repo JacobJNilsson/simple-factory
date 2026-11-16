@@ -131,6 +131,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng.SetLog(log)
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
 	eng.SetRegistration(registration.Folder{Home: p.home})
+	eng.SetAuth(func(token string) (string, bool) { return claude.AgentForToken(p.home, token) })
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
 }
 
