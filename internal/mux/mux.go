@@ -181,6 +181,30 @@ func run(timeout time.Duration, template, which, name, dir, command, text string
 	return code, &commandError{which: which, stderr: strings.TrimSpace(stderr.String()), err: err}
 }
 
+// Prefixed returns a Mux that puts prefix in front of every session name it passes on.
+// An empty prefix returns m itself.
+func Prefixed(m Mux, prefix string) Mux {
+	if prefix == "" {
+		return m
+	}
+	return prefixed{m: m, prefix: prefix}
+}
+
+type prefixed struct {
+	m      Mux
+	prefix string
+}
+
+func (p prefixed) Start(name, dir string, command []string) error {
+	return p.m.Start(p.prefix+name, dir, command)
+}
+func (p prefixed) Send(name, text string) error    { return p.m.Send(p.prefix+name, text) }
+func (p prefixed) Alive(name string) (bool, error) { return p.m.Alive(p.prefix + name) }
+func (p prefixed) Stop(name string) error          { return p.m.Stop(p.prefix + name) }
+func (p prefixed) Notify(name, text string) error  { return p.m.Notify(p.prefix+name, text) }
+func (p prefixed) Show(name string) error          { return p.m.Show(p.prefix + name) }
+func (p prefixed) ShowMain(name string) error      { return p.m.ShowMain(p.prefix + name) }
+
 // shellQuote wraps s in single quotes and escapes each single quote inside it.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
