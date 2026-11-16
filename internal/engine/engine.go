@@ -24,6 +24,10 @@ type SessionSpec struct {
 	Protected []string
 	// HasRepo reports that the task names a repo, so a worker gets the repo part of its prompt.
 	HasRepo bool
+	// ResumePrompt is the first message when the provider resumes the main agent's last conversation.
+	ResumePrompt string
+	// Fresh makes the provider start a new conversation, even when it recorded one.
+	Fresh bool
 }
 
 // Launcher controls agent sessions in terminal panes.

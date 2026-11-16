@@ -12,22 +12,36 @@ import (
 )
 
 type fakeMux struct {
-	name, dir string
-	command   []string
-	sent      string
-	stopped   string
-	notified  string
-	shown     []string
-	shownMain []string
-	showErr   error
+	// starts lists each started session name. endAfterStart names sessions that end at once, and Stop clears them.
+	starts        []string
+	endAfterStart map[string]bool
+	name, dir     string
+	command       []string
+	sent          string
+	stopped       string
+	notified      string
+	shown         []string
+	shownMain     []string
+	showErr       error
 }
 
 func (f *fakeMux) Start(name, dir string, command []string) error {
 	f.name, f.dir, f.command = name, dir, command
+	f.starts = append(f.starts, name)
 	return nil
 }
 func (f *fakeMux) Send(name, text string) error { f.sent = name + ":" + text; return nil }
 func (f *fakeMux) Alive(name string) (bool, error) {
+	if f.endAfterStart != nil {
+		// The first start of the name ends at once. A second start runs.
+		started := 0
+		for _, s := range f.starts {
+			if s == name {
+				started++
+			}
+		}
+		return started > 0 && (!f.endAfterStart[name] || started > 1), nil
+	}
 	return name == "up", nil
 }
 func (f *fakeMux) Stop(name string) error         { f.stopped = name; return nil }
@@ -41,13 +55,73 @@ func (f *fakeMux) ShowMain(name string) error {
 	return f.showErr
 }
 
-type fakeProvider struct{ spec engine.SessionSpec }
+type fakeProvider struct {
+	spec  engine.SessionSpec
+	specs []engine.SessionSpec
+	// resumable is what Resumes reports for a spec that is not fresh.
+	resumable bool
+}
 
 func (p *fakeProvider) TrustWarning(string) string { return "" }
 
+func (p *fakeProvider) Resumes(spec engine.SessionSpec) bool {
+	return p.resumable && spec.Kind == "main" && !spec.Fresh
+}
+
 func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
 	p.spec = spec
+	p.specs = append(p.specs, spec)
 	return []string{"agent", "--flag"}, nil
+}
+
+func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {
+	resumeGrace = 0
+	m, p := &fakeMux{}, &fakeProvider{}
+	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "main", Kind: "main"})
+	if err != nil || resumed {
+		t.Fatalf("resumed %v, err %v", resumed, err)
+	}
+	if len(m.starts) != 1 || p.spec.Fresh {
+		t.Errorf("starts %v, spec %+v", m.starts, p.spec)
+	}
+}
+
+func TestStartMainResumesWhenTheSessionStaysAlive(t *testing.T) {
+	resumeGrace = 0
+	m, p := &fakeMux{endAfterStart: map[string]bool{}}, &fakeProvider{resumable: true}
+	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "main", Kind: "main"})
+	if err != nil || !resumed {
+		t.Fatalf("resumed %v, err %v", resumed, err)
+	}
+	if len(m.starts) != 1 || len(m.shownMain) != 1 {
+		t.Errorf("starts %v, shown %v", m.starts, m.shownMain)
+	}
+}
+
+func TestStartMainStartsFreshWhenTheResumedSessionEndsAtOnce(t *testing.T) {
+	resumeGrace = 0
+	m, p := &fakeMux{endAfterStart: map[string]bool{"main": true}}, &fakeProvider{resumable: true}
+	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "main", Kind: "main"})
+	if err != nil || resumed {
+		t.Fatalf("resumed %v, err %v", resumed, err)
+	}
+	if len(m.starts) != 2 {
+		t.Fatalf("starts %v, want a resume and a fresh start", m.starts)
+	}
+	if len(p.specs) != 2 || p.specs[0].Fresh || !p.specs[1].Fresh {
+		t.Errorf("specs %+v", p.specs)
+	}
+}
+
+func TestStartNeverResumesAWorker(t *testing.T) {
+	resumeGrace = 0
+	m, p := &fakeMux{}, &fakeProvider{resumable: true}
+	if err := New(m, p, nil).Start(engine.SessionSpec{Name: "worker-t1", Kind: "worker"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.starts) != 1 {
+		t.Errorf("starts %v", m.starts)
+	}
 }
 
 func TestStartPassesArgvNameAndDir(t *testing.T) {

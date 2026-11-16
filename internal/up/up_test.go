@@ -77,6 +77,8 @@ type fakeLauncher struct {
 	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
 	warning    string
 	trustAsked []string
+	// resumes is what StartMain reports.
+	resumes bool
 }
 
 func (l *fakeLauncher) TrustWarning(dir string) string {
@@ -85,12 +87,18 @@ func (l *fakeLauncher) TrustWarning(dir string) string {
 }
 
 func (l *fakeLauncher) Start(s engine.SessionSpec) error {
+	_, err := l.StartMain(s)
+	return err
+}
+
+// StartMain records the spec and reports l.resumes as the outcome.
+func (l *fakeLauncher) StartMain(s engine.SessionSpec) (bool, error) {
 	if l.err != nil {
-		return l.err
+		return false, l.err
 	}
 	l.specs = append(l.specs, s)
 	l.alive[s.Name] = true
-	return nil
+	return l.resumes, nil
 }
 
 type rig struct {
@@ -141,6 +149,34 @@ func TestUpStartsServeAndMain(t *testing.T) {
 	}
 	if !strings.Contains(r.out.String(), "Started") {
 		t.Errorf("output: %q", r.out.String())
+	}
+}
+
+func TestUpReportsANewConversationAndGivesTheResumeNote(t *testing.T) {
+	r := newRig(t)
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Started the sfy process and the main agent (new conversation).\n"; r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
+	}
+	note := r.l.specs[0].ResumePrompt
+	if !strings.Contains(note, "sfy started again") || !strings.Contains(note, "notes.md") ||
+		!strings.Contains(note, "status.md") || !strings.Contains(note, r.o.home) {
+		t.Errorf("resume prompt %q", note)
+	}
+}
+
+func TestUpReportsAResumedConversation(t *testing.T) {
+	r := newRig(t)
+	r.m.alive["sfy"] = true
+	r.m.answering = true
+	r.l.resumes = true
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Started the main agent (resumed conversation).\n"; r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }
 

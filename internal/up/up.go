@@ -41,6 +41,11 @@ func mainPrompt(home string) string {
 	return "Your state folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
 }
 
+// resumePrompt is the first message of a resumed main agent. Its conversation already holds the full prompt.
+func resumePrompt(home string) string {
+	return "sfy started again. Read notes.md and status.md in " + home + " with the Read tool."
+}
+
 // mainPromptPath is the file that holds the prompt of the running main agent.
 func mainPromptPath(home string) string { return filepath.Join(home, "main-prompt.md") }
 
@@ -135,14 +140,20 @@ func (o options) ensure() (started []string, mainAlive bool, err error) {
 		}
 		spec := engine.SessionSpec{
 			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
+			ResumePrompt: resumePrompt(o.home),
 		}
-		if err := o.launcher.Start(spec); err != nil {
+		resumed, err := o.launcher.StartMain(spec)
+		if err != nil {
 			if serveStarted {
 				return nil, false, &mainFailedError{err: err}
 			}
 			return nil, false, err
 		}
-		started = append(started, "the main agent")
+		if resumed {
+			started = append(started, "the main agent (resumed conversation)")
+		} else {
+			started = append(started, "the main agent (new conversation)")
+		}
 	}
 	return started, alive, nil
 }

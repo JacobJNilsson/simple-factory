@@ -156,7 +156,7 @@ func TestRestartWithNothingRunningActsLikeUp(t *testing.T) {
 	if len(r.m.sends) != 0 {
 		t.Errorf("sends = %q, want none for a new main agent", r.m.sends)
 	}
-	if r.out.String() != "Started the sfy process and the main agent.\n" {
+	if r.out.String() != "Started the sfy process and the main agent (new conversation).\n" {
 		t.Errorf("output %q", r.out.String())
 	}
 }
