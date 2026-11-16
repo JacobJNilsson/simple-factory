@@ -11,8 +11,12 @@ sfy runs coding agents as interactive sessions in terminal panes. You talk to a 
 ## Install
 
 - macOS: `brew install jacobjnilsson/tap/sfy`
-- Linux: download the amd64 or arm64 tarball from GitHub Releases.
+- Linux: download the amd64 or arm64 tarball from GitHub Releases. Put `sfy` in a folder that you can write, such as `~/.local/bin`, so that `sfy restart --update` can replace it without sudo.
 - From source: `go install ./cmd/sfy`
+
+## Update
+
+Run `sfy restart --update`. A brew install upgrades through brew. Any other install downloads the newest release from GitHub, checks its SHA-256 sum and replaces the binary. If the binary's folder is not writable, sfy prints a `sudo install` command for you to run and keeps the old process.
 
 ## Quick start
 

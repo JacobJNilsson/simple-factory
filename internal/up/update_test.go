@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+func isBrew() bool { return true }
+
 // unknownTemplateEnv returns an environment whose config holds a template key that this code does not know.
 func unknownTemplateEnv(t *testing.T) func(string) string {
 	t.Helper()
@@ -28,7 +30,7 @@ func unknownTemplateEnv(t *testing.T) func(string) string {
 func TestRestartUpdateUpgradesBeforeItReadsTheConfig(t *testing.T) {
 	f := &fakeBrew{versions: [2]string{"0.1.3", "0.1.4"}}
 	reruns := 0
-	u := updater{brew: f.run, rerun: func([]string, io.Writer, io.Writer) error { reruns++; return nil }}
+	u := updater{brewInstalled: isBrew, brew: f.run, rerun: func(string, []string, io.Writer, io.Writer) error { reruns++; return nil }}
 	var out, errOut strings.Builder
 	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, true); err != nil {
 		t.Fatal(err)
@@ -43,7 +45,7 @@ func TestRestartUpdateUpgradesBeforeItReadsTheConfig(t *testing.T) {
 
 func TestRestartUpdateReturnsTheNewBinarysError(t *testing.T) {
 	f := &fakeBrew{versions: [2]string{"0.1.3", "0.1.4"}}
-	u := updater{brew: f.run, rerun: func([]string, io.Writer, io.Writer) error { return errors.New("bad config") }}
+	u := updater{brewInstalled: isBrew, brew: f.run, rerun: func(string, []string, io.Writer, io.Writer) error { return errors.New("bad config") }}
 	var out, errOut strings.Builder
 	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, true); err == nil || err.Error() != "bad config" {
 		t.Fatalf("err = %v", err)
@@ -52,8 +54,9 @@ func TestRestartUpdateReturnsTheNewBinarysError(t *testing.T) {
 
 func TestRestartWithoutUpdateSkipsBrewAndValidatesTheConfig(t *testing.T) {
 	u := updater{
-		brew:  func([]string, ...string) ([]byte, error) { t.Fatal("brew ran"); return nil, nil },
-		rerun: func([]string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil },
+		brewInstalled: isBrew,
+		brew:          func([]string, ...string) ([]byte, error) { t.Fatal("brew ran"); return nil, nil },
+		rerun:         func(string, []string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil },
 	}
 	var out, errOut strings.Builder
 	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, false); err == nil {
@@ -153,7 +156,7 @@ func TestUpgradeReportsBrewsError(t *testing.T) {
 
 func TestRestartUpdateSkipsTheRestartWhenBrewFails(t *testing.T) {
 	f := &fakeBrew{versions: [2]string{"0.1.0", "0.1.1"}, failOn: "upgrade sfy", output: "boom"}
-	u := updater{brew: f.run, rerun: func([]string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil }}
+	u := updater{brewInstalled: isBrew, brew: f.run, rerun: func(string, []string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil }}
 	var out, errOut strings.Builder
 	var be *brewError
 	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, true); !errors.As(err, &be) || be.output != "boom" {

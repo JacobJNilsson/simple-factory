@@ -94,7 +94,7 @@ func (a app) run(args []string) int {
 		if len(args) > 1 && !update {
 			return a.report(fmt.Errorf("usage: sfy restart [--update]"))
 		}
-		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, update))
+		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, version, update))
 	}
 	return cli.Run(args, a.getenv, a.stdin, a.stdout, a.stderr)
 }
