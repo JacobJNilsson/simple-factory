@@ -3,7 +3,9 @@ package up
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 )
@@ -19,6 +21,17 @@ func runBrew(environ []string, args ...string) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
+// updater holds the two steps of sfy restart --update, so that tests replace them.
+type updater struct {
+	// brew runs brew with the given arguments and returns what brew printed.
+	brew func(environ []string, args ...string) ([]byte, error)
+	// rerun runs sfy restart through the upgraded binary.
+	rerun func(environ []string, stdout, stderr io.Writer) error
+}
+
+// systemUpdater runs the real brew and the real upgraded binary.
+func systemUpdater() updater { return updater{brew: runBrew, rerun: runNewBinary} }
+
 // brewError reports a failed brew command and carries what brew printed.
 type brewError struct {
 	command string
@@ -32,14 +45,36 @@ func (e *brewError) Error() string {
 
 func (e *brewError) Unwrap() error { return e.err }
 
-// restartCommand restarts sfy, after an upgrade when update is set. A failed upgrade stops before anything restarts.
-func restartCommand(o options, update bool) error {
-	if update {
-		if err := upgrade(o); err != nil {
+// runNewBinary runs sfy restart through the sfy binary that PATH names, which is the upgraded one.
+// The new binary reads and validates the config. The error is the text that it printed.
+func runNewBinary(environ []string, stdout, stderr io.Writer) error {
+	path, err := exec.LookPath("sfy")
+	if err != nil {
+		return err
+	}
+	var errBuf bytes.Buffer
+	cmd := exec.CommandContext(context.Background(), path, "restart")
+	cmd.Env = environ
+	cmd.Stdout = stdout
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		text := strings.TrimPrefix(strings.TrimSpace(errBuf.String()), "sfy: ")
+		if text == "" {
 			return err
 		}
+		return errors.New(text)
 	}
-	return restart(o)
+	_, _ = io.Copy(stderr, &errBuf)
+	return nil
+}
+
+// updateAndRestart upgrades sfy before it reads the config, because a config written for the new version can fail the old one.
+// A failed upgrade stops before anything restarts. After the upgrade, the new binary restarts sfy and validates the config.
+func (u updater) updateAndRestart(environ []string, stdout, stderr io.Writer) error {
+	if err := upgrade(options{environ: environ, brew: u.brew, out: stdout}); err != nil {
+		return err
+	}
+	return u.rerun(environ, stdout, stderr)
 }
 
 // brewRun runs one brew command and wraps a failure in a brewError that carries brew's output.

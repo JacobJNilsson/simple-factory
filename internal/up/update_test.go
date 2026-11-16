@@ -2,9 +2,64 @@ package up
 
 import (
 	"errors"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// unknownTemplateEnv returns an environment whose config holds a template key that this code does not know.
+func unknownTemplateEnv(t *testing.T) func(string) string {
+	t.Helper()
+	home := t.TempDir()
+	cfg := "multiplexer = \"herdr\"\n[multiplexers.herdr]\nfuture_template = \"x\"\n"
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return func(key string) string {
+		if key == "SFY_HOME" {
+			return home
+		}
+		return ""
+	}
+}
+
+func TestRestartUpdateUpgradesBeforeItReadsTheConfig(t *testing.T) {
+	f := &fakeBrew{versions: [2]string{"0.1.3", "0.1.4"}}
+	reruns := 0
+	u := updater{brew: f.run, rerun: func([]string, io.Writer, io.Writer) error { reruns++; return nil }}
+	var out, errOut strings.Builder
+	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, true); err != nil {
+		t.Fatal(err)
+	}
+	if !f.upgraded() {
+		t.Errorf("brew calls %v, want the upgrade to run", f.calls)
+	}
+	if reruns != 1 {
+		t.Errorf("the new binary ran %d times, want 1", reruns)
+	}
+}
+
+func TestRestartUpdateReturnsTheNewBinarysError(t *testing.T) {
+	f := &fakeBrew{versions: [2]string{"0.1.3", "0.1.4"}}
+	u := updater{brew: f.run, rerun: func([]string, io.Writer, io.Writer) error { return errors.New("bad config") }}
+	var out, errOut strings.Builder
+	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, true); err == nil || err.Error() != "bad config" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRestartWithoutUpdateSkipsBrewAndValidatesTheConfig(t *testing.T) {
+	u := updater{
+		brew:  func([]string, ...string) ([]byte, error) { t.Fatal("brew ran"); return nil, nil },
+		rerun: func([]string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil },
+	}
+	var out, errOut strings.Builder
+	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, false); err == nil {
+		t.Fatal("want a config error")
+	}
+}
 
 // fakeBrew records each brew command. Its list command answers with the first version before the upgrade ran and the second after.
 type fakeBrew struct {
@@ -96,48 +151,13 @@ func TestUpgradeReportsBrewsError(t *testing.T) {
 	}
 }
 
-func TestRestartUpdateUpgradesThenRestarts(t *testing.T) {
-	r := runningRig(t)
-	f := &fakeBrew{versions: [2]string{"0.1.0", "0.1.1"}}
-	r.o.brew = f.run
-	if err := restartCommand(r.o, true); err != nil {
-		t.Fatal(err)
-	}
-	if !f.upgraded() || len(r.m.starts) != 1 {
-		t.Fatalf("brew calls %v, serve starts %v", f.calls, r.m.starts)
-	}
-}
-
-func TestRestartUpdateRestartsWhenAlreadyNewest(t *testing.T) {
-	r := runningRig(t)
-	f := &fakeBrew{versions: [2]string{"0.1.1", "0.1.1"}}
-	r.o.brew = f.run
-	if err := restartCommand(r.o, true); err != nil {
-		t.Fatal(err)
-	}
-	if len(r.m.starts) != 1 {
-		t.Fatalf("serve starts %v", r.m.starts)
-	}
-}
-
-func TestRestartUpdateKeepsTheOldProcessWhenBrewFails(t *testing.T) {
-	r := runningRig(t)
+func TestRestartUpdateSkipsTheRestartWhenBrewFails(t *testing.T) {
 	f := &fakeBrew{versions: [2]string{"0.1.0", "0.1.1"}, failOn: "upgrade sfy", output: "boom"}
-	r.o.brew = f.run
+	u := updater{brew: f.run, rerun: func([]string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil }}
+	var out, errOut strings.Builder
 	var be *brewError
-	if err := restartCommand(r.o, true); !errors.As(err, &be) || be.output != "boom" {
+	if err := restartWith(u, nil, unknownTemplateEnv(t), &out, &errOut, true); !errors.As(err, &be) || be.output != "boom" {
 		t.Fatalf("err = %v", err)
-	}
-	if len(r.m.starts) != 0 || !r.m.alive["sfy"] {
-		t.Fatalf("sfy was restarted: starts %v, alive %v", r.m.starts, r.m.alive)
-	}
-}
-
-func TestRestartWithoutUpdateSkipsBrew(t *testing.T) {
-	r := runningRig(t)
-	r.o.brew = func([]string, ...string) ([]byte, error) { t.Fatal("brew ran"); return nil, nil }
-	if err := restartCommand(r.o, false); err != nil {
-		t.Fatal(err)
 	}
 }
 

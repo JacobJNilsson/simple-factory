@@ -144,16 +144,24 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 }
 
 // Restart runs sfy restart for the sfy home that env names. The operator and the main agent may run it.
-// With update set, it updates the tap and runs brew upgrade sfy first, and restarts only when that succeeds.
+// With update set, it updates the tap and runs brew upgrade sfy before it reads the config, and restarts only when that succeeds.
+// The upgraded binary then reads the config, because a config written for the new version can fail the old one.
 func Restart(environ []string, env func(string) string, stdout, stderr io.Writer, update bool) error {
+	return restartWith(systemUpdater(), environ, env, stdout, stderr, update)
+}
+
+func restartWith(u updater, environ []string, env func(string) string, stdout, stderr io.Writer, update bool) error {
 	if !mayRestart(env("SFY_AGENT")) {
 		return ErrNotAllowed
+	}
+	if update {
+		return u.updateAndRestart(environ, stdout, stderr)
 	}
 	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {
 		return err
 	}
-	return restartCommand(o, update)
+	return restart(o)
 }
 
 func newOptions(environ []string, env func(string) string, stdout, stderr io.Writer) (options, error) {
