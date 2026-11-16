@@ -43,7 +43,9 @@ func (l *launcher) Stop(string) error           { return nil }
 func (l *launcher) Notify(string, string) error { return nil }
 func (l *launcher) TrustWarning(string) string  { return "" }
 
-func (l *launcher) Deliver(string, string) (bool, error) { return false, nil }
+func (l *launcher) Deliver(string, string, string) (bool, error) { return false, nil }
+func (l *launcher) Stuck(string) bool                            { return false }
+func (l *launcher) Drain(string) (string, error)                 { return "", nil }
 
 type workspaces struct{}
 

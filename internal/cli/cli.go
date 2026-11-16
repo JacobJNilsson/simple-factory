@@ -15,6 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
 // Exit codes of Run.
@@ -280,16 +281,51 @@ func noteHook(event string, env func(string) string, stdout, stderr io.Writer) i
 		_, _ = fmt.Fprintln(stdout, out)
 		return exitOK
 	}
-	text, err := claude.DrainNote(path)
+	home, agent := config.Home(env), env("SFY_AGENT")
+	entries, err := claude.DrainNote(path)
+	if err == nil {
+		var text string
+		text, err = takeDelivered(store.Files(home), agent, entries)
+		if text != "" {
+			_, _ = fmt.Fprintln(stderr, text)
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
+			}
+			return exitWake
+		}
+	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed
 	}
-	if text == "" {
-		return exitOK
+	return exitOK
+}
+
+// takeDelivered returns the text of the entries that still wait and marks their messages read.
+// An entry for a message that sfy inbox already showed, or that an earlier entry already carried, adds nothing.
+func takeDelivered(st store.Store, agent string, entries []claude.Entry) (string, error) {
+	unread := map[string]bool{}
+	if slices.ContainsFunc(entries, func(e claude.Entry) bool { return e.ID != "" }) {
+		msgs, err := st.Unread(agent)
+		if err != nil {
+			return "", err
+		}
+		for _, m := range msgs {
+			unread[m.ID] = true
+		}
 	}
-	_, _ = fmt.Fprintln(stderr, text)
-	return exitWake
+	var texts, ids []string
+	for _, e := range entries {
+		if e.ID != "" {
+			if !unread[e.ID] {
+				continue
+			}
+			delete(unread, e.ID)
+			ids = append(ids, e.ID)
+		}
+		texts = append(texts, e.Text)
+	}
+	return strings.Join(texts, "\n\n"), st.MarkRead(agent, ids)
 }
 
 // userHookEvents lists the events that the hooks in the user settings report.
