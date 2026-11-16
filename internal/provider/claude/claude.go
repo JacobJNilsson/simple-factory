@@ -37,6 +37,8 @@ type hook struct {
 	Command string `json:"command"`
 	// Timeout is in seconds. A slow sfy process must not stall the agent.
 	Timeout int `json:"timeout"`
+	// AsyncRewake runs the hook in the background. Exit code 2 gives its stderr to the agent and starts a turn, also when the session is idle.
+	AsyncRewake bool `json:"asyncRewake,omitempty"`
 }
 
 type hookGroup struct {
@@ -166,6 +168,9 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"Stop":              {{Hooks: []hook{a.hook("turn-ended")}}},
 			"PermissionRequest": {{Hooks: []hook{a.hook("permission")}}},
 			"Notification":      {{Matcher: "idle_prompt", Hooks: []hook{a.hook("idle")}}},
+			// SessionStart asks Claude Code to watch the note file. FileChanged then wakes the agent with the file's text.
+			"SessionStart": {{Hooks: []hook{a.hook("note-watch")}}},
+			"FileChanged":  {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
 	if spec.Kind != "main" {
@@ -256,6 +261,13 @@ func expandHome(p string) (string, error) {
 // hook builds a command hook. Claude Code runs the command through a shell, so a binary path with spaces is quoted.
 func (a adapter) hook(event string) hook {
 	return hook{Type: "command", Command: shellWord(a.sfyBin) + " hook " + event, Timeout: 10}
+}
+
+// rewakeHook builds a command hook that runs in the background and wakes the agent when it exits with code 2.
+func (a adapter) rewakeHook(event string) hook {
+	h := a.hook(event)
+	h.AsyncRewake = true
+	return h
 }
 
 var safeWord = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
