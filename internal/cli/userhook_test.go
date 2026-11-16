@@ -98,6 +98,30 @@ func TestUserHookIsSilentForAnAgentThatSfyStarted(t *testing.T) {
 	}
 }
 
+func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"session event", []string{"hook", "idle"}, true},
+		{"note", []string{"hook", "note"}, true},
+		{"user permission", []string{"hook", "--user", "permission"}, true},
+		{"user turn-ended", []string{"hook", "--user", "turn-ended"}, true},
+		{"user idle", []string{"hook", "--user", "idle"}, true},
+		{"free event", []string{"hook", "x"}, false},
+		{"user free event", []string{"hook", "--user", "x"}, false},
+		{"user note", []string{"hook", "--user", "note"}, false},
+		{"no event", []string{"hook"}, false},
+		{"too many words", []string{"hook", "idle", "x"}, false},
+	}
+	for _, c := range cases {
+		if got := sessionOwnHook(c.args); got != c.want {
+			t.Errorf("%s: sessionOwnHook = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestUserHookRejectsAnUnknownEvent(t *testing.T) {
 	code, _, errb := userHook(envOf(nil), "bogus", "")
 
