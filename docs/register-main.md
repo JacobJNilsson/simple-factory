@@ -1,6 +1,19 @@
 # Registering a running agent as the main agent
 
-This note investigates one request. The operator wants an agent that already runs in a terminal to start sfy and register itself as the main agent (operator, 2026-11-16). No Go code changed.
+This note investigates one request. The operator wants an agent that already runs in a terminal to start sfy and register itself as the main agent (operator, 2026-11-16). The investigation changed no Go code.
+
+## Decision
+
+The operator declined registration of a running agent (designs 2 and 3 below, and any form of `sfy up --register`). The operator chose design 1, with one change: it is the default and has no `--here` flag (operator, 2026-11-16).
+
+- `sfy` and `sfy up` start the main agent in the terminal where the operator runs them, when the main agent does not run and the template set has a `whoami` template that prints an address.
+- sfy writes the address to `sessions/main/address` and replaces its own process with the main agent's command. The flags, hooks, prompt, identity and resume stay the same as for a started session.
+- Without `whoami`, or when it fails or prints nothing, sfy starts the main agent through `start` and `show_main` as before.
+- `mux.Registered` in `internal/mux` sends the calls for the session `main` to the recorded address. It removes the record when `alive` reports the address gone, and after a stop.
+- `sfy down` stops the main agent through `stop` with the recorded address. `sfy restart` keeps the main agent and sends it the note. Neither one replaces its own process.
+- The tmux set, `docs/herdr.md` and `docs/rex.md` have a `whoami` line. The Herdr and Rex lines were not run against a live terminal, as in the checks below.
+
+The text below is the investigation as it stood before the decision.
 
 ## Summary
 

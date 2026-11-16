@@ -30,6 +30,10 @@ exit 1
 stop = '''
 hc kill {name}
 '''
+# hc get without an argument describes the terminal it runs in. The address works as {name} in the other templates.
+whoami = '''
+hc get --json | sed -n 's/.*"address":"\([^"]*\)".*/\1/p'
+'''
 # An empty show keeps workers and reviewers hidden. Their terminals run in the background.
 show = ""
 # A background terminal has no pane. herdr-app needs its address, which hc get prints in the JSON.
@@ -53,6 +57,7 @@ exit 1
 ## Notes on the example
 
 - sfy runs `show_main` for the main agent and `show` for workers and reviewers. With `show = ""`, a worker gets no Show.
+- With `whoami`, `sfy` run in a Herdr terminal turns that terminal into the main agent. sfy records the address in `sessions/main/address` and uses it as `{name}` for the main agent. The `alive`, `send`, `stop` and `show_main` templates above accept the address. `sfy down` runs `hc kill` on it, which ends the terminal.
 - To show every agent, put the `show_main` script in `show` and remove `show_main`.
 - A test loads this example and runs its templates against stub commands, so the file stays valid. See `herdrSet` in `internal/mux/mux_test.go`.
 - A worker that stops at the provider's trust dialog needs the operator. Open that agent's terminal in Herdr and accept the dialog.
