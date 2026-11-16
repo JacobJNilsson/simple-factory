@@ -87,12 +87,22 @@ type options struct {
 	warn io.Writer
 	// brew runs brew with the given arguments and returns what brew printed.
 	brew func(environ []string, args ...string) ([]byte, error)
+	// whoami returns the address of the terminal that sfy runs in. An empty address means that the set has no whoami template.
+	whoami func() (string, error)
+	// exec replaces the sfy process with argv. It returns only when the replacement fails.
+	exec func(argv []string) error
+}
+
+// mainAddressPath is the file that records the address of a main agent that runs in the operator's terminal.
+func mainAddressPath(home string) string {
+	return filepath.Join(home, "sessions", mainSession, "address")
 }
 
 // run starts what is missing: notes.md, the sfy process and the main agent.
-// When the main agent already runs, it shows the main agent again, so the operator gets it where they started sfy.
+// A main agent that is missing runs in this terminal when the set can name it.
+// When the main agent already runs, run shows it again, so the operator gets it where they started sfy.
 func run(o options) error {
-	started, mainAlive, err := o.ensure()
+	started, mainAlive, err := o.ensure(true)
 	if err != nil {
 		return err
 	}
@@ -112,7 +122,9 @@ func run(o options) error {
 }
 
 // ensure starts what is missing and returns what it started. It reports whether the main agent ran before.
-func (o options) ensure() (started []string, mainAlive bool, err error) {
+// With inPlace set, a missing main agent replaces this process when the set names this terminal.
+// Only the operator's own command may do that, so restart passes false.
+func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err error) {
 	if err := os.MkdirAll(o.home, 0o700); err != nil {
 		return nil, false, err
 	}
@@ -142,6 +154,15 @@ func (o options) ensure() (started []string, mainAlive bool, err error) {
 			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
 			ResumePrompt: resumePrompt(o.home),
 		}
+		if inPlace {
+			placed, err := o.startInPlace(spec, started)
+			if err != nil {
+				return nil, false, err
+			}
+			if placed {
+				return append(started, "the main agent (in this terminal)"), false, nil
+			}
+		}
 		resumed, err := o.launcher.StartMain(spec)
 		if err != nil {
 			if serveStarted {
@@ -156,6 +177,46 @@ func (o options) ensure() (started []string, mainAlive bool, err error) {
 		}
 	}
 	return started, alive, nil
+}
+
+// startInPlace turns this terminal into the main agent. It reports false when it did not, so the caller starts the main agent through the set.
+// It does not when the set has no whoami template, when whoami fails or prints nothing, or when the replacement fails.
+// A failed whoami goes to warn. The address is recorded before the replacement, and removed when the replacement fails.
+// A real replacement never returns. A test replacement returns nil, and startInPlace then reports true.
+func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, error) {
+	if o.whoami == nil || o.exec == nil {
+		return false, nil
+	}
+	address, err := o.whoami()
+	if err != nil {
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: whoami failed, so the main agent starts through the set: "+err.Error())
+		return false, nil
+	}
+	if address == "" {
+		return false, nil
+	}
+	argv, _, err := o.launcher.MainCommand(spec)
+	if err != nil {
+		return false, err
+	}
+	path := mainAddressPath(o.home)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(path, []byte(address+"\n"), 0o600); err != nil {
+		return false, err
+	}
+	if len(started) > 0 {
+		if err := reportList(o.out, "Started", started); err != nil {
+			return false, err
+		}
+	}
+	_, _ = fmt.Fprintln(o.out, "Starting the main agent in this terminal.")
+	if err := o.exec(argv); err != nil {
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: could not start the main agent in this terminal, so it starts through the set: "+err.Error())
+		return false, os.Remove(path)
+	}
+	return true, nil
 }
 
 func report(out io.Writer, started []string) error {

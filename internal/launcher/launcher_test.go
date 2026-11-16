@@ -198,6 +198,28 @@ func TestStartShowsTheMainAgentWithShowMain(t *testing.T) {
 	}
 }
 
+func TestMainCommandReturnsTheArgvAndStartsNoSession(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{resumable: true}
+	argv, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "main", Kind: "main"})
+	if err != nil || !resumed {
+		t.Fatalf("resumed %v, err %v", resumed, err)
+	}
+	if !reflect.DeepEqual(argv, []string{"agent", "--flag"}) {
+		t.Errorf("argv %v", argv)
+	}
+	if len(m.starts) != 0 || len(m.shownMain) != 0 {
+		t.Errorf("starts %v, shown %v, want none", m.starts, m.shownMain)
+	}
+}
+
+func TestMainCommandOfAFreshSpecDoesNotResume(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{resumable: true}
+	_, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "main", Kind: "main", Fresh: true})
+	if err != nil || resumed {
+		t.Fatalf("resumed %v, err %v", resumed, err)
+	}
+}
+
 func TestStartShowsWorkersAndReviewersWithShow(t *testing.T) {
 	m := &fakeMux{}
 	l := New(m, &fakeProvider{}, nil)
