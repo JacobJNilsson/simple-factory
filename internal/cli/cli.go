@@ -29,6 +29,7 @@ const usage = `usage:
   sfy                  start sfy (operator only)
   sfy up               same as sfy (operator only)
   sfy register         make the running agent session the main agent (not for started agents)
+  sfy hooks install    add sfy's hooks to the user's Claude Code settings (operator only)
   sfy help
   sfy task new <file|->
   sfy task list [--archived]
