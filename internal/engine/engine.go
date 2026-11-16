@@ -191,7 +191,7 @@ func (e *Engine) authenticate(req protocol.Request) (protocol.Request, error) {
 	claimed := req.Caller.Agent
 	if req.Caller.Token == "" {
 		if claimed != "" {
-			return req, errors.New("missing session token. Run sfy from the session that sfy started")
+			return req, errors.New("missing session token. This session started before sessions had tokens. Restart the session, or run sfy restart, or run sfy from the session that sfy started")
 		}
 		return req, nil
 	}

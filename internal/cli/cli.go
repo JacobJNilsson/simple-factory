@@ -147,6 +147,10 @@ func token(env func(string) string) string {
 	if env("SFY_AGENT") == "" && Agent(env) == "main" {
 		return claude.ReadToken(config.Home(env), "main")
 	}
+	// A session that started before sessions had tokens has no SFY_TOKEN, and sfy serve left it a legacy token.
+	if agent := env("SFY_AGENT"); agent != "" {
+		return claude.ReadLegacyToken(config.Home(env), agent, claude.CurrentSession(env))
+	}
 	return ""
 }
 
