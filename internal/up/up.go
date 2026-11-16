@@ -16,6 +16,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
 // ErrNotAnswering reports that the sfy process did not answer in time after it started.
@@ -95,9 +96,7 @@ type options struct {
 }
 
 // mainAddressPath is the file that records the address of a main agent that runs in the operator's terminal.
-func mainAddressPath(home string) string {
-	return filepath.Join(home, "sessions", mainSession, "address")
-}
+func mainAddressPath(home string) string { return registration.AddressPath(home) }
 
 // run starts what is missing: notes.md, the sfy process and the main agent.
 // A main agent that is missing runs in this terminal when the set can name it.

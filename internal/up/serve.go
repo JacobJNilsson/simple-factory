@@ -16,6 +16,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/workspace"
@@ -70,7 +71,7 @@ func newParts(env func(string) string) (parts, error) {
 	}
 	// Registered sits inside Prefixed, so a recorded address stays as the terminal tool printed it.
 	prefix := config.Prefix(home, env)
-	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home)), prefix)
+	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home), registration.Path(home)), prefix)
 	who, _ := m.(mux.Whoamier)
 	return parts{home: home, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
 }
