@@ -98,7 +98,10 @@ func (l *fakeLauncher) TrustWarning(dir string) string {
 }
 
 // Deliver delivers nothing when delivered is false, and records the text otherwise.
-func (l *fakeLauncher) Deliver(name, text string) (bool, error) {
+func (l *fakeLauncher) Stuck(string) bool            { return false }
+func (l *fakeLauncher) Drain(string) (string, error) { return "", nil }
+
+func (l *fakeLauncher) Deliver(name, text, _ string) (bool, error) {
 	if !l.deliverable {
 		return false, nil
 	}
@@ -108,7 +111,7 @@ func (l *fakeLauncher) Deliver(name, text string) (bool, error) {
 
 // Note delivers the text when it can, and sends it through the mux otherwise.
 func (l *fakeLauncher) Note(name, text string) error {
-	if ok, _ := l.Deliver(name, text); ok {
+	if ok, _ := l.Deliver(name, text, ""); ok {
 		return nil
 	}
 	return l.Send(name, text)

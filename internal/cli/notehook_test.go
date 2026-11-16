@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
 func noteHookRun(env func(string) string, event string) (code int, out, errb string) {
@@ -28,7 +30,7 @@ func noteEnv(t *testing.T, agent string) (func(string) string, string) {
 
 func TestNoteHookPrintsTheNotesToStderrAndExitsWithTwo(t *testing.T) {
 	env, path := noteEnv(t, "worker-t1")
-	if err := claude.AppendNote(path, "From main:\nPlease rebase."); err != nil {
+	if err := claude.AppendNote(path, "", "From main:\nPlease rebase."); err != nil {
 		t.Fatal(err)
 	}
 
@@ -39,6 +41,79 @@ func TestNoteHookPrintsTheNotesToStderrAndExitsWithTwo(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("the note file stayed: %v", err)
+	}
+}
+
+// storeMessage puts an unread message for worker-t1 into the state folder that the hook env names.
+func storeMessage(t *testing.T, env func(string) string, id, body string) store.Store {
+	t.Helper()
+	st := store.Files(env("SFY_HOME"))
+	if err := st.Send(store.Message{ID: id, From: "main", To: "worker-t1", Body: body, Created: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func TestNoteHookMarksADeliveredMessageReadOnlyWhenItDrains(t *testing.T) {
+	env, path := noteEnv(t, "worker-t1")
+	st := storeMessage(t, env, "m1", "Please rebase.")
+	if err := claude.AppendNote(path, "m1", "From main:\nPlease rebase."); err != nil {
+		t.Fatal(err)
+	}
+	if unread, _ := st.Unread("worker-t1"); len(unread) != 1 {
+		t.Fatalf("unread before the drain: %+v", unread)
+	}
+
+	code, _, errb := noteHookRun(env, "note")
+
+	if code != 2 || errb != "From main:\nPlease rebase.\n" {
+		t.Fatalf("code %d, stderr %q", code, errb)
+	}
+	if unread, _ := st.Unread("worker-t1"); len(unread) != 0 {
+		t.Fatalf("unread after the drain: %+v", unread)
+	}
+}
+
+func TestNoteHookSkipsAMessageThatSfyInboxAlreadyShowed(t *testing.T) {
+	env, path := noteEnv(t, "worker-t1")
+	st := storeMessage(t, env, "m1", "Please rebase.")
+	if err := claude.AppendNote(path, "m1", "From main:\nPlease rebase."); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.MarkRead("worker-t1", []string{"m1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errb := noteHookRun(env, "note")
+
+	if code != 0 || out != "" || errb != "" {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errb)
+	}
+}
+
+func TestNoteHookDeliversAResentMessageOnce(t *testing.T) {
+	env, path := noteEnv(t, "worker-t1")
+	storeMessage(t, env, "m1", "Please rebase.")
+	for range 2 {
+		if err := claude.AppendNote(path, "m1", "From main:\nPlease rebase."); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, _, errb := noteHookRun(env, "note")
+
+	if errb != "From main:\nPlease rebase.\n" {
+		t.Fatalf("stderr %q", errb)
+	}
+}
+
+func TestNoteWatchHookRecordsThatTheHooksRan(t *testing.T) {
+	env, path := noteEnv(t, "worker-t1")
+
+	noteHookRun(env, "note-watch")
+
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "hooks-ready")); err != nil {
+		t.Fatal(err)
 	}
 }
 

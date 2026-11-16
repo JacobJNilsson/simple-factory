@@ -3,6 +3,7 @@ package claude
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -188,6 +189,10 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 	}
 	dir := filepath.Join(a.home, "sessions", spec.Name)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("claude: %w", err)
+	}
+	// The new session has to prove its hooks, so the marker of an earlier session goes.
+	if err := os.Remove(filepath.Join(dir, "hooks-ready")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", fmt.Errorf("claude: %w", err)
 	}
 	path := filepath.Join(dir, "settings.json")

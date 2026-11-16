@@ -135,7 +135,9 @@ func (quietLauncher) Stop(string) error              { return nil }
 func (quietLauncher) Notify(string, string) error    { return nil }
 func (quietLauncher) TrustWarning(string) string     { return "" }
 
-func (quietLauncher) Deliver(string, string) (bool, error) { return false, nil }
+func (quietLauncher) Deliver(string, string, string) (bool, error) { return false, nil }
+func (quietLauncher) Stuck(string) bool                            { return false }
+func (quietLauncher) Drain(string) (string, error)                 { return "", nil }
 
 type fixedClock struct{}
 

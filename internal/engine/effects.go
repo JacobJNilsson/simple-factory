@@ -48,11 +48,13 @@ func (e *Engine) message(to, from, body string) error {
 
 const (
 	newMessageNote = "New message. Run: sfy inbox"
+	stuckNote      = "You have undelivered notes. Run: sfy inbox"
 	noReportNote   = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
 )
 
 // noteMessages tells an agent about its unread messages. The agent is busy until its next turn ends.
-// The provider delivers the senders and texts, and sfy marks the messages read. Otherwise sfy types the new-message note.
+// The provider takes the sender and text of each message. The message stays unread until the session takes the text,
+// so a message that never arrives still shows in sfy inbox. When the provider cannot deliver, sfy types the new-message note.
 func (e *Engine) noteMessages(name, why string) error {
 	if !e.reachable(name) {
 		return nil
@@ -63,41 +65,56 @@ func (e *Engine) noteMessages(name, why string) error {
 	if err == nil {
 		s.notedID = newestID(unread)
 	}
-	if err == nil && len(unread) > 0 {
-		delivered, derr := e.deliver(name, strings.TrimRight(formatMessages(unread), "\n"))
-		if derr != nil {
-			e.logf("delivery to %s failed, so sfy types the note: %v", name, derr)
-		}
-		if delivered {
-			e.logf("messages delivered to %s: %s", name, why)
-			return e.st.MarkRead(name, messageIDs(unread))
-		}
+	if err == nil && len(unread) > 0 && e.deliverMessages(name, unread) {
+		e.logf("messages delivered to %s: %s", name, why)
+		return nil
 	}
 	e.logf("note typed to %s: %s", name, why)
 	return e.l.Send(name, newMessageNote)
 }
 
+// deliverMessages hands each message to the provider and reports whether all of them went through.
+func (e *Engine) deliverMessages(name string, msgs []store.Message) bool {
+	for _, m := range msgs {
+		delivered, err := e.deliver(name, strings.TrimRight(formatMessages([]store.Message{m}), "\n"), m.ID)
+		if err != nil {
+			e.logf("delivery to %s failed, so sfy types the note: %v", name, err)
+		}
+		if !delivered {
+			return false
+		}
+	}
+	return true
+}
+
 // note tells an agent a line of text. The provider delivers it, and sfy types it when the provider cannot.
+// A session that cannot take delivered text also hears about the text that waits for it.
 func (e *Engine) note(name, text string) error {
 	if !e.reachable(name) {
 		return nil
 	}
-	delivered, err := e.deliver(name, text)
+	delivered, err := e.deliver(name, text, "")
 	if err != nil {
 		e.logf("delivery to %s failed, so sfy types the note: %v", name, err)
 	}
 	if delivered {
 		return nil
 	}
-	return e.l.Send(name, text)
+	if err := e.l.Send(name, text); err != nil {
+		return err
+	}
+	if e.l.Stuck(name) {
+		return e.l.Send(name, stuckNote)
+	}
+	return nil
 }
 
 // deliver asks the provider to deliver text. A registered main agent has no sfy session folder, so it gets no delivery.
-func (e *Engine) deliver(name, text string) (bool, error) {
+func (e *Engine) deliver(name, text, messageID string) (bool, error) {
 	if name == "main" && e.registeredMain() {
 		return false, nil
 	}
-	return e.l.Deliver(name, text)
+	return e.l.Deliver(name, text, messageID)
 }
 
 // formatMessages renders messages with their senders, as sfy inbox prints them.

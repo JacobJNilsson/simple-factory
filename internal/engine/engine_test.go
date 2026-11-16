@@ -39,9 +39,19 @@ type fakeLauncher struct {
 	canDeliver bool
 	deliverErr error
 	delivered  []string
+	// stuck is what Stuck reports, and drained is what Drain returns once.
+	stuck   bool
+	drained string
 }
 
-func (f *fakeLauncher) Deliver(name, text string) (bool, error) {
+func (f *fakeLauncher) Stuck(string) bool { return f.stuck }
+func (f *fakeLauncher) Drain(string) (string, error) {
+	d := f.drained
+	f.drained = ""
+	return d, nil
+}
+
+func (f *fakeLauncher) Deliver(name, text, _ string) (bool, error) {
 	if f.deliverErr != nil {
 		return false, f.deliverErr
 	}

@@ -71,7 +71,10 @@ func (p *fakeProvider) Preflight(string) error     { return p.preflight }
 func (p *fakeProvider) TrustWarning(string) string { return "" }
 
 // Deliver takes the text when deliverable is set, and fails with deliverErr when that is set.
-func (p *fakeProvider) Deliver(name, text string) (bool, error) {
+func (p *fakeProvider) Stuck(string) bool            { return false }
+func (p *fakeProvider) Drain(string) (string, error) { return "", nil }
+
+func (p *fakeProvider) Deliver(name, text, _ string) (bool, error) {
 	if p.deliverErr != nil {
 		return false, p.deliverErr
 	}
@@ -135,7 +138,7 @@ func TestNoteTypesTheTextWhenDeliveryFails(t *testing.T) {
 func TestDeliverAsksTheProvider(t *testing.T) {
 	p := &fakeProvider{deliverable: true}
 
-	ok, err := New(&fakeMux{}, p, nil).Deliver("main", "hi")
+	ok, err := New(&fakeMux{}, p, nil).Deliver("main", "hi", "")
 
 	if err != nil || !ok || len(p.delivered) != 1 {
 		t.Fatalf("ok %v, err %v, delivered %q", ok, err, p.delivered)
