@@ -1,76 +1,63 @@
 # simple factory
 
-sfy runs coding agents as interactive sessions in terminal panes. A main agent hands out tasks, and a fresh reviewer session checks each result.
+sfy runs coding agents as interactive sessions in terminal panes. You talk to a main agent. It hands tasks to workers, and each worker does its task in its own git worktree. A fresh reviewer checks each result, and the worker opens a pull request when the review passes. You can watch every session in your terminal.
 
-SPEC.md holds the requirements.
+## Requirements
 
-## Install with Homebrew
+- Claude Code, logged in.
+- git.
+- gh, logged in.
+- A terminal tool. The default template set uses tmux. Other tools plug in through the config file.
 
-Install sfy from the tap with `brew install jacobjnilsson/tap/sfy`. Upgrade it with `brew upgrade sfy`. Run `sfy --version` to see the installed version. A build from source prints `dev`.
+## Install
 
-Each pushed tag `v*` triggers a release. GoReleaser builds sfy for macOS and Linux on amd64 and arm64, publishes a GitHub release, and updates the cask in `JacobJNilsson/homebrew-tap`. The workflow needs the repository secret `HOMEBREW_TAP_GITHUB_TOKEN`, a token with write access to the tap.
+- macOS: `brew install jacobjnilsson/tap/sfy`
+- Linux: download the amd64 or arm64 tarball from GitHub Releases.
+- From source: `go install ./cmd/sfy`
 
-## Install a new build
+## Quick start
 
-Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The running sfy process keeps the old code until you restart it. Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
+Run `sfy`, then talk to the main agent. Describe what you want built and the main agent creates tasks.
 
-## Stop sfy
+A task moves through these states:
 
-Run `sfy down` from a terminal outside the agent sessions. It stops the main agent, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. A later `sfy` starts the sfy process and the main agent. It tells the main agent about each task whose worker is gone. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it. It does not stop a registered main agent, because sfy did not start it. It clears the registration and says so.
+1. `new`: the main agent prepares the task.
+2. `queued`: the task waits for a free worker.
+3. `working`: a worker does the task. A failed review sends it back as `feedback`.
+4. `review`: a reviewer checks the result.
+5. `approved`: the reviewer passed the result.
+6. `done`: the main agent completed the task.
 
-## Register a running agent
+sfy keeps its state in `~/.sfy`:
 
-A Claude Code session that already runs can become the main agent. This needs a template set with a `whoami` template, such as the tmux set. Do these steps once and then each time:
+- `tasks/` holds one folder for each task.
+- `notes.md` holds the main agent's notes.
+- `status.md` holds the current state of all tasks.
+- `config.toml` holds your settings.
 
-1. Run `sfy hooks install` once from a terminal outside the agent sessions. It adds sfy's idle, permission request and turn end hooks to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json`. It keeps every other setting, changes nothing when you run it again, and prints what it changed. The hooks run `sfy hook --user <event>`. They act only for the registered session and exit at once for every other session.
-2. In the session, ask the agent to run `sfy register`. It refuses when a main agent runs or when the set has no `whoami` template. Otherwise it starts the sfy process, records the address and the session id in `sessions/main/` in the state folder, and prints the main prompt, with the additions from `prompts/main.d/`. The agent reads the prompt as its role.
+## Everyday commands
 
-From then on the agent's own `sfy` commands run as `main`, and the operator-only commands `sfy`, `sfy up`, `sfy down` and `sfy hooks install` refuse for it. The prompt arrives as a tool result and not as a system prompt, so a long conversation may drop it. If the agent forgets the role, tell it to read `main-prompt.md` in the state folder. `sfy restart` keeps the registered agent and sends it the restart note. When the address is gone, sfy clears the registration, and the next `sfy` starts a main agent as usual. It does not resume the registered conversation.
+| Command | What it does |
+|---|---|
+| `sfy` or `sfy up` | Starts sfy and the main agent. |
+| `sfy down` | Stops all agents and the sfy process. |
+| `sfy restart` | Restarts the sfy process and keeps the agents running. |
+| `sfy status` | Prints `status.md`. |
+| `sfy task list` | Lists the tasks. |
+| `sfy help` | Lists every command. |
 
-## Prompts
+## Configure
 
-A file `<home>/prompts/<kind>.md` replaces the default prompt of a kind of agent. The kinds are `main`, `worker`, `reviewer` and `worker-repo`. To add lines without a copy of the whole prompt, put files that end in `.md` in `<home>/prompts/<kind>.d/`. sfy appends them in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the main agent when an addition to its prompt changed.
+See `docs/configuration.md` for the details of each item.
 
-## Start sfy again
+- Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets.
+- Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind.
+- Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
+- Terminal tools: a template set under `[multiplexers.<name>]` plugs in another tool. See `docs/herdr.md` and `docs/rex.md`.
+- A second state folder: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
+- A running agent: `sfy register` turns a Claude Code session that already runs into the main agent.
 
-Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. If the main agent's session ended, sfy resumes the main agent's last Claude conversation. It records the conversation id in `sessions/main/conversation-id` in the state folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the main agent's session still runs, `sfy` runs the `show_main` template again, so the main agent appears in your terminal. Workers and reviewers always start new conversations.
+## More
 
-## Run a second main agent
-
-Each state folder holds its own tasks, notes, config, sfy process and main agent. To run a second main agent, put a `config.toml` in a new folder and start sfy with that folder:
-
-```
-SFY_HOME=~/.sfy-work sfy up
-```
-
-Use the same `SFY_HOME` for every other sfy command that targets that folder, such as `sfy down`.
-
-The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`.
-
-The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in each worker branch, so that task is `sfy/sfy-work-t1`. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
-
-## Session settings
-
-sfy writes a settings file for each agent session. To add keys to the file of one kind of session, use a `[session_settings.<kind>]` table in `~/.sfy/config.toml`. The kinds are `main`, `worker` and `reviewer`. sfy copies the keys to the top level of that kind's file, and the provider decides what they mean. This example stops notifications from workers and reviewers:
-
-```toml
-[session_settings.worker]
-preferredNotifChannel = "notifications_disabled"
-
-[session_settings.reviewer]
-preferredNotifChannel = "notifications_disabled"
-```
-
-A table that sets `permissions`, `hooks` or `sandbox` is a config error, because sfy writes those keys itself. An unknown kind is also a config error.
-
-## Terminal tools
-
-sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`.
-
-The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`. When sfy starts the main agent in place, it runs `show_main` after it records the address and before it hands the terminal to the main agent, so a template set can arrange the terminal around it, for example to open side panes. A failed `show_main` prints a warning and the main agent still starts.
-
-The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the main agent in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the main agent through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
-
-In that case sfy records the address in `sessions/main/address` in the state folder. It then uses the address as `{name}` for the main agent in the `send`, `notify`, `alive`, `stop`, `show` and `show_main` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the main agent in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session. `sfy restart` keeps the main agent and sends it the note. To make an agent that already runs the main agent, see "Register a running agent".
-
-`docs/herdr.md` holds an example set for Herdr. See SPEC.md for every template.
+- `SPEC.md` holds the full behaviour.
+- `docs/` holds the examples and details, including `docs/releasing.md`.
