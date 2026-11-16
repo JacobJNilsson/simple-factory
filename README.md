@@ -8,6 +8,35 @@ sfy runs coding agents as interactive sessions in terminal panes. You talk to a 
 - git.
 - A terminal tool. The default template set uses tmux. Other tools plug in through the config file.
 
+### Linux sandbox
+
+Workers and reviewers run in the Claude Code sandbox. On Linux the sandbox needs `bubblewrap` and `socat`. macOS needs nothing extra. Install both on Ubuntu or Debian:
+
+```sh
+sudo apt install bubblewrap socat
+```
+
+Ubuntu 24.04 and later also stop bwrap from creating user namespaces. Without a fix, Claude Code fails with `loopback: Failed RTM_NEWADDR: Operation not permitted`. Create `/etc/apparmor.d/bwrap` with this text:
+
+```
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/bwrap>
+}
+```
+
+Then load it:
+
+```sh
+sudo apparmor_parser -r /etc/apparmor.d/bwrap
+```
+
+sfy checks this before it starts a worker or a reviewer. It also checks that it can find `claude`, on PATH or at `~/.local/bin/claude`. When a check fails, sfy starts no session. It escalates the task, tells the main agent and the operator the cause, and names the fix. After the fix, run `sfy task resume <id>`. sfy installs nothing itself, because that needs root.
+
 ## Install
 
 - macOS: `brew install jacobjnilsson/tap/sfy`

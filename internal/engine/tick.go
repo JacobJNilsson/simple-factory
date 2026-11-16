@@ -166,11 +166,16 @@ func workerPrompt(t task.Task) string {
 // startFailed counts a failed start. After maxStartFailures in a row the task moves to escalated and main hears of it.
 func (e *Engine) startFailed(t task.Task, err error) error {
 	e.startFails[t.ID]++
-	if e.startFails[t.ID] < maxStartFailures {
+	var pre *PreflightError
+	// A failed preflight check stays failed until the operator fixes the machine, so retries only lose time.
+	if !errors.As(err, &pre) && e.startFails[t.ID] < maxStartFailures {
 		return err
 	}
 	delete(e.startFails, t.ID)
 	why := fmt.Sprintf("Its worker failed to start %d times. Last error: %v", maxStartFailures, err)
+	if pre != nil {
+		why = fmt.Sprintf("Its worker cannot start. Fix this, then run sfy task resume %s: %v", t.ID, pre.Msg)
+	}
 	return errors.Join(err, e.escalateTask(t, why, true))
 }
 

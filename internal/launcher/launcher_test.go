@@ -64,8 +64,10 @@ type fakeProvider struct {
 	deliverable bool
 	deliverErr  error
 	delivered   []string
+	preflight   error
 }
 
+func (p *fakeProvider) Preflight(string) error     { return p.preflight }
 func (p *fakeProvider) TrustWarning(string) string { return "" }
 
 // Deliver takes the text when deliverable is set, and fails with deliverErr when that is set.
@@ -87,6 +89,17 @@ func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
 	p.spec = spec
 	p.specs = append(p.specs, spec)
 	return []string{"agent", "--flag"}, nil
+}
+
+func TestAFailedPreflightStartsNoSession(t *testing.T) {
+	want := &engine.PreflightError{Msg: "no sandbox"}
+	m, p := &fakeMux{}, &fakeProvider{preflight: want}
+
+	err := New(m, p, nil).Start(engine.SessionSpec{Name: "worker-t1", Kind: "worker"})
+
+	if !errors.Is(err, want) || len(m.starts) != 0 || len(p.specs) != 0 {
+		t.Fatalf("err %v, starts %v, commands %d", err, m.starts, len(p.specs))
+	}
 }
 
 func TestNoteDeliversThroughTheProviderAndTypesNothing(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
@@ -45,6 +46,8 @@ type parts struct {
 	mux      mux.Mux
 	whoami   func() (string, error)
 	launcher launcher.Launcher
+	// agent is the provider that the launcher runs, kept for the check at start-up.
+	agent provider.Provider
 }
 
 // execInPlace changes into dir and replaces the sfy process with argv. It returns only when one of the two fails.
@@ -73,7 +76,8 @@ func newParts(env func(string) string) (parts, error) {
 	prefix := config.Prefix(home, env)
 	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home), registration.Path(home)), prefix)
 	who, _ := m.(mux.Whoamier)
-	return parts{home: home, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
+	agent := claude.New(cfg, home, bin)
+	return parts{home: home, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, agent: agent, launcher: launcher.New(m, agent, logAppender{path: filepath.Join(home, logName)})}, nil
 }
 
 // logAppender appends to sfy.log on each write, so a plain sfy and sfy serve both log without holding the file open.
@@ -116,6 +120,13 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	if err := checkSocketPath(socket(p.home)); err != nil {
 		return err
 	}
+	// A failed check does not stop sfy. Each session start repeats it and reports the cause.
+	// It runs in the background, because the trial run of bwrap may be slow.
+	go func() {
+		if err := p.agent.Preflight("worker"); err != nil {
+			_, _ = fmt.Fprintf(log, "%s warning: %v\n", time.Now().Format(time.RFC3339), err)
+		}
+	}()
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
 	eng.SetRegistration(registration.Folder{Home: p.home})

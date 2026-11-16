@@ -24,12 +24,13 @@ type adapter struct {
 	sfyBin string
 	goos   string
 	uid    int
+	sys    system
 }
 
 // New returns the adapter for Claude Code. The hooks in each session run sfyBin.
 // CONTRACT: the sfy process picks an adapter by the provider setting, so New returns the interface.
 func New(cfg config.Config, home, sfyBin string) provider.Provider {
-	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: runtime.GOOS, uid: os.Getuid()}
+	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: runtime.GOOS, uid: os.Getuid(), sys: realSystem()}
 }
 
 type hook struct {
@@ -117,7 +118,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if clean {
 		env = append(env, a.inherited()...)
 	}
-	argv := []string{"claude", "--name", spec.Name, "--model", spec.Model}
+	argv := []string{a.claudeCommand(), "--name", spec.Name, "--model", spec.Model}
 	// The main agent gets no permission flag, so claude uses the operator's own default mode.
 	if spec.Kind != "main" {
 		argv = append(argv, "--permission-mode", "acceptEdits")
@@ -332,4 +333,15 @@ func rulePath(p string) string {
 		return "/" + p
 	}
 	return strings.TrimPrefix(p, "./")
+}
+
+// claudeCommand returns the path of claude when it lies off PATH, and the plain name otherwise.
+func (a adapter) claudeCommand() string {
+	if _, err := a.sys.lookPath("claude"); err == nil {
+		return "claude"
+	}
+	if p, ok := a.claudePath(); ok {
+		return p
+	}
+	return "claude"
 }
