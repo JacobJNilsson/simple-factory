@@ -14,6 +14,10 @@ Each pushed tag `v*` triggers a release. GoReleaser builds sfy for macOS and Lin
 
 Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The running sfy process keeps the old code until you restart it. Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
 
+## Stop sfy
+
+Run `sfy down` from a terminal outside the agent sessions. It stops the main agent, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. A later `sfy` starts the sfy process and the main agent. It tells the main agent about each task whose worker is gone. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it.
+
 ## Prompts
 
 A file `<home>/prompts/<kind>.md` replaces the default prompt of a kind of agent. The kinds are `main`, `worker`, `reviewer` and `worker-repo`. To add lines without a copy of the whole prompt, put files that end in `.md` in `<home>/prompts/<kind>.d/`. sfy appends them in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the main agent when an addition to its prompt changed.
