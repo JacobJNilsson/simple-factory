@@ -110,7 +110,11 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if err := removeStaleNote(a.home, spec.Name); err != nil {
 		return nil, err
 	}
-	env := []string{"SFY_AGENT=" + spec.Name}
+	token, err := IssueToken(a.home, spec.Name)
+	if err != nil {
+		return nil, err
+	}
+	env := []string{"SFY_AGENT=" + spec.Name, "SFY_TOKEN=" + token}
 	if spec.Task != "" {
 		env = append(env, "SFY_TASK="+spec.Task)
 	}
@@ -182,7 +186,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 		// The hook blocks a hand push, merge or rebase in a no-merge repo. sfy task integrate refuses there too.
 		s.Hooks["PreToolUse"] = []hookGroup{{Matcher: "Bash", Hooks: []hook{a.hook("merge-guard")}}}
 	} else {
-		if err := a.sandboxFor(&s, a.cfg.SessionRules[spec.Kind].ExcludedCommands); err != nil {
+		if err := a.sandboxFor(&s, spec.Kind, a.cfg.SessionRules[spec.Kind].ExcludedCommands); err != nil {
 			return "", err
 		}
 	}
@@ -227,7 +231,7 @@ func marshalSettings(s settings, extra config.SessionValues) ([]byte, error) {
 
 // sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands. The excluded patterns run outside it.
 // A Linux sandbox ignores a write path that does not exist, so each one is created first.
-func (a adapter) sandboxFor(s *settings, excluded []string) error {
+func (a adapter) sandboxFor(s *settings, kind string, excluded []string) error {
 	for _, p := range a.cfg.AllowWrite {
 		dir, err := expandHome(p)
 		if err != nil {
@@ -240,7 +244,7 @@ func (a adapter) sandboxFor(s *settings, excluded []string) error {
 	s.Sandbox = &sandbox{
 		Enabled: true, FailIfUnavailable: true, AutoAllowBashIfSandboxed: true,
 		Filesystem: filesystem{
-			DenyRead:   append([]string{}, a.cfg.DenyRead...),
+			DenyRead:   append([]string{filepath.Join(a.home, "sessions")}, a.cfg.DenyRead...),
 			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
 		},
 	}
@@ -252,7 +256,7 @@ func (a adapter) sandboxFor(s *settings, excluded []string) error {
 			fmt.Sprintf("/tmp/claude-%d", a.uid), fmt.Sprintf("/private/tmp/claude-%d", a.uid),
 		}}
 	}
-	s.Sandbox.ExcludedCommands = append([]string{"git push *", "sfy *"}, excluded...)
+	s.Sandbox.ExcludedCommands = append(append([]string{"git push *"}, sfyRules(kind)...), excluded...)
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
 	return nil
@@ -304,11 +308,29 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 	}
 	rules = append(rules, a.cfg.SessionRules[spec.Kind].Allow...)
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
-	rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
+	// Hooks run from the settings and need no rule. Agents run sfy by its name on the PATH.
 	if spec.Kind == "main" {
+		rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
 		rules = append(rules, a.mainReads()...)
+	} else {
+		for _, c := range sfyRules(spec.Kind) {
+			rules = append(rules, "Bash("+c+")")
+		}
 	}
 	return rules
+}
+
+// sfyRules lists the sfy commands that a worker or a reviewer may run, as command patterns.
+// The same patterns run outside the sandbox, because the sandbox blocks the sfy socket.
+// A wider pattern such as "sfy *" would let sfy run start any command outside the sandbox.
+func sfyRules(kind string) []string {
+	switch kind {
+	case "worker":
+		return []string{"sfy report *", "sfy inbox"}
+	case "reviewer":
+		return []string{"sfy verdict *", "sfy report blocked *", "sfy inbox"}
+	}
+	return nil
 }
 
 // mainReads lets the main agent read the sfy home without a prompt and list folders. It gets no cat rule, because a rule matches the command text and cannot limit a path.

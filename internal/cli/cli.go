@@ -137,6 +137,26 @@ func Agent(env func(string) string) string {
 	return ""
 }
 
+// token returns the secret that proves the caller's identity to the sfy process.
+// A started agent has it in SFY_TOKEN. A registered agent has no such variable, so it reads the token that sfy register wrote.
+// The operator has none.
+func token(env func(string) string) string {
+	if t := env("SFY_TOKEN"); t != "" {
+		return t
+	}
+	if env("SFY_AGENT") == "" && Agent(env) == "main" {
+		return claude.ReadToken(config.Home(env), "main")
+	}
+	return ""
+}
+
+// Restricted reports whether SFY_AGENT names a worker or a reviewer.
+// Such a session may run only the sfy commands that its allow rules name.
+func Restricted(env func(string) string) bool {
+	agent := env("SFY_AGENT")
+	return strings.HasPrefix(agent, "worker-") || strings.HasPrefix(agent, "review-")
+}
+
 // WithIdentity returns env with SFY_AGENT set to the caller's session name, as Agent finds it.
 func WithIdentity(env func(string) string) func(string) string {
 	agent := Agent(env)
@@ -150,7 +170,7 @@ func WithIdentity(env func(string) string) func(string) string {
 
 // parse builds the request for a command line. It reads a file argument, and reads stdin for "-" and for hooks.
 func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Request, error) {
-	req := protocol.Request{Caller: protocol.Caller{Agent: Agent(env), Task: env("SFY_TASK")}}
+	req := protocol.Request{Caller: protocol.Caller{Agent: Agent(env), Task: env("SFY_TASK"), Token: token(env)}}
 	name, f, ok := lookup(args)
 	if !ok {
 		return req, &usageError{"unknown or incomplete command"}
@@ -239,8 +259,18 @@ func readFile(path string, stdin io.Reader) (string, error) {
 	return string(b), err
 }
 
+// sessionHookEvents lists the hook events that the settings of a started session run.
+var sessionHookEvents = []string{"turn-ended", "permission", "idle", "note", "note-watch"}
+
+// ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the main agent run.
+var ErrRestricted = errors.New("a worker or a reviewer may not run this command")
+
 // Run executes one sfy command and returns the exit code.
 func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) >= 1 && args[0] == "hook" && Restricted(env) && (len(args) != 2 || !slices.Contains(sessionHookEvents, args[1])) {
+		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", ErrRestricted)
+		return exitFailed
+	}
 	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
 		return noteHook(args[1], env, stdout, stderr)
 	}
