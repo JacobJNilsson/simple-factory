@@ -132,3 +132,20 @@ func Home(env func(string) string) string {
 	}
 	return filepath.Join(env("HOME"), ".sfy")
 }
+
+// Prefix returns the text that goes in front of every terminal session name and worker branch of a state folder.
+// The default folder, .sfy in the user's home folder, has an empty prefix.
+// Any other folder gets its base name without a leading dot, in lower case, with each character outside a-z0-9- replaced by -, and a final -.
+func Prefix(home string, env func(string) string) string {
+	home = filepath.Clean(home)
+	if home == filepath.Join(env("HOME"), ".sfy") {
+		return ""
+	}
+	name := strings.ToLower(strings.TrimPrefix(filepath.Base(home), "."))
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return '-'
+	}, name) + "-"
+}

@@ -28,11 +28,16 @@ stop = "touch %[1]s/%[2]s-{name}"
 }
 
 func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
-	home, err := os.MkdirTemp("", "fu")
+	parent, err := os.MkdirTemp("", "fu")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Cleanup(func() { _ = os.RemoveAll(parent) })
+	// A folder other than ~/.sfy prefixes every session name.
+	home := filepath.Join(parent, ".sfy-work")
+	if err := os.Mkdir(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	configPath := filepath.Join(home, "config.toml")
 	if err := os.WriteFile(configPath, []byte(multiplexerConfig(home, "stopped")), 0o600); err != nil {
 		t.Fatal(err)
@@ -64,10 +69,10 @@ func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the sfy process did not exit")
 	}
-	if _, err := os.Stat(filepath.Join(home, "stopped-main")); err != nil {
-		t.Errorf("the start-time stop template did not run: %v", err)
+	if _, err := os.Stat(filepath.Join(home, "stopped-sfy-work-main")); err != nil {
+		t.Errorf("the start-time stop template did not run with the prefixed name: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, "changed-main")); err == nil {
+	if _, err := os.Stat(filepath.Join(home, "changed-sfy-work-main")); err == nil {
 		t.Error("the changed config's stop template ran")
 	}
 	if _, err := os.Lstat(socket(home)); err == nil {
