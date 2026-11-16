@@ -48,6 +48,7 @@ const usage = `usage:
   sfy escalate <id> <text...>
   sfy status
   sfy down             stop all agents and the sfy process (operator only)
+  sfy restart          restart the sfy process and keep the agents running (--update runs brew upgrade first)
   sfy hook <event>
   sfy hook --user <event>
 `
