@@ -103,6 +103,28 @@ func TestRestartNotesAChangedPrompt(t *testing.T) {
 	}
 }
 
+func TestRestartNotesAChangedPromptAddition(t *testing.T) {
+	r := runningRig(t)
+	dir := filepath.Join(r.o.home, "prompts", "main.d")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("Extra rule.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(r.o.home, "main-prompt.md")
+	want := [][2]string{{"main", "sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool."}}
+	if !reflect.DeepEqual(r.m.sends, want) {
+		t.Fatalf("sends = %q, want %q", r.m.sends, want)
+	}
+	if b, _ := os.ReadFile(path); !strings.HasSuffix(string(b), "\n\nExtra rule.\n") {
+		t.Errorf("%s lacks the addition", path)
+	}
+}
+
 func TestRestartNotesAChangedPromptOnce(t *testing.T) {
 	r := runningRig(t)
 	overrideMainPrompt(t, r.o.home)
