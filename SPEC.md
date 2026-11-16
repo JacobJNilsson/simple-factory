@@ -207,7 +207,7 @@ A command that an agent kind may not run fails with an error that names the comm
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
 | `no_merge` | `false` | When true, the main agent leaves approved branches for the operator. A `.sfy.toml` file can set it per repo. |
 | `session_rules.main`, `.worker`, `.reviewer` | none | Tables with an `allow` list and an `excluded_commands` list. sfy adds them to that kind's permission allow rules and sandbox excluded commands. |
-| `session_settings.main`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy adds them at the top level of that kind's settings file. |
+| `session_settings.main`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy adds them at the top level of that kind's settings file. Worker and reviewer files hold `promptSuggestionEnabled = false` unless a table sets it. |
 
 ### Session settings
 
@@ -221,7 +221,7 @@ preferredNotifChannel = "notifications_disabled"
 preferredNotifChannel = "notifications_disabled"
 ```
 
-sfy keeps its own keys. A table that sets `permissions`, `hooks` or `sandbox` is a config error that names the key. A kind other than `main`, `worker` or `reviewer` is a config error. Without the tables, the settings files stay as they are.
+sfy keeps its own keys. A table that sets `permissions`, `hooks` or `sandbox` is a config error that names the key. A kind other than `main`, `worker` or `reviewer` is a config error. Worker and reviewer settings files hold `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. Nobody reads those panes, so a suggestion would only look like a stuck message and cost a model request. A table can set the key to `true` to override the default. The main agent's file stays at Claude Code's default. Without the tables, the settings files hold only sfy's keys and that default.
 
 ### Per-repo configuration
 
