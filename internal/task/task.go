@@ -34,7 +34,9 @@ type Task struct {
 	Goal        string
 	Repo        string
 	Check       string
-	Protected   []string
+	// Type is the optional Conventional Commits type from the Type section. It decides the branch prefix.
+	Type      string
+	Protected []string
 	// After lists the ids of tasks that must be done before sfy starts this task's worker.
 	After []string
 	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
@@ -56,6 +58,8 @@ type Task struct {
 	Reopened bool
 	// Pushing is true in review after a passed review of a task with a repo, until the worker reports that it pushed.
 	Pushing bool
+	// Branch is the git branch of a task with a repo. sfy picks it once, so it never changes. It is empty until then.
+	Branch string
 	// Dir is the task's workspace folder, empty until sfy creates it.
 	Dir     string
 	Updated time.Time
@@ -125,7 +129,7 @@ func Parse(md string) (Task, error) {
 		}
 		body := strings.Trim(strings.Join(buf, "\n"), "\n")
 		switch name {
-		case "Description", "Goal", "Repo", "Check", "Protected", "After":
+		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After":
 			if _, seen := sections[name]; seen && dup == "" {
 				dup = name
 			}
@@ -182,6 +186,12 @@ func Parse(md string) (Task, error) {
 	t.Goal = sections["Goal"]
 	t.Repo = firstLine(sections["Repo"])
 	t.Check = firstLine(sections["Check"])
+	if typ := strings.ToLower(firstLine(sections["Type"])); typ != "" {
+		if !slices.Contains(Types, typ) {
+			return Task{}, &FormatError{Problem: "invalid section", Section: "Type"}
+		}
+		t.Type = typ
+	}
 	for _, line := range strings.Split(sections["Protected"], "\n") {
 		if p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- ")); p != "" {
 			t.Protected = append(t.Protected, p)
@@ -236,6 +246,9 @@ func (t Task) Markdown() string {
 	}
 	if t.Check != "" {
 		fmt.Fprintf(&b, "\n## Check\n\n%s\n", t.Check)
+	}
+	if t.Type != "" {
+		fmt.Fprintf(&b, "\n## Type\n\n%s\n", t.Type)
 	}
 	if len(t.Protected) > 0 {
 		b.WriteString("\n## Protected\n\n")

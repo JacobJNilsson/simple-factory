@@ -72,7 +72,9 @@ type stateFile struct {
 	Pending  []string   `json:"pending,omitempty"`
 	Reopened bool       `json:"reopened,omitempty"`
 	// Pushing is the task's flag of the same name.
-	Pushing bool      `json:"pushing,omitempty"`
+	Pushing bool `json:"pushing,omitempty"`
+	// Branch is the task's field of the same name.
+	Branch  string    `json:"branch,omitempty"`
 	Updated time.Time `json:"updated"`
 }
 
@@ -206,7 +208,7 @@ func checkRoundTrip(t task.Task) error {
 		return fmt.Errorf("store: task %s does not parse back: %w", t.ID, err)
 	}
 	same := back.Title == t.Title && back.Description == t.Description && back.Goal == t.Goal &&
-		back.Repo == t.Repo && back.Check == t.Check && back.Extra == t.Extra &&
+		back.Repo == t.Repo && back.Check == t.Check && back.Type == t.Type && back.Extra == t.Extra &&
 		slices.Equal(back.Protected, t.Protected) && slices.Equal(back.After, t.After)
 	if !same {
 		return fmt.Errorf("store: task %s does not parse back to the same fields", t.ID)
@@ -221,6 +223,7 @@ func normalize(t task.Task) task.Task {
 	t.Goal = strings.TrimSpace(t.Goal)
 	t.Repo = strings.TrimSpace(t.Repo)
 	t.Check = strings.TrimSpace(t.Check)
+	t.Type = strings.TrimSpace(t.Type)
 	t.Extra = strings.TrimSpace(t.Extra)
 	var protected []string
 	for _, p := range t.Protected {
@@ -240,7 +243,7 @@ func writeTask(dir string, t task.Task) error {
 	if err := writeFile(filepath.Join(dir, "task.md"), []byte(t.Markdown())); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Updated}, "", "  ")
+	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Branch, t.Updated}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -269,7 +272,7 @@ func (f files) Task(id string) (task.Task, error) {
 		return task.Task{}, fmt.Errorf("store: task %s state: %w", id, err)
 	}
 	t.ID, t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Updated = id, st.State, st.Before, st.Round, st.Archived, st.Source, st.Progress, st.Dir, st.Updated
-	t.Pending, t.Reopened, t.Pushing = st.Pending, st.Reopened, st.Pushing
+	t.Pending, t.Reopened, t.Pushing, t.Branch = st.Pending, st.Reopened, st.Pushing, st.Branch
 	return t, nil
 }
 

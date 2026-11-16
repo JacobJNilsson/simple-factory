@@ -25,7 +25,7 @@ type SessionSpec struct {
 	Protected []string
 	// HasRepo reports that the task names a repo, so a worker gets the repo part of its prompt.
 	HasRepo bool
-	// Branch is the git branch of the task, as the workspace names it. It is empty for a task with no repo.
+	// Branch is the git branch of the task. It is empty for a task with no repo.
 	Branch string
 	// ResumePrompt is the first message when the provider resumes the main agent's last conversation.
 	ResumePrompt string
@@ -62,8 +62,10 @@ type Workspaces interface {
 	Remove(task.Task) error
 	// HoldsWork reports whether the task's workspace holds work that Remove would delete.
 	HoldsWork(task.Task) (bool, error)
-	// Branch returns the name of the git branch that holds the work of the task with this id.
-	Branch(id string) string
+	// NewBranch returns a free branch name for the task, in the repo and on its remotes. It creates nothing.
+	NewBranch(task.Task) (string, error)
+	// LegacyBranch returns the branch name that sfy gave to tasks before they carried a branch of their own.
+	LegacyBranch(id string) string
 	// HasRemote reports whether the task's repo has a remote to push to. A repo that exists only locally has none.
 	HasRemote(task.Task) (bool, error)
 	// RepoFolder returns the folder that a task on repo belongs to, which exists after the first clone.
