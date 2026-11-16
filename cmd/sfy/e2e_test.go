@@ -115,11 +115,11 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	start := time.Now()
 	home, sfy := newRig(t)
 
-	if out, err := sfy("", "", "up"); err != nil {
-		t.Fatalf("up: %v\n%s", err, out)
+	if out, err := sfy("", ""); err != nil {
+		t.Fatalf("start: %v\n%s", err, out)
 	}
-	if out, err := sfy("", "", "up"); err != nil || !strings.Contains(out, "Everything already runs.") {
-		t.Fatalf("second up: %v\n%s", err, out)
+	if out, err := sfy("", ""); err != nil || !strings.Contains(out, "Everything already runs.") {
+		t.Fatalf("second start: %v\n%s", err, out)
 	}
 	task := "# Write a note\n\n## Description\n\nWrite one line.\n\n## Goal\n\nA note exists.\n"
 	if out, err := sfy("", task, "task", "new", "-"); err != nil {

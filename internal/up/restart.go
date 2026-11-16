@@ -11,7 +11,7 @@ import (
 var ErrNotAllowed = errors.New("only the operator and the main agent run sfy restart")
 
 // ErrNotStopped reports a sfy process that kept answering after its session ended.
-var ErrNotStopped = errors.New("the sfy process still answers after it was stopped. Stop it by hand and run sfy up")
+var ErrNotStopped = errors.New("the sfy process still answers after it was stopped. Stop it by hand and run sfy")
 
 // mainSession is the multiplexer session of the main agent.
 const mainSession = "main"
@@ -19,7 +19,7 @@ const mainSession = "main"
 // mayRestart reports whether the agent may run sfy restart. The operator has no agent name.
 func mayRestart(agent string) bool { return agent == "" || agent == mainSession }
 
-// restart stops the sfy process and starts it again as sfy up does.
+// restart stops the sfy process and starts it again as a plain sfy does.
 // The multiplexer ends the sfy session with a hangup, which the sfy process handles by removing its socket and lock file.
 // A running main agent keeps its session and chat, and gets a note. Workers and reviewers keep their sessions, and their tasks stay on disk.
 func restart(o options) error {

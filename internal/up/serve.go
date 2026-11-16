@@ -61,7 +61,7 @@ func newParts(env func(string) string) (parts, error) {
 	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
 }
 
-// logAppender appends to sfy.log on each write, so sfy up and sfy serve both log without holding the file open.
+// logAppender appends to sfy.log on each write, so a plain sfy and sfy serve both log without holding the file open.
 type logAppender struct{ path string }
 
 func (l logAppender) Write(p []byte) (int, error) {
@@ -134,7 +134,7 @@ func checkSocketPath(path string) error {
 	return nil
 }
 
-// Command runs sfy up for the sfy home that env names.
+// Command runs a plain sfy for the sfy home that env names.
 func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
 	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {

@@ -24,6 +24,8 @@ const (
 )
 
 const usage = `usage:
+  sfy                  start sfy (operator only)
+  sfy help
   sfy task new <file|->
   sfy task list [--archived]
   sfy task show <id>
@@ -42,6 +44,17 @@ const usage = `usage:
   sfy status
   sfy hook <event>
 `
+
+// PrintUsage writes the usage text to w.
+func PrintUsage(w io.Writer) {
+	_, _ = io.WriteString(w, usage)
+}
+
+// Misuse prints msg and the usage to stderr and returns the usage exit code.
+func Misuse(stderr io.Writer, msg string) int {
+	_, _ = fmt.Fprintf(stderr, "sfy: %s\n%s", msg, usage)
+	return exitUsage
+}
 
 // usageError reports a command line that matches none of the forms.
 type usageError struct{ msg string }

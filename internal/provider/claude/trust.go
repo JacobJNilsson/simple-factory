@@ -131,7 +131,7 @@ func repoRoot(dir string) (string, bool) {
 	return gitOut(dir, "rev-parse", "--show-toplevel")
 }
 
-// gitTimeout bounds one git call, so a stuck repository cannot stall sfy up.
+// gitTimeout bounds one git call, so a stuck repository cannot stall the sfy start.
 const gitTimeout = 5 * time.Second
 
 func gitOut(dir string, args ...string) (string, bool) {
