@@ -12,6 +12,8 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 )
 
@@ -46,6 +48,7 @@ const usage = `usage:
   sfy status
   sfy down             stop all agents and the sfy process (operator only)
   sfy hook <event>
+  sfy hook --user <event>
 `
 
 // PrintUsage writes the usage text to w.
@@ -200,7 +203,14 @@ func readFile(path string, stdin io.Reader) (string, error) {
 
 // Run executes one sfy command and returns the exit code.
 func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	req, err := parse(args, env, stdin)
+	var req protocol.Request
+	var err error
+	acts := true
+	if len(args) == 3 && args[0] == "hook" && args[1] == "--user" {
+		req, acts, err = userHookRequest(args[2], env, stdin)
+	} else {
+		req, err = parse(args, env, stdin)
+	}
 	var ue *usageError
 	if errors.As(err, &ue) {
 		_, _ = fmt.Fprintf(stderr, "sfy: %s\n%s", ue.msg, usage)
@@ -210,6 +220,38 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed
 	}
+	if !acts {
+		return exitOK
+	}
+	return send(req, env, stdout, stderr)
+}
+
+// userHookEvents lists the events that the hooks in the user settings report.
+var userHookEvents = []string{"turn-ended", "permission", "idle"}
+
+// userHookRequest builds the request for a hook that comes from the user settings.
+// The user settings reach every session of the user, so the hook acts only for the registered main agent.
+// It acts for no other session and for no agent that sfy started. It makes no socket call then, and it prints nothing.
+func userHookRequest(event string, env func(string) string, stdin io.Reader) (req protocol.Request, acts bool, err error) {
+	if !slices.Contains(userHookEvents, event) {
+		return req, false, &usageError{fmt.Sprintf("unknown hook event %q", event)}
+	}
+	if env("SFY_AGENT") != "" {
+		return req, false, nil
+	}
+	record, ok := registration.Read(config.Home(env))
+	if !ok {
+		return req, false, nil
+	}
+	body, err := io.ReadAll(stdin)
+	if err != nil || claude.HookSession(body) != record.ID {
+		return req, false, err
+	}
+	return protocol.Request{Caller: protocol.Caller{Agent: "main"}, Command: "hook " + event, Body: string(body)}, true, nil
+}
+
+// send calls the sfy process and prints its answer.
+func send(req protocol.Request, env func(string) string, stdout, stderr io.Writer) int {
 	ans, err := server.Call(filepath.Join(config.Home(env), "sfy.sock"), req)
 	var nr *server.NotRunningError
 	if errors.As(err, &nr) && req.Command == "down" {

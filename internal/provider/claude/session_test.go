@@ -2,6 +2,20 @@ package claude
 
 import "testing"
 
+func TestHookSessionReadsTheSessionIDOfTheInput(t *testing.T) {
+	cases := map[string]string{
+		`{"session_id":"s-1","hook_event_name":"Stop"}`: "s-1",
+		`{"hook_event_name":"Stop"}`:                    "",
+		`not json`:                                      "",
+		``:                                              "",
+	}
+	for input, want := range cases {
+		if got := HookSession([]byte(input)); got != want {
+			t.Errorf("input %q got %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestCurrentSessionReadsTheSessionVariable(t *testing.T) {
 	env := func(k string) string {
 		if k == "CLAUDE_CODE_SESSION_ID" {
