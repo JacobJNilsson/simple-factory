@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -37,6 +39,47 @@ type Config struct {
 	PassEnv []string `toml:"pass_env"`
 	// Multiplexers holds the raw template sets by name. A later package validates and fills them.
 	Multiplexers map[string]map[string]string `toml:"multiplexers"`
+	// SessionSettings holds extra top-level keys for each session kind's provider settings file.
+	// The keys are the provider's own, so sfy copies the values without a check.
+	SessionSettings map[string]SessionValues `toml:"session_settings"`
+}
+
+// SessionValues holds the extra keys of one session kind. Each value is any TOML value.
+type SessionValues map[string]any
+
+// SessionSettingsError reports a session_settings table that sfy refuses.
+// Key is empty when the kind itself is unknown.
+type SessionSettingsError struct {
+	Kind string
+	Key  string
+}
+
+func (e *SessionSettingsError) Error() string {
+	if e.Key == "" {
+		return fmt.Sprintf("config: unknown session kind %q in session_settings", e.Kind)
+	}
+	return fmt.Sprintf("config: session_settings.%s.%s is reserved, because sfy writes %s itself", e.Kind, e.Key, e.Key)
+}
+
+// sessionKinds lists the kinds that session_settings accepts.
+var sessionKinds = []string{"main", "worker", "reviewer"}
+
+// reservedSessionKeys are the settings keys that sfy writes itself.
+var reservedSessionKeys = []string{"permissions", "hooks", "sandbox"}
+
+// validateSessionSettings refuses an unknown kind and a key that sfy owns.
+func validateSessionSettings(tables map[string]SessionValues) error {
+	for _, kind := range slices.Sorted(maps.Keys(tables)) {
+		if !slices.Contains(sessionKinds, kind) {
+			return &SessionSettingsError{Kind: kind}
+		}
+		for _, key := range slices.Sorted(maps.Keys(tables[kind])) {
+			if slices.Contains(reservedSessionKeys, key) {
+				return &SessionSettingsError{Kind: kind, Key: key}
+			}
+		}
+	}
+	return nil
 }
 
 // SettingError reports a setting with a value that sfy cannot use.
@@ -121,6 +164,9 @@ func load(home string, userTempDir func() (string, error)) (Config, error) {
 	}
 	if c.ResendMinutes < 1 {
 		return Config{}, &SettingError{Setting: "resend_minutes"}
+	}
+	if err := validateSessionSettings(c.SessionSettings); err != nil {
+		return Config{}, err
 	}
 	return c, nil
 }
