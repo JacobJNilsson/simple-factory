@@ -261,6 +261,18 @@ func TestRenderStatusListsTheHigherIdFirstWhenTimesAreEqual(t *testing.T) {
 	}
 }
 
+func TestRenderStatusShowsTheLocalTimeAndNamesTheZoneInTheHeader(t *testing.T) {
+	saved := time.Local
+	time.Local = time.FixedZone("CET", 3600)
+	t.Cleanup(func() { time.Local = saved })
+
+	out := store.RenderStatus([]task.Task{updatedAt("t1", task.Queued, noon)})
+
+	if !strings.Contains(out, "Last change (CET) |") || !strings.Contains(out, "| 2026-11-15 13:00 |") {
+		t.Fatalf("want local time and zone:\n%s", out)
+	}
+}
+
 func TestRenderStatusNamesTheWorkerAndReviewerOfATaskInReview(t *testing.T) {
 	tk := sample("t3", task.Review)
 	tk.Round = 2
