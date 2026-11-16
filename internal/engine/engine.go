@@ -25,6 +25,8 @@ type SessionSpec struct {
 	Protected []string
 	// HasRepo reports that the task names a repo, so a worker gets the repo part of its prompt.
 	HasRepo bool
+	// Branch is the git branch of the task, as the workspace names it. It is empty for a task with no repo.
+	Branch string
 	// ResumePrompt is the first message when the provider resumes the main agent's last conversation.
 	ResumePrompt string
 	// Fresh makes the provider start a new conversation, even when it recorded one.
@@ -50,6 +52,8 @@ type Workspaces interface {
 	Remove(task.Task) error
 	// HoldsWork reports whether the task's workspace holds work that Remove would delete.
 	HoldsWork(task.Task) (bool, error)
+	// Branch returns the name of the git branch that holds the work of the task with this id.
+	Branch(id string) string
 	// RepoFolder returns the folder that a task on repo belongs to, which exists after the first clone.
 	RepoFolder(repo string) string
 }

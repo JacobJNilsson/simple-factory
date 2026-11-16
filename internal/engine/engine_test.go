@@ -97,6 +97,7 @@ func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 	}
 	return f.dirty[t.ID], nil
 }
+func (f *fakeWorkspaces) Branch(id string) string       { return "sfy/" + id }
 func (f *fakeWorkspaces) RepoFolder(repo string) string { return "/folder/" + repo }
 
 func (f *fakeWorkspaces) Remove(t task.Task) error {

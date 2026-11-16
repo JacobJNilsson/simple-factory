@@ -16,7 +16,6 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
-	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 type adapter struct {
@@ -95,6 +94,10 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	role, err := prompts.Role(spec.Kind, a.home, spec.HasRepo)
 	if err != nil {
 		return nil, err
+	}
+	// The worker prompt names the branch as <branch>, and the workspace decides its name.
+	if spec.Branch != "" {
+		role = strings.ReplaceAll(role, "<branch>", spec.Branch)
 	}
 	path, err := a.writeSettings(spec)
 	if err != nil {
@@ -259,8 +262,7 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 			"Bash(gh pr edit * --body-file *)", "Bash(gh pr edit * --title *)",
 			"Bash(gh issue create *)", "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)")
 		// A rule with no wildcard matches that command only, so no second branch, force flag or refspec passes.
-		branch := workspace.Branch(spec.Task)
-		rules = append(rules, "Bash(git push -u origin "+branch+")", "Bash(git push --force-with-lease origin "+branch+")")
+		rules = append(rules, "Bash(git push -u origin "+spec.Branch+")", "Bash(git push --force-with-lease origin "+spec.Branch+")")
 	case "reviewer":
 		rules = append(rules, "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)")
 	}

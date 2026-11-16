@@ -49,6 +49,7 @@ func (workspaces) Create(t task.Task) (string, error)  { return "/work/" + t.ID,
 func (workspaces) Restore(t task.Task) (string, error) { return "/work/" + t.ID, nil }
 func (workspaces) Remove(task.Task) error              { return nil }
 func (workspaces) HoldsWork(task.Task) (bool, error)   { return false, nil }
+func (workspaces) Branch(id string) string             { return "sfy/" + id }
 func (workspaces) RepoFolder(repo string) string       { return repo }
 
 type clock struct{}
