@@ -60,9 +60,24 @@ type fakeProvider struct {
 	specs []engine.SessionSpec
 	// resumable is what Resumes reports for a spec that is not fresh.
 	resumable bool
+	// deliverable makes Deliver take a text, deliverErr makes it fail, and delivered lists the texts it took.
+	deliverable bool
+	deliverErr  error
+	delivered   []string
 }
 
 func (p *fakeProvider) TrustWarning(string) string { return "" }
+
+// Deliver takes the text when deliverable is set, and fails with deliverErr when that is set.
+func (p *fakeProvider) Deliver(name, text string) (bool, error) {
+	if p.deliverErr != nil {
+		return false, p.deliverErr
+	}
+	if p.deliverable {
+		p.delivered = append(p.delivered, name+":"+text)
+	}
+	return p.deliverable, nil
+}
 
 func (p *fakeProvider) Resumes(spec engine.SessionSpec) bool {
 	return p.resumable && spec.Kind == "main" && !spec.Fresh
@@ -72,6 +87,46 @@ func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
 	p.spec = spec
 	p.specs = append(p.specs, spec)
 	return []string{"agent", "--flag"}, nil
+}
+
+func TestNoteDeliversThroughTheProviderAndTypesNothing(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{deliverable: true}
+
+	err := New(m, p, nil).Note("worker-t1", "sfy restarted.")
+
+	if err != nil || m.sent != "" || len(p.delivered) != 1 || p.delivered[0] != "worker-t1:sfy restarted." {
+		t.Fatalf("err %v, typed %q, delivered %q", err, m.sent, p.delivered)
+	}
+}
+
+func TestNoteTypesTheTextWhenTheProviderCannotDeliver(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{}
+
+	err := New(m, p, nil).Note("worker-t1", "sfy restarted.")
+
+	if err != nil || m.sent != "worker-t1:sfy restarted." {
+		t.Fatalf("err %v, typed %q", err, m.sent)
+	}
+}
+
+func TestNoteTypesTheTextWhenDeliveryFails(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{deliverErr: errors.New("disk full")}
+
+	err := New(m, p, nil).Note("worker-t1", "sfy restarted.")
+
+	if err != nil || m.sent != "worker-t1:sfy restarted." {
+		t.Fatalf("err %v, typed %q", err, m.sent)
+	}
+}
+
+func TestDeliverAsksTheProvider(t *testing.T) {
+	p := &fakeProvider{deliverable: true}
+
+	ok, err := New(&fakeMux{}, p, nil).Deliver("main", "hi")
+
+	if err != nil || !ok || len(p.delivered) != 1 {
+		t.Fatalf("ok %v, err %v, delivered %q", ok, err, p.delivered)
+	}
 }
 
 func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {

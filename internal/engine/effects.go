@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -39,7 +40,7 @@ func (e *Engine) message(to, from, body string) error {
 		return err
 	}
 	if e.agent(to).waiting {
-		return e.typeNote(to, "new message")
+		return e.noteMessages(to, "new message")
 	}
 	return nil
 }
@@ -49,15 +50,64 @@ const (
 	noReportNote   = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
 )
 
-// typeNote types the new-message note into a pane. The agent is busy until its next turn ends.
-func (e *Engine) typeNote(name, why string) error {
-	e.logf("note typed to %s: %s", name, why)
+// noteMessages tells an agent about its unread messages. The agent is busy until its next turn ends.
+// The provider delivers the senders and texts, and sfy marks the messages read. Otherwise sfy types the new-message note.
+func (e *Engine) noteMessages(name, why string) error {
 	s := e.agent(name)
 	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
-	if unread, err := e.st.Unread(name); err == nil {
+	unread, err := e.st.Unread(name)
+	if err == nil {
 		s.notedID = newestID(unread)
 	}
+	if err == nil && len(unread) > 0 {
+		delivered, derr := e.deliver(name, strings.TrimRight(formatMessages(unread), "\n"))
+		if derr != nil {
+			e.logf("delivery to %s failed, so sfy types the note: %v", name, derr)
+		}
+		if delivered {
+			e.logf("messages delivered to %s: %s", name, why)
+			return e.st.MarkRead(name, messageIDs(unread))
+		}
+	}
+	e.logf("note typed to %s: %s", name, why)
 	return e.l.Send(name, newMessageNote)
+}
+
+// note tells an agent a line of text. The provider delivers it, and sfy types it when the provider cannot.
+func (e *Engine) note(name, text string) error {
+	delivered, err := e.deliver(name, text)
+	if err != nil {
+		e.logf("delivery to %s failed, so sfy types the note: %v", name, err)
+	}
+	if delivered {
+		return nil
+	}
+	return e.l.Send(name, text)
+}
+
+// deliver asks the provider to deliver text. A registered main agent has no sfy session folder, so it gets no delivery.
+func (e *Engine) deliver(name, text string) (bool, error) {
+	if name == "main" && e.registeredMain() {
+		return false, nil
+	}
+	return e.l.Deliver(name, text)
+}
+
+// formatMessages renders messages with their senders, as sfy inbox prints them.
+func formatMessages(msgs []store.Message) string {
+	var b strings.Builder
+	for _, m := range msgs {
+		fmt.Fprintf(&b, "From %s:\n%s\n\n", m.From, m.Body)
+	}
+	return b.String()
+}
+
+func messageIDs(msgs []store.Message) []string {
+	ids := make([]string, 0, len(msgs))
+	for _, m := range msgs {
+		ids = append(ids, m.ID)
+	}
+	return ids
 }
 
 // newestID returns the highest message id. Ids sort in send order.

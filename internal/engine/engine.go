@@ -40,6 +40,9 @@ type Launcher interface {
 	Alive(name string) (bool, error)
 	Stop(name string) error
 	Notify(name, text string) error
+	// Deliver gives text to the agent through the provider, without typing into the pane.
+	// It returns false, with nothing delivered, when the provider cannot. The caller then types the text with Send.
+	Deliver(name, text string) (delivered bool, err error)
 	// TrustWarning returns a warning when the provider would stop an agent at a trust prompt for dir.
 	TrustWarning(dir string) string
 }

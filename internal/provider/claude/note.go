@@ -18,6 +18,25 @@ func NotePath(home, name string) (string, bool) {
 	return filepath.Join(home, "sessions", name, "note.md"), true
 }
 
+// Deliver appends text to the note file of the session. The session's FileChanged hook then wakes the agent.
+// It returns false for a session without a settings file from sfy, because no hook watches such a session's note file.
+func (a adapter) Deliver(name, text string) (bool, error) {
+	path, ok := NotePath(a.home, name)
+	if !ok {
+		return false, nil
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "settings.json")); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("claude: %w", err)
+	}
+	if err := AppendNote(path, text); err != nil {
+		return false, fmt.Errorf("claude: %w", err)
+	}
+	return true, nil
+}
+
 // lockNote takes an exclusive lock for the note file at path and returns the function that releases it.
 // The lock keeps an append out of a drain, so a note never lands in a file that a drain already read.
 func lockNote(path string) (func(), error) {

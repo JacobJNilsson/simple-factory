@@ -190,7 +190,7 @@ func (e *Engine) resendNotes() error {
 			last = unread[0].Created
 		}
 		if e.c.Now().Sub(last) >= wait && (s.waiting || !s.hookSince) {
-			errs = append(errs, e.typeNote(name, "resend"))
+			errs = append(errs, e.noteMessages(name, "resend"))
 		}
 	}
 	return errors.Join(errs...)

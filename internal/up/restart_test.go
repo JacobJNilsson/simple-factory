@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
 // runningRig returns a rig whose sfy process, main agent and one worker already run.
@@ -84,6 +86,35 @@ func TestRestartNotesThatSfyRestarted(t *testing.T) {
 	want := [][2]string{{"main", "sfy restarted."}}
 	if !reflect.DeepEqual(r.m.sends, want) {
 		t.Errorf("sends = %q, want %q", r.m.sends, want)
+	}
+}
+
+func TestRestartDeliversTheNoteThroughTheProviderWhenItCan(t *testing.T) {
+	r := runningRig(t)
+	r.l.deliverable = true
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := [][2]string{{"main", "sfy restarted."}}; !reflect.DeepEqual(r.l.delivered, want) || len(r.m.sends) != 0 {
+		t.Fatalf("delivered %q, typed %q", r.l.delivered, r.m.sends)
+	}
+}
+
+func TestRestartTypesTheNoteForARegisteredMainAgent(t *testing.T) {
+	r := runningRig(t)
+	r.l.deliverable = true
+	if err := registration.Write(r.o.home, registration.Record{ID: "s-main"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := [][2]string{{"main", "sfy restarted."}}; !reflect.DeepEqual(r.m.sends, want) || len(r.l.delivered) != 0 {
+		t.Fatalf("delivered %q, typed %q", r.l.delivered, r.m.sends)
 	}
 }
 
