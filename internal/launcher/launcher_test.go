@@ -18,6 +18,7 @@ type fakeMux struct {
 	stopped   string
 	notified  string
 	shown     []string
+	shownMain []string
 	showErr   error
 }
 
@@ -33,6 +34,10 @@ func (f *fakeMux) Stop(name string) error         { f.stopped = name; return nil
 func (f *fakeMux) Notify(name, text string) error { f.notified = name + ":" + text; return nil }
 func (f *fakeMux) Show(name string) error {
 	f.shown = append(f.shown, name)
+	return f.showErr
+}
+func (f *fakeMux) ShowMain(name string) error {
+	f.shownMain = append(f.shownMain, name)
 	return f.showErr
 }
 
@@ -97,18 +102,6 @@ func TestMuxBuiltinAndUnknown(t *testing.T) {
 	}
 }
 
-func TestStartShowsEveryAgentKind(t *testing.T) {
-	for _, kind := range []string{"main", "worker", "reviewer"} {
-		m := &fakeMux{}
-		if err := New(m, &fakeProvider{}, nil).Start(engine.SessionSpec{Name: kind + "-t1", Kind: kind, Dir: "/w"}); err != nil {
-			t.Fatal(err)
-		}
-		if !reflect.DeepEqual(m.shown, []string{kind + "-t1"}) {
-			t.Errorf("%s shown %v", kind, m.shown)
-		}
-	}
-}
-
 func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
 	m := &fakeMux{showErr: errors.New("no pane")}
 	var log bytes.Buffer
@@ -117,5 +110,29 @@ func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "show of main failed: no pane") {
 		t.Errorf("log %q", log.String())
+	}
+}
+
+func TestStartShowsTheMainAgentWithShowMain(t *testing.T) {
+	m := &fakeMux{}
+	l := New(m, &fakeProvider{}, nil)
+	if err := l.Start(engine.SessionSpec{Name: "main", Kind: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.shownMain, []string{"main"}) || len(m.shown) != 0 {
+		t.Errorf("shownMain %v, shown %v", m.shownMain, m.shown)
+	}
+}
+
+func TestStartShowsWorkersAndReviewersWithShow(t *testing.T) {
+	m := &fakeMux{}
+	l := New(m, &fakeProvider{}, nil)
+	for _, kind := range []string{"worker", "reviewer"} {
+		if err := l.Start(engine.SessionSpec{Name: kind + "-t1", Kind: kind}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !reflect.DeepEqual(m.shown, []string{"worker-t1", "reviewer-t1"}) || len(m.shownMain) != 0 {
+		t.Errorf("shown %v, shownMain %v", m.shown, m.shownMain)
 	}
 }

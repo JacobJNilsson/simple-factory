@@ -13,7 +13,7 @@ import (
 
 // Templates holds one shell command line for each multiplexer action.
 type Templates struct {
-	Start, Send, Alive, Stop, Notify, Show string
+	Start, Send, Alive, Stop, Notify, Show, ShowMain string
 }
 
 // Mux controls named sessions in a terminal multiplexer.
@@ -24,13 +24,14 @@ type Mux interface {
 	Stop(name string) error
 	Notify(name, text string) error
 	Show(name string) error
+	ShowMain(name string) error
 }
 
 // FromMap builds a template set from a config table and rejects unknown keys.
 func FromMap(m map[string]string) (Templates, error) {
 	var t Templates
 	fields := map[string]*string{
-		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show,
+		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_main": &t.ShowMain,
 	}
 	for key, value := range m {
 		field, ok := fields[key]
@@ -157,6 +158,16 @@ func (r runner) Show(name string) error {
 		return nil
 	}
 	_, err := run(r.timeout, r.t.Show, "show", name, "", "", "")
+	return err
+}
+
+// ShowMain makes the main agent's session visible to the operator.
+// A set without a show_main template uses the show template.
+func (r runner) ShowMain(name string) error {
+	if r.t.ShowMain == "" {
+		return r.Show(name)
+	}
+	_, err := run(r.timeout, r.t.ShowMain, "show_main", name, "", "", "")
 	return err
 }
 
