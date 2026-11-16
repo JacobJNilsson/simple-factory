@@ -161,13 +161,10 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	if t.Dir != "" && !slices.Equal(edited.Protected, t.Protected) {
 		return "", fmt.Errorf("task %s has a workspace, so its protected paths are fixed", t.ID)
 	}
-	edited.ID = t.ID
+	edited = t.WithFileFieldsOf(edited)
 	if err := e.checkAfter(edited); err != nil {
 		return "", err
 	}
-	edited.State, edited.Round, edited.Source = t.State, t.Round, t.Source
-	edited.Progress, edited.Dir, edited.Pending, edited.Reopened = t.Progress, t.Dir, t.Pending, t.Reopened
-	edited.Pushing, edited.Branch = t.Pushing, t.Branch
 	if err := e.save(edited); err != nil {
 		return "", err
 	}
