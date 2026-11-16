@@ -21,12 +21,18 @@ const gitTimeout = 5 * time.Minute
 
 // Workspaces creates and removes task folders under one state folder.
 type Workspaces struct {
-	home string
+	home   string
+	prefix string
 }
 
 // New returns Workspaces that keep task folders in home/work and clones in home/repos.
 func New(home string) *Workspaces {
-	return &Workspaces{home: home}
+	return NewPrefixed(home, "")
+}
+
+// NewPrefixed returns Workspaces whose task branches carry prefix after sfy/, as in sfy/<prefix>t1.
+func NewPrefixed(home, prefix string) *Workspaces {
+	return &Workspaces{home: home, prefix: prefix}
 }
 
 func (w *Workspaces) dir(id string) string {
@@ -69,7 +75,7 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	if err := addWorktree(repo, dir, Branch(t.ID), base, restore); err != nil {
+	if err := addWorktree(repo, dir, w.Branch(t.ID), base, restore); err != nil {
 		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
 			return "", fmt.Errorf("%w (and the folder stays: %v)", err, rmErr)
 		}
@@ -79,7 +85,7 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 }
 
 // Branch returns the name of the git branch that holds a task's work.
-func Branch(id string) string { return "sfy/" + id }
+func (w *Workspaces) Branch(id string) string { return "sfy/" + w.prefix + id }
 
 // holdsTask reports whether the task's folder still holds its work: its worktree on the task branch, or a plain folder with files.
 func (w *Workspaces) holdsTask(t task.Task) bool {
@@ -89,7 +95,7 @@ func (w *Workspaces) holdsTask(t task.Task) bool {
 		return err == nil && len(entries) > 0
 	}
 	head, err := git(dir, "rev-parse", "--abbrev-ref", "HEAD")
-	return err == nil && head == Branch(t.ID)
+	return err == nil && head == w.Branch(t.ID)
 }
 
 // addWorktree checks out branch in dir. A leftover branch that holds no work of its own moves to base.

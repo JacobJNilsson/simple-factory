@@ -11,7 +11,6 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
-	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
 var errEmptyVerdict = errors.New("a verdict needs the file body, and the body is empty")
@@ -514,7 +513,7 @@ func (e *Engine) approve(t task.Task, from string) error {
 	}
 	note := fmt.Sprintf("Task %s is approved. It has no pull request. Check its result, then run: sfy task complete %s", t.ID, t.ID)
 	if t.Repo != "" {
-		note = fmt.Sprintf("Task %s is approved. Merge the pull request of branch %s, then run: sfy task complete %s", t.ID, workspace.Branch(t.ID), t.ID)
+		note = fmt.Sprintf("Task %s is approved. Merge the pull request of branch %s, then run: sfy task complete %s", t.ID, e.w.Branch(t.ID), t.ID)
 	}
 	if err := e.message("main", from, note); err != nil {
 		return err

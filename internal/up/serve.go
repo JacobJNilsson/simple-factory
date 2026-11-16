@@ -102,7 +102,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	if err := checkSocketPath(socket(p.home)); err != nil {
 		return err
 	}
-	eng := engine.New(store.Files(p.home), p.launcher, workspace.New(p.home), p.cfg, systemClock{})
+	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
 }

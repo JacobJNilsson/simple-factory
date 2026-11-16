@@ -98,7 +98,7 @@ func readSettings(t *testing.T, home, name string) settings {
 func worker() engine.SessionSpec {
 	return engine.SessionSpec{
 		Name: "worker-t1", Kind: "worker", Task: "t1", Dir: "/work/t1", Model: "sonnet",
-		Prompt: "Do this task.", Protected: []string{"SPEC.md", "/abs/dir"},
+		Prompt: "Do this task.", Protected: []string{"SPEC.md", "/abs/dir"}, Branch: "sfy/t1",
 	}
 }
 
@@ -424,6 +424,24 @@ func TestArgvAddsTheRepoPartOnlyForATaskWithARepo(t *testing.T) {
 	}
 	if !strings.Contains(gotRepo, "git push") {
 		t.Error("a task with a repo lacks git steps")
+	}
+}
+
+func TestWorkerPromptAndPushRulesNameThePrefixedBranch(t *testing.T) {
+	p, home := setup(t, bin)
+	spec := worker()
+	spec.HasRepo, spec.Branch = true, "sfy/sfy-work-t1"
+
+	prompt := flagValue(t, command(t, p, spec), "--append-system-prompt")
+
+	if !strings.Contains(prompt, "git push -u origin sfy/sfy-work-t1`") || strings.Contains(prompt, "<branch>") {
+		t.Errorf("the prompt does not name the branch:\n%s", prompt)
+	}
+	rules := bashRules(readSettings(t, home, spec.Name).Permissions.Allow)
+	for _, want := range []string{"Bash(git push -u origin sfy/sfy-work-t1)", "Bash(git push --force-with-lease origin sfy/sfy-work-t1)"} {
+		if !slices.Contains(rules, want) {
+			t.Errorf("missing rule %s in %q", want, rules)
+		}
 	}
 }
 
