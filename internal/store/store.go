@@ -243,7 +243,10 @@ func writeTask(dir string, t task.Task) error {
 	if err := writeFile(filepath.Join(dir, "task.md"), []byte(t.Markdown())); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(stateFile{t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Branch, t.Updated}, "", "  ")
+	b, err := json.MarshalIndent(stateFile{
+		State: t.State, Before: t.Before, Round: t.Round, Archived: t.Archived, Source: t.Source, Progress: t.Progress,
+		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Branch: t.Branch, Updated: t.Updated,
+	}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -271,8 +274,9 @@ func (f files) Task(id string) (task.Task, error) {
 	if err := json.Unmarshal(raw, &st); err != nil {
 		return task.Task{}, fmt.Errorf("store: task %s state: %w", id, err)
 	}
-	t.ID, t.State, t.Before, t.Round, t.Archived, t.Source, t.Progress, t.Dir, t.Updated = id, st.State, st.Before, st.Round, st.Archived, st.Source, st.Progress, st.Dir, st.Updated
-	t.Pending, t.Reopened, t.Pushing, t.Branch = st.Pending, st.Reopened, st.Pushing, st.Branch
+	t.ID = id
+	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, st.Source
+	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Branch, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Branch, st.Updated
 	return t, nil
 }
 
