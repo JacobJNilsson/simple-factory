@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 // Templates holds one shell command line for each multiplexer action.
 type Templates struct {
 	Start, Send, Alive, Stop, Notify, Show, ShowMain string
+	// Whoami prints the address of the terminal it runs in, as a value that the other templates accept as {name}.
+	Whoami string
 }
 
 // Mux controls named sessions in a terminal multiplexer.
@@ -31,7 +34,7 @@ type Mux interface {
 func FromMap(m map[string]string) (Templates, error) {
 	var t Templates
 	fields := map[string]*string{
-		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_main": &t.ShowMain,
+		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_main": &t.ShowMain, "whoami": &t.Whoami,
 	}
 	for key, value := range m {
 		field, ok := fields[key]
@@ -62,6 +65,8 @@ var tmuxSet = Templates{
 	Send:  "tmux send-keys -t ={name}: -l -- {text} && tmux send-keys -t ={name}: Enter",
 	Alive: "tmux has-session -t ={name}",
 	Stop:  "tmux kill-session -t ={name}",
+	// The pane id selects the pane that runs the command, and the session name works as {name} in the other templates.
+	Whoami: `tmux display-message -p -t "$TMUX_PANE" '#{session_name}'`,
 }
 
 // A template that runs longer than this is killed and reported as an error.
@@ -141,6 +146,23 @@ func (r runner) ShowMain(name string) error {
 	return err
 }
 
+// Whoami runs the whoami template and returns the address it prints.
+// A set without a whoami template returns an empty address. A template that prints more than one line is an error.
+func (r runner) Whoami() (string, error) {
+	if r.t.Whoami == "" {
+		return "", nil
+	}
+	out, _, err := runOut(r.timeout, r.t.Whoami, "whoami", "", "", "", "")
+	if err != nil {
+		return "", err
+	}
+	address := strings.TrimSpace(out)
+	if strings.ContainsAny(address, "\r\n") {
+		return "", &commandError{which: "whoami", stderr: "the template printed more than one line", err: errors.New("bad output")}
+	}
+	return address, nil
+}
+
 // Alive reads exit 0 as running and exit 1 as gone. Any other failure is an error.
 func (r runner) Alive(name string) (bool, error) {
 	code, err := run(r.timeout, r.t.Alive, "alive", name, "", "", "")
@@ -155,6 +177,12 @@ func (r runner) Alive(name string) (bool, error) {
 
 // run returns the exit code, or -1 when the shell did not start or exit normally.
 func run(timeout time.Duration, template, which, name, dir, command, text string) (int, error) {
+	_, code, err := runOut(timeout, template, which, name, dir, command, text)
+	return code, err
+}
+
+// runOut works as run and also returns what the command printed on stdout.
+func runOut(timeout time.Duration, template, which, name, dir, command, text string) (string, int, error) {
 	// One pass over the template keeps a value that holds "{text}" from being filled again.
 	line := strings.NewReplacer(
 		"{name}", shellQuote(name),
@@ -167,18 +195,19 @@ func run(timeout time.Duration, template, which, name, dir, command, text string
 	cmd := exec.CommandContext(ctx, "sh", "-c", line)
 	// A child that keeps the stderr pipe open must not block Wait after the kill.
 	cmd.WaitDelay = time.Second
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err == nil {
-		return 0, nil
+		return stdout.String(), 0, nil
 	}
 	code := -1
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		code = exit.ExitCode()
 	}
-	return code, &commandError{which: which, stderr: strings.TrimSpace(stderr.String()), err: err}
+	return "", code, &commandError{which: which, stderr: strings.TrimSpace(stderr.String()), err: err}
 }
 
 // Prefixed returns a Mux that puts prefix in front of every session name it passes on.
@@ -204,6 +233,99 @@ func (p prefixed) Stop(name string) error          { return p.m.Stop(p.prefix + 
 func (p prefixed) Notify(name, text string) error  { return p.m.Notify(p.prefix+name, text) }
 func (p prefixed) Show(name string) error          { return p.m.Show(p.prefix + name) }
 func (p prefixed) ShowMain(name string) error      { return p.m.ShowMain(p.prefix + name) }
+
+// Whoamier is a Mux that can tell the address of the terminal that sfy runs in.
+type Whoamier interface {
+	// Whoami returns the address, or an empty string when the set has no whoami template.
+	Whoami() (string, error)
+}
+
+// Registered returns a Mux that sends every call for session name to the address that the file at path holds.
+// A missing or empty file leaves the calls as they are. Other sessions are never changed.
+// When Alive finds the address gone, Registered removes the file, so the next start runs as if nothing registered.
+// A successful Stop removes the file too. Put Registered inside Prefixed and give it the prefixed name,
+// because a recorded address is not a name that sfy chose.
+// CONTRACT: callers hold a Mux, as for Prefixed, so Registered returns the interface.
+func Registered(m Mux, name, path string) Mux { return registered{m: m, name: name, path: path} }
+
+type registered struct {
+	m          Mux
+	name, path string
+}
+
+// target returns the recorded address for name, and whether it applies.
+func (r registered) target(name string) (string, bool) {
+	if name != r.name {
+		return name, false
+	}
+	b, err := os.ReadFile(r.path)
+	address := strings.TrimSpace(string(b))
+	if err != nil || address == "" {
+		return name, false
+	}
+	return address, true
+}
+
+func (r registered) forget() error {
+	if err := os.Remove(r.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func (r registered) Start(name, dir string, command []string) error {
+	return r.m.Start(name, dir, command)
+}
+func (r registered) Send(name, text string) error {
+	target, _ := r.target(name)
+	return r.m.Send(target, text)
+}
+func (r registered) Notify(name, text string) error {
+	target, _ := r.target(name)
+	return r.m.Notify(target, text)
+}
+func (r registered) Show(name string) error {
+	target, _ := r.target(name)
+	return r.m.Show(target)
+}
+func (r registered) ShowMain(name string) error {
+	target, _ := r.target(name)
+	return r.m.ShowMain(target)
+}
+func (r registered) Alive(name string) (bool, error) {
+	target, recorded := r.target(name)
+	alive, err := r.m.Alive(target)
+	if recorded && err == nil && !alive {
+		err = r.forget()
+	}
+	return alive, err
+}
+func (r registered) Stop(name string) error {
+	target, recorded := r.target(name)
+	if err := r.m.Stop(target); err != nil {
+		return err
+	}
+	if recorded {
+		return r.forget()
+	}
+	return nil
+}
+
+// Whoami passes the question on, because a registered address does not change the terminal that sfy runs in.
+func (r registered) Whoami() (string, error) {
+	if w, ok := r.m.(Whoamier); ok {
+		return w.Whoami()
+	}
+	return "", nil
+}
+
+// Whoami passes the question on without the prefix, because an address is not a session name.
+func (p prefixed) Whoami() (string, error) {
+	if w, ok := p.m.(Whoamier); ok {
+		return w.Whoami()
+	}
+	return "", nil
+}
 
 // shellQuote wraps s in single quotes and escapes each single quote inside it.
 func shellQuote(s string) string {
