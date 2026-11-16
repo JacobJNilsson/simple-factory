@@ -53,7 +53,7 @@ The prefix goes in front of every terminal session name, so the main agent of `~
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`.
 
-The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`.
+The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`. When sfy starts the main agent in place, it runs `show_main` after it records the address and before it hands the terminal to the main agent, so a template set can arrange the terminal around it, for example to open side panes. A failed `show_main` prints a warning and the main agent still starts.
 
 The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the main agent in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the main agent through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
 

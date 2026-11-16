@@ -189,6 +189,7 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 // startInPlace turns this terminal into the main agent. It reports false when it did not, so the caller starts the main agent through the set.
 // It does not when the set has no whoami template, when whoami fails or prints nothing, or when the replacement fails.
 // A failed whoami goes to warn. The address is recorded before the replacement, and removed when the replacement fails.
+// After it records the address, startInPlace runs show_main. A failure of show_main goes to warn and does not stop the start.
 // A real replacement never returns. A test replacement returns nil, and startInPlace then reports true.
 func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, error) {
 	if o.whoami == nil || o.exec == nil {
@@ -217,6 +218,10 @@ func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, 
 		if err := reportList(o.out, "Started", started); err != nil {
 			return false, err
 		}
+	}
+	// The recorded address is now the main agent's {name}, so show_main can arrange the terminal around it.
+	if err := o.launcher.ShowMain(mainSession); err != nil {
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: show_main failed, the main agent still starts in this terminal: "+err.Error())
 	}
 	_, _ = fmt.Fprintln(o.out, "Starting the main agent in this terminal.")
 	if err := o.exec(spec.Dir, argv); err != nil {

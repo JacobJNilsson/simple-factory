@@ -34,6 +34,9 @@ type fakeMux struct {
 	stubborn bool
 	// shownMain lists the sessions that ShowMain showed.
 	shownMain []string
+	// onShowMain runs inside ShowMain, and showMainErr is what ShowMain returns.
+	onShowMain  func()
+	showMainErr error
 }
 
 func (m *fakeMux) probe() bool {
@@ -66,7 +69,10 @@ func (m *fakeMux) Notify(string, string) error { return nil }
 func (m *fakeMux) Show(string) error           { return nil }
 func (m *fakeMux) ShowMain(name string) error {
 	m.shownMain = append(m.shownMain, name)
-	return nil
+	if m.onShowMain != nil {
+		m.onShowMain()
+	}
+	return m.showMainErr
 }
 
 // fakeLauncher records the main agent's spec and marks its session alive.
