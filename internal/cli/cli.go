@@ -426,7 +426,7 @@ func userHookRequest(event string, env func(string) string, stdin io.Reader) (re
 	if err != nil || claude.HookSession(body) != record.ID {
 		return req, false, err
 	}
-	return protocol.Request{Caller: protocol.Caller{Agent: "main"}, Command: "hook " + event, Body: string(body)}, true, nil
+	return protocol.Request{Caller: protocol.Caller{Agent: "main", Token: claude.ReadToken(config.Home(env), "main")}, Command: "hook " + event, Body: string(body)}, true, nil
 }
 
 // send calls the sfy process and prints its answer.
