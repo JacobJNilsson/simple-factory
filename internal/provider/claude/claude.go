@@ -178,7 +178,10 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"FileChanged":  {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
-	if spec.Kind != "main" {
+	if spec.Kind == "main" {
+		// The hook blocks a hand push, merge or rebase in a no-merge repo. sfy task integrate refuses there too.
+		s.Hooks["PreToolUse"] = []hookGroup{{Matcher: "Bash", Hooks: []hook{a.hook("merge-guard")}}}
+	} else {
 		if err := a.sandboxFor(&s, a.cfg.SessionRules[spec.Kind].ExcludedCommands); err != nil {
 			return "", err
 		}
@@ -318,22 +321,10 @@ func (a adapter) mainReads() []string {
 // A deny rule beats the auto-approval. It cannot match the allowed exact pushes, which have no option before push.
 const pushWithGitOptions = "Bash(git -* push*)"
 
-// mainDeny keeps the main agent from integrating by hand. sfy task integrate does it and honors a repo's no-merge setting.
-// A rule cannot name the default branch, so each rule covers the whole verb, with and without a git option before it.
-// A rule without a wildcard covers the bare command. git merge and git rebase act on the current branch of the folder they run in.
-var mainDeny = []string{
-	"Bash(git push*)", pushWithGitOptions,
-	"Bash(git merge)", "Bash(git merge *)", "Bash(git -* merge)", "Bash(git -* merge *)",
-	"Bash(git rebase)", "Bash(git rebase *)", "Bash(git -* rebase)", "Bash(git -* rebase *)",
-	"Bash(gh pr merge*)",
-}
-
-// deny returns the deny rules of a session. The main agent denies only the direct forms of integration.
+// deny returns the deny rules of a session. The main agent gets none, and its merge guard hook limits no-merge repos.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
 	switch spec.Kind {
-	case "main":
-		return slices.Clone(mainDeny)
 	case "reviewer":
 		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":

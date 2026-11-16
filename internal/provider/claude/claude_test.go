@@ -249,23 +249,43 @@ func TestReviewerSettingsDenyEveryEdit(t *testing.T) {
 	}
 }
 
-func TestMainSettingsDenyOnlyTheDirectFormsOfIntegration(t *testing.T) {
+func TestMainSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
 
 	s := readSettings(t, home, "main")
 
-	want := []string{
-		"Bash(git push*)", "Bash(git -* push*)",
-		"Bash(git merge)", "Bash(git merge *)", "Bash(git -* merge)", "Bash(git -* merge *)",
-		"Bash(git rebase)", "Bash(git rebase *)", "Bash(git -* rebase)", "Bash(git -* rebase *)",
-		"Bash(gh pr merge*)",
+	if len(s.Permissions.Deny) != 0 {
+		t.Errorf("main deny rules = %v, want none", s.Permissions.Deny)
 	}
-	if !slices.Equal(want, s.Permissions.Deny) {
-		t.Errorf("main deny rules = %v, want %v", s.Permissions.Deny, want)
+	groups := s.Hooks["PreToolUse"]
+	if len(groups) != 1 || groups[0].Matcher != "Bash" || len(groups[0].Hooks) != 1 || groups[0].Hooks[0].Command != bin+" hook merge-guard" {
+		t.Errorf("PreToolUse hooks = %+v", groups)
 	}
 	if hookOf(t, s, "Stop").Command == "" {
 		t.Error("main has no Stop hook")
+	}
+}
+
+func TestMainSessionRulesAllowAddsMergeRules(t *testing.T) {
+	home := t.TempDir()
+	cfg := config.Config{SessionRules: map[string]config.SessionRule{"main": {Allow: []string{"Bash(gh pr merge *)"}}}}
+	p := claude.New(cfg, home, bin)
+	command(t, p, mainSpec())
+
+	s := readSettings(t, home, "main")
+
+	if !slices.Contains(s.Permissions.Allow, "Bash(gh pr merge *)") {
+		t.Errorf("allow lacks the extra rule: %v", s.Permissions.Allow)
+	}
+}
+
+func TestWorkersGetNoMergeGuardHook(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+
+	if _, ok := readSettings(t, home, "worker-t1").Hooks["PreToolUse"]; ok {
+		t.Error("a worker has the main agent's merge guard hook")
 	}
 }
 
