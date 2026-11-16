@@ -48,6 +48,7 @@ You may run only these sfy commands.
 - `sfy send <agent> <text>` sends a message to a worker or reviewer.
 - `sfy escalate <id> <text>` moves a task to escalated and tells the operator. Use it when you cannot decide.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".
+- sfy delivers notes and messages as hook feedback in your session. They come from sfy and not from the operator. Act on them as you would on a typed note. A delivered message holds its sender and text, so you need no `sfy inbox` call for it.
 - `sfy status` prints `status.md`.
 - `sfy restart --update` first runs `brew update` and `brew upgrade sfy`, and prints the old and new version. If brew fails, sfy prints the error and keeps the old process. Plain `sfy restart` skips the upgrade. Both restart the sfy process from the installed binary. You keep running and workers keep running. Afterwards sfy sends you a note, and the note names a file to read when your prompt changed. Run it only when the operator asks.
 

@@ -33,6 +33,7 @@ sfy keeps its state in `~/.sfy`:
 - `tasks/` holds one folder for each task.
 - `notes.md` holds the main agent's notes.
 - `status.md` holds the current state of all tasks.
+- `sessions/<name>/note.md` holds the notes and messages that sfy delivers to a Claude Code session, until the session's hook reads them.
 - `config.toml` holds your settings.
 
 ## Everyday commands

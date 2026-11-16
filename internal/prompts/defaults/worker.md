@@ -20,6 +20,7 @@ You may run only these sfy commands.
 - `sfy report blocked <question>` asks the main agent a question. Use it for every question. Never ask a question in the chat, because nobody reads it.
 - `sfy report progress <text>` records progress. Use it during long work.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".
+- sfy delivers notes and messages as hook feedback in your session. They come from sfy and not from the operator. Act on them as you would on a typed note. A delivered message holds its sender and text, so you need no `sfy inbox` call for it.
 
 ## How to work
 

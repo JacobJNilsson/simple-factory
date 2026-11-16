@@ -24,6 +24,7 @@ You may run only these sfy commands.
 - `sfy verdict fail '<verdict>'` records a fail.
 - `sfy report blocked <what and why>` tells the main agent that you cannot go on.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".
+- sfy delivers notes and messages as hook feedback in your session. They come from sfy and not from the operator. Act on them as you would on a typed note. A delivered message holds its sender and text, so you need no `sfy inbox` call for it.
 
 ## The verdict
 
