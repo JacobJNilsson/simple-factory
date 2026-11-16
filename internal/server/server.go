@@ -124,9 +124,9 @@ func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Dur
 		go func() {
 			defer wg.Done()
 			defer conns.remove(conn)
-			handle(conn, eng, maxLine)
+			stop := handle(conn, eng, maxLine)
 			// The answer is written, so the connection can close with the process.
-			if eng.Stopping() {
+			if stop {
 				cancel()
 			}
 		}()
@@ -263,7 +263,9 @@ func safeHandle(eng *engine.Engine, req protocol.Request) (ans protocol.Answer) 
 
 var errTooLarge = errors.New("request too large")
 
-func handle(conn net.Conn, eng *engine.Engine, maxLine int) {
+// handle answers one request. It returns true when the request was the sfy down that stops the process.
+// A probe or another request must not end the server, because it could close the connection of sfy down before its answer.
+func handle(conn net.Conn, eng *engine.Engine, maxLine int) bool {
 	defer func() { _ = conn.Close() }()
 	// The deadline covers the request only. The engine may take minutes to answer.
 	_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
@@ -288,6 +290,7 @@ func handle(conn net.Conn, eng *engine.Engine, maxLine int) {
 		_ = conn.SetReadDeadline(time.Now().Add(time.Second))
 		_, _ = io.Copy(io.Discard, conn)
 	}
+	return req.Command == "down" && ans.OK && eng.Stopping()
 }
 
 // readLine reads one line of at most maxLine bytes.
