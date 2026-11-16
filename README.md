@@ -21,7 +21,7 @@ Run `sfy`, then talk to the main agent. Describe what you want built and the mai
 A task moves through these states:
 
 1. `new`: the main agent prepares the task.
-2. `queued`: the task waits for a free worker.
+2. `queued`: the task waits for a free worker. A task with an `## After` section also waits until every task that it names is `done`, and shows as `queued (after t6, t8)`. List the ids on separate lines or separate them with commas or spaces. A task may name only older tasks.
 3. `working`: a worker does the task. A failed review sends it back as `feedback`.
 4. `review`: a reviewer checks the result.
 5. `approved`: the reviewer passed the result.

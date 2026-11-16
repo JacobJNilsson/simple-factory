@@ -207,7 +207,7 @@ func checkRoundTrip(t task.Task) error {
 	}
 	same := back.Title == t.Title && back.Description == t.Description && back.Goal == t.Goal &&
 		back.Repo == t.Repo && back.Check == t.Check && back.Extra == t.Extra &&
-		slices.Equal(back.Protected, t.Protected)
+		slices.Equal(back.Protected, t.Protected) && slices.Equal(back.After, t.After)
 	if !same {
 		return fmt.Errorf("store: task %s does not parse back to the same fields", t.ID)
 	}
