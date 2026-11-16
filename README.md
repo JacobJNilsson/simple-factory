@@ -16,7 +16,16 @@ Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The 
 
 ## Stop sfy
 
-Run `sfy down` from a terminal outside the agent sessions. It stops the main agent, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. A later `sfy` starts the sfy process and the main agent. It tells the main agent about each task whose worker is gone. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it.
+Run `sfy down` from a terminal outside the agent sessions. It stops the main agent, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. A later `sfy` starts the sfy process and the main agent. It tells the main agent about each task whose worker is gone. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it. It does not stop a registered main agent, because sfy did not start it. It clears the registration and says so.
+
+## Register a running agent
+
+A Claude Code session that already runs can become the main agent. This needs a template set with a `whoami` template, such as the tmux set. Do these steps once and then each time:
+
+1. Run `sfy hooks install` once from a terminal outside the agent sessions. It adds sfy's idle, permission request and turn end hooks to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json`. It keeps every other setting, changes nothing when you run it again, and prints what it changed. The hooks run `sfy hook --user <event>`. They act only for the registered session and exit at once for every other session.
+2. In the session, ask the agent to run `sfy register`. It refuses when a main agent runs or when the set has no `whoami` template. Otherwise it starts the sfy process, records the address and the session id in `sessions/main/` in the state folder, and prints the main prompt, with the additions from `prompts/main.d/`. The agent reads the prompt as its role.
+
+From then on the agent's own `sfy` commands run as `main`, and the operator-only commands `sfy`, `sfy up`, `sfy down` and `sfy hooks install` refuse for it. The prompt arrives as a tool result and not as a system prompt, so a long conversation may drop it. If the agent forgets the role, tell it to read `main-prompt.md` in the state folder. `sfy restart` keeps the registered agent and sends it the restart note. When the address is gone, sfy clears the registration, and the next `sfy` starts a main agent as usual. It does not resume the registered conversation.
 
 ## Prompts
 
@@ -48,6 +57,6 @@ The `show_main` template makes the main agent's session visible. sfy runs `show`
 
 The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the main agent in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the main agent through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
 
-In that case sfy records the address in `sessions/main/address` in the state folder. It then uses the address as `{name}` for the main agent in the `send`, `notify`, `alive`, `stop`, `show` and `show_main` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the main agent in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session. `sfy restart` keeps the main agent and sends it the note. sfy cannot adopt an agent that already runs. Quit it and run `sfy` in its terminal.
+In that case sfy records the address in `sessions/main/address` in the state folder. It then uses the address as `{name}` for the main agent in the `send`, `notify`, `alive`, `stop`, `show` and `show_main` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the main agent in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session. `sfy restart` keeps the main agent and sends it the note. To make an agent that already runs the main agent, see "Register a running agent".
 
 `docs/herdr.md` holds an example set for Herdr. See SPEC.md for every template.

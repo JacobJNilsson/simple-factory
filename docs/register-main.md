@@ -13,7 +13,27 @@ The operator declined registration of a running agent (designs 2 and 3 below, an
 - `sfy down` stops the main agent through `stop` with the recorded address. `sfy restart` keeps the main agent and sends it the note. Neither one replaces its own process.
 - The tmux set, `docs/herdr.md` and `docs/rex.md` have a `whoami` line. The Herdr and Rex lines were not run against a live terminal, as in the checks below.
 
-The text below is the investigation as it stood before the decision.
+## Status update, 2026-11-16
+
+The operator then accepted design 2, about 400 lines with tests (operator, 2026-11-16). It is built as `sfy register` and `sfy hooks install`. Design 1 stays as the default start.
+
+A test of the main agent in Claude Code, in Rex, settled two open points:
+
+- A hook written to a settings file after the session started fired at the next turn end, with no `/hooks` approval. The test used a project `.claude/settings.local.json`. It did not test the user settings.
+- The hook's JSON input holds `session_id`. The hook's environment holds `CLAUDE_CODE_SESSION_ID` and the terminal's variables. Claude's Bash tool has the same environment.
+
+What the build does, against the open points below:
+
+- **Address (section 1).** `sfy register` runs `whoami` and records the address in `sessions/main/address`, as `sfy up` does in place. Without an address it refuses.
+- **Hooks (section 2).** `sfy hooks install` adds the three hooks to the user settings, `~/.claude/settings.json`. Each runs `sfy hook --user <event>`. The command acts only when the hook input's `session_id` is the registered one, and exits 0 at once for any other session, with no socket call. Workers and reviewers keep their own hooks from `--settings`. The reload of the user settings file was not tested, so the operator runs `sfy hooks install` before the session starts, or in the session and then waits for the next turn.
+- **Prompt (section 3).** `sfy register` prints the prompt as a tool result, with a first line that tells the agent to follow it as its role. The costs listed in section 3 stay: no system prompt, and a compaction may drop it. `main-prompt.md` holds the same text.
+- **Identity (section 4).** The CLI asks the provider for the current session's id and maps the registered id to `main`. It makes no `whoami` call, so it adds no shell call to each command. `sfy down`, `sfy up` and `sfy hooks install` refuse for it.
+- **Lifecycle (section 5).** `sfy down` clears the registration and stops no session for the registered agent. `sfy restart` keeps the agent and sends it the note. A plain `sfy` does not show it. When `alive` reports the address gone, the registration goes with the address. The next `sfy` starts a main agent as usual and does not resume the registered conversation, because the registered id is not the recorded `conversation-id`.
+- **Several state folders (section 6).** The registration lives in the state folder, next to the address. The check for one terminal that registers in two folders is not built.
+
+The state is in `sessions/main/registered.json`, which holds the session id and the working folder. The Claude names stay in `internal/provider/claude`.
+
+The text below is the investigation as it stood before the decisions.
 
 ## Summary
 
