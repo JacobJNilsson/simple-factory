@@ -56,6 +56,7 @@ const usage = `usage:
   sfy hook <event>
   sfy hook note        print the delivered notes to stderr and exit 2 (a hook of the session's settings)
   sfy hook note-watch  print the SessionStart output that names the note file (a hook of the session's settings)
+  sfy hook merge-guard block a hand push, merge or rebase in a no-merge repo (a hook of the main session's settings)
   sfy hook --user <event>
 `
 
@@ -243,6 +244,9 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
 		return noteHook(args[1], env, stdout, stderr)
 	}
+	if len(args) == 2 && args[0] == "hook" && args[1] == "merge-guard" {
+		return mergeGuardHook(env, stdin, stderr)
+	}
 	var req protocol.Request
 	var err error
 	acts := true
@@ -264,6 +268,38 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		return exitOK
 	}
 	return send(req, env, stdout, stderr)
+}
+
+// mergeGuardHook is the PreToolUse hook of the main agent. It exits with exitWake, which blocks the tool call, for a hand push, merge or rebase in a no-merge repo.
+// It reads the repo config on each call. A config that cannot be read, and a folder that a shell expansion hides, count as no-merge.
+func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) int {
+	raw, _ := io.ReadAll(stdin)
+	in, err := claude.ParseHookInput(raw)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sfy: merge guard cannot read the hook input: %v\n", err)
+		return exitWake
+	}
+	targets := claude.MergeTargets(in.ToolInput.Command, in.Cwd, env("HOME"))
+	if len(targets) == 0 {
+		return exitOK
+	}
+	cfg, err := config.Load(config.Home(env))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sfy: merge guard cannot read the config, so it blocks %s: %v\n", targets[0].Command, err)
+		return exitWake
+	}
+	for _, t := range targets {
+		if t.Unknown {
+			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s, because its folder comes from a shell expansion and sfy cannot check whether the repo is no-merge. Write the folder out.\n", t.Command)
+			return exitWake
+		}
+		repo, err := config.ForRepo(cfg, env("HOME"), t.Folder)
+		if err != nil || repo.NoMerge {
+			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s in %s. The repo is set to no-merge, or its .sfy.toml cannot be read. Leave the merge to the operator and tell the operator.\n", t.Command, t.Folder)
+			return exitWake
+		}
+	}
+	return exitOK
 }
 
 // noteHook runs the two hooks that deliver notes through the session's note file. It needs no sfy process.

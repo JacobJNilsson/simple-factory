@@ -72,7 +72,7 @@ The only key so far is `no_merge`. With `no_merge = true`, `sfy task integrate` 
 no_merge = true
 ```
 
-A key that sfy does not know, and a global-only key such as `max_workers` or `multiplexer`, is an error that names the file. The main agent's settings deny `git push`, `git merge`, `git rebase` and `gh pr merge` in every repo, so it cannot merge around the setting.
+A key that sfy does not know, and a global-only key such as `max_workers` or `multiplexer`, is an error that names the file. In a no-merge repo, a hook in the main agent's settings also blocks a hand `git push`, `git merge`, `git rebase` and `gh pr merge`. Other repos get no extra rule. To let the main agent run `gh pr merge` where it may merge, add `allow = ["Bash(gh pr merge *)"]` to `[session_rules.main]`. The hook does not follow a subshell, a script, `eval`, `bash -c`, an alias or `gh --repo`. SPEC.md lists what it misses.
 
 ## Session rules
 
