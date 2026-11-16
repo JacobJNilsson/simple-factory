@@ -60,6 +60,8 @@ A task moves through these states:
 5. `approved`: the reviewer passed the result.
 6. `done`: the main agent completed the task.
 
+A task on a repo works on its own branch, named `<type>/<slug>`, as in `feat/organisation-locations`. The type is a Conventional Commits type. An optional `## Type` section in the task file sets it. Otherwise sfy reads it from a `fix:` style prefix or the first word of the title, and falls back to `feat`. The slug is the title in lower case ASCII words joined by `-`, cut at 50 characters on a word boundary. If the name exists in the repo or on a remote, sfy appends `-2`, `-3` and so on. sfy picks the name once and keeps it, and `sfy task show` prints it. Tasks that started earlier keep their `sfy/<id>` branch.
+
 sfy keeps its state in `~/.sfy`:
 
 - `tasks/` holds one folder for each task.

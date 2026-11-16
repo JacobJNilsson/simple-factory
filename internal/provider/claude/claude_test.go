@@ -429,18 +429,18 @@ func TestArgvAddsTheRepoPartOnlyForATaskWithARepo(t *testing.T) {
 	}
 }
 
-func TestWorkerPromptAndPushRulesNameThePrefixedBranch(t *testing.T) {
+func TestWorkerPromptAndPushRulesNameTheTaskBranch(t *testing.T) {
 	p, home := setup(t, bin)
 	spec := worker()
-	spec.HasRepo, spec.Branch = true, "sfy/sfy-work-t1"
+	spec.HasRepo, spec.Branch = true, "fix/refuse-packaging-writes"
 
 	prompt := flagValue(t, command(t, p, spec), "--append-system-prompt")
 
-	if !strings.Contains(prompt, "git push -u origin sfy/sfy-work-t1`") || strings.Contains(prompt, "<branch>") {
+	if !strings.Contains(prompt, "git push -u origin fix/refuse-packaging-writes`") || strings.Contains(prompt, "<branch>") {
 		t.Errorf("the prompt does not name the branch:\n%s", prompt)
 	}
 	rules := bashRules(readSettings(t, home, spec.Name).Permissions.Allow)
-	for _, want := range []string{"Bash(git push -u origin sfy/sfy-work-t1)", "Bash(git push --force-with-lease origin sfy/sfy-work-t1)"} {
+	for _, want := range []string{"Bash(git push -u origin fix/refuse-packaging-writes)", "Bash(git push --force-with-lease origin fix/refuse-packaging-writes)"} {
 		if !slices.Contains(rules, want) {
 			t.Errorf("missing rule %s in %q", want, rules)
 		}

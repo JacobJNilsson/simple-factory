@@ -39,6 +39,21 @@ func TestCreateThenTaskReturnsTheSameTask(t *testing.T) {
 	}
 }
 
+func TestTheBranchAndTheTypeSurviveASaveAndLoad(t *testing.T) {
+	s := store.Files(t.TempDir())
+	in := sample("t1", task.Working)
+	in.Repo, in.Type, in.Branch = "some/repo", "fix", "fix/refuse-packaging-writes"
+
+	if err := s.Create(in); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Task("t1")
+
+	if err != nil || !reflect.DeepEqual(got, in) {
+		t.Fatalf("got %+v, %v, want %+v", got, err, in)
+	}
+}
+
 func TestTaskReturnsErrNotFoundForAnUnknownID(t *testing.T) {
 	s := store.Files(t.TempDir())
 

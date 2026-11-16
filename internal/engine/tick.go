@@ -103,6 +103,9 @@ const maxStartFailures = 3
 func (e *Engine) startWorker(t task.Task) error {
 	prompt, pending := workerPrompt(t), t.Pending
 	dir := t.Dir
+	if err := e.chooseBranch(&t); err != nil {
+		return e.startFailed(t, fmt.Errorf("task %s: choose branch: %w", t.ID, err))
+	}
 	if dir == "" {
 		create := e.w.Create
 		if t.Reopened {
@@ -121,7 +124,7 @@ func (e *Engine) startWorker(t task.Task) error {
 	err := e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
 		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
-		Branch: e.w.Branch(t.ID),
+		Branch: t.Branch,
 	})
 	if err != nil {
 		rmErr := e.discard(t)
@@ -134,6 +137,28 @@ func (e *Engine) startWorker(t task.Task) error {
 	delete(e.startFails, t.ID)
 	e.agents[name] = &agentState{}
 	return nil
+}
+
+// branchOf returns the task's branch. A task with a repo that started before tasks carried a branch keeps its old name.
+// It returns "" for a task with no repo and for a task that has not started and has no branch yet.
+func (e *Engine) branchOf(t task.Task) string {
+	if t.Branch == "" && t.Repo != "" && (t.Dir != "" || t.Reopened) {
+		return e.w.LegacyBranch(t.ID)
+	}
+	return t.Branch
+}
+
+// chooseBranch fixes the branch of a task with a repo, once.
+func (e *Engine) chooseBranch(t *task.Task) error {
+	if t.Repo == "" {
+		return nil
+	}
+	if t.Branch = e.branchOf(*t); t.Branch != "" {
+		return nil
+	}
+	branch, err := e.w.NewBranch(*t)
+	t.Branch = branch
+	return err
 }
 
 // discard removes the workspace of a task whose start failed, unless it holds the earlier work of a reopened task.

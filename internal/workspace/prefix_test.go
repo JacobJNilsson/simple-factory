@@ -7,16 +7,16 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
-func TestBranchCarriesThePrefixAfterSfy(t *testing.T) {
-	if got := workspace.New(t.TempDir()).Branch("t1"); got != "sfy/t1" {
+func TestLegacyBranchCarriesThePrefixAfterSfy(t *testing.T) {
+	if got := workspace.New(t.TempDir()).LegacyBranch("t1"); got != "sfy/t1" {
 		t.Errorf("default branch = %q", got)
 	}
-	if got := workspace.NewPrefixed(t.TempDir(), "sfy-work-").Branch("t1"); got != "sfy/sfy-work-t1" {
+	if got := workspace.NewPrefixed(t.TempDir(), "sfy-work-").LegacyBranch("t1"); got != "sfy/sfy-work-t1" {
 		t.Errorf("prefixed branch = %q", got)
 	}
 }
 
-func TestCreateChecksOutThePrefixedBranch(t *testing.T) {
+func TestCreateChecksOutTheLegacyBranchForATaskWithoutOne(t *testing.T) {
 	gitEnv(t)
 	repo := newRepo(t)
 

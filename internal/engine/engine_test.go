@@ -96,6 +96,9 @@ type fakeWorkspaces struct {
 	createErr   error
 	// localOnly makes HasRemote report a repo with no remote.
 	localOnly bool
+	// branchErr makes NewBranch fail. branchesMade counts the names it gave out.
+	branchErr    error
+	branchesMade int
 }
 
 func (f *fakeWorkspaces) HasRemote(task.Task) (bool, error) { return !f.localOnly, nil }
@@ -116,8 +119,16 @@ func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 	}
 	return f.dirty[t.ID], nil
 }
-func (f *fakeWorkspaces) Branch(id string) string       { return "sfy/" + id }
+func (f *fakeWorkspaces) LegacyBranch(id string) string { return "sfy/" + id }
 func (f *fakeWorkspaces) RepoFolder(repo string) string { return "/folder/" + repo }
+
+func (f *fakeWorkspaces) NewBranch(t task.Task) (string, error) {
+	if f.branchErr != nil {
+		return "", f.branchErr
+	}
+	f.branchesMade++
+	return "feat/" + strings.ToLower(t.ID) + "-title", nil
+}
 
 func (f *fakeWorkspaces) Remove(t task.Task) error {
 	if f.removeErr != nil {

@@ -30,7 +30,7 @@ func New(home string) *Workspaces {
 	return NewPrefixed(home, "")
 }
 
-// NewPrefixed returns Workspaces whose task branches carry prefix after sfy/, as in sfy/<prefix>t1.
+// NewPrefixed returns Workspaces whose legacy task branches carry prefix after sfy/, as in sfy/<prefix>t1.
 func NewPrefixed(home, prefix string) *Workspaces {
 	return &Workspaces{home: home, prefix: prefix}
 }
@@ -75,7 +75,7 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	if err := addWorktree(repo, dir, w.Branch(t.ID), base, restore); err != nil {
+	if err := addWorktree(repo, dir, w.branchOf(t), base, restore); err != nil {
 		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
 			return "", fmt.Errorf("%w (and the folder stays: %v)", err, rmErr)
 		}
@@ -84,8 +84,58 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	return dir, nil
 }
 
-// Branch returns the name of the git branch that holds a task's work.
-func (w *Workspaces) Branch(id string) string { return "sfy/" + w.prefix + id }
+// LegacyBranch returns the branch name from before tasks carried their own: sfy/<prefix><id>.
+func (w *Workspaces) LegacyBranch(id string) string { return "sfy/" + w.prefix + id }
+
+// branchOf returns the task's recorded branch, or the legacy name for a task that has none.
+func (w *Workspaces) branchOf(t task.Task) string {
+	if t.Branch != "" {
+		return t.Branch
+	}
+	return w.LegacyBranch(t.ID)
+}
+
+// NewBranch returns the first free name of the form <type>/<slug>, <type>/<slug>-2, <type>/<slug>-3 and so on.
+// A name is taken when the repo has a local branch of that name or any remote has one.
+// It fetches no branch and creates none.
+func (w *Workspaces) NewBranch(t task.Task) (string, error) {
+	repo, _, err := w.source(t.Repo)
+	if err != nil {
+		return "", err
+	}
+	remotes, err := git(repo, "remote")
+	if err != nil {
+		return "", err
+	}
+	base := t.BranchBase()
+	for n := 1; ; n++ {
+		name := base
+		if n > 1 {
+			name = fmt.Sprintf("%s-%d", base, n)
+		}
+		taken, err := branchTaken(repo, strings.Fields(remotes), name)
+		if err != nil || !taken {
+			return name, err
+		}
+	}
+}
+
+// branchTaken reports whether the repo or one of its remotes has a branch with this name.
+func branchTaken(repo string, remotes []string, name string) (bool, error) {
+	if _, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+name); err == nil {
+		return true, nil
+	}
+	for _, remote := range remotes {
+		out, err := git(repo, "ls-remote", "--heads", remote, "refs/heads/"+name)
+		if err != nil {
+			return false, err
+		}
+		if out != "" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // holdsTask reports whether the task's folder still holds its work: its worktree on the task branch, or a plain folder with files.
 func (w *Workspaces) holdsTask(t task.Task) bool {
@@ -95,7 +145,7 @@ func (w *Workspaces) holdsTask(t task.Task) bool {
 		return err == nil && len(entries) > 0
 	}
 	head, err := git(dir, "rev-parse", "--abbrev-ref", "HEAD")
-	return err == nil && head == w.Branch(t.ID)
+	return err == nil && head == w.branchOf(t)
 }
 
 // addWorktree checks out branch in dir. A leftover branch that holds no work of its own moves to base.
