@@ -181,6 +181,21 @@ A command that an agent kind may not run fails with an error that names the comm
 | `deny_read` | `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
 | `allow_write` | The user cache folder and `~/go/pkg/mod`. On macOS also the per-user temp folder from `getconf DARWIN_USER_TEMP_DIR`, without its trailing slash | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
+| `session_settings.main`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy adds them at the top level of that kind's settings file. |
+
+### Session settings
+
+A `session_settings.<kind>` table holds keys that sfy copies into the provider settings file of that kind of session. The provider decides what the keys mean, so sfy passes the values without a check. For example, this config stops notifications from workers and reviewers and leaves the main agent's alone:
+
+```toml
+[session_settings.worker]
+preferredNotifChannel = "notifications_disabled"
+
+[session_settings.reviewer]
+preferredNotifChannel = "notifications_disabled"
+```
+
+sfy keeps its own keys. A table that sets `permissions`, `hooks` or `sandbox` is a config error that names the key. A kind other than `main`, `worker` or `reviewer` is a config error. Without the tables, the settings files stay as they are.
 
 ## Multiplexer templates
 
