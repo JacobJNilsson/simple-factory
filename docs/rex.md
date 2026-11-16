@@ -185,12 +185,16 @@ exit 2
 stop = '''
 "/Users/<you>/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex" --autostart=false kill {name}
 '''
+whoami = '''
+printf '%s' "$REX_SESSION"
+'''
 ```
 
 Notes on the example:
 
 - Replace `/Users/<you>` with the home folder. The path contains `Versions/Current`, so an app update may move the binary.
 - `rex new` does not move focus, so the set has no `show` template.
+- `whoami` prints the session of the terminal that runs `sfy`. The session works as `{name}` in `send`, `alive` and `stop`. It is untested, like the rest of this set. `sfy down` kills the whole session, so every tab in it ends.
 - Rex allows two sessions with one label. Remove a stale session with `rex kill <label>`.
 - Alive exits 1 for a finished or missing session and 2 for any other failure.
 - Rex cannot read the input line, so sfy cannot see a draft that the operator has typed.

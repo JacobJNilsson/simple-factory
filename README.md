@@ -46,4 +46,8 @@ sfy runs each agent in a multiplexer. It ships a set for tmux. Any other termina
 
 The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`.
 
+The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the main agent in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the main agent through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
+
+In that case sfy records the address in `sessions/main/address` in the state folder. It then uses the address as `{name}` for the main agent in the `send`, `notify`, `alive`, `stop`, `show` and `show_main` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the main agent in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session. `sfy restart` keeps the main agent and sends it the note. sfy cannot adopt an agent that already runs. Quit it and run `sfy` in its terminal.
+
 `docs/herdr.md` holds an example set for Herdr. See SPEC.md for every template.
