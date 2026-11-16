@@ -21,6 +21,8 @@ type hookEntry struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
 	Timeout int    `json:"timeout"`
+	// AsyncRewake makes Claude Code wake the agent when the hook exits with code 2.
+	AsyncRewake bool `json:"asyncRewake"`
 }
 
 type settings struct {

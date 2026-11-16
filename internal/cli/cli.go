@@ -23,6 +23,8 @@ const (
 	exitFailed     = 1
 	exitUsage      = 2
 	exitNotRunning = 3
+	// exitWake is the code that makes Claude Code give a background hook's stderr to the agent.
+	exitWake = 2
 )
 
 const usage = `usage:
@@ -50,6 +52,8 @@ const usage = `usage:
   sfy down             stop all agents and the sfy process (operator only)
   sfy restart          restart the sfy process and keep the agents running (--update runs brew upgrade first)
   sfy hook <event>
+  sfy hook note        print the delivered notes to stderr and exit 2 (a hook of the session's settings)
+  sfy hook note-watch  print the SessionStart output that names the note file (a hook of the session's settings)
   sfy hook --user <event>
 `
 
@@ -233,6 +237,9 @@ func readFile(path string, stdin io.Reader) (string, error) {
 
 // Run executes one sfy command and returns the exit code.
 func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
+		return noteHook(args[1], env, stdout, stderr)
+	}
 	var req protocol.Request
 	var err error
 	acts := true
@@ -254,6 +261,35 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		return exitOK
 	}
 	return send(req, env, stdout, stderr)
+}
+
+// noteHook runs the two hooks that deliver notes through the session's note file. It needs no sfy process.
+// note-watch prints the SessionStart output that names the file. note prints the file's text to stderr and exits with exitWake.
+// A caller with no session name, such as a registered main agent, gets no output and exit code 0.
+func noteHook(event string, env func(string) string, stdout, stderr io.Writer) int {
+	path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT"))
+	if !ok {
+		return exitOK
+	}
+	if event == "note-watch" {
+		out, err := claude.WatchNote(path)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
+			return exitFailed
+		}
+		_, _ = fmt.Fprintln(stdout, out)
+		return exitOK
+	}
+	text, err := claude.DrainNote(path)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
+		return exitFailed
+	}
+	if text == "" {
+		return exitOK
+	}
+	_, _ = fmt.Fprintln(stderr, text)
+	return exitWake
 }
 
 // userHookEvents lists the events that the hooks in the user settings report.
