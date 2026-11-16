@@ -30,6 +30,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 	}
 	var stopped []string
 	var errs []error
+	left := false
 	for _, name := range names {
 		alive, err := e.l.Alive(name)
 		if err != nil {
@@ -37,6 +38,15 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 			continue
 		}
 		if !alive {
+			continue
+		}
+		// sfy did not start a registered agent, so it ends only the registration.
+		if name == "main" && e.registeredMain() {
+			if err := e.reg.Clear(); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			left = true
 			continue
 		}
 		if err := e.stop(name); err != nil {
@@ -49,8 +59,15 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 		return "", err
 	}
 	e.down.Store(true)
-	if len(stopped) == 0 {
-		return "No agent session ran. Stopped the sfy process.", nil
+	text := "No agent session ran. Stopped the sfy process."
+	switch {
+	case len(stopped) > 0:
+		text = "Stopped " + strings.Join(stopped, ", ") + " and the sfy process."
+	case left:
+		text = "Stopped the sfy process."
 	}
-	return "Stopped " + strings.Join(stopped, ", ") + " and the sfy process.", nil
+	if left {
+		text += " Left main running and cleared its registration, because sfy did not start it."
+	}
+	return text, nil
 }

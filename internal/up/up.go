@@ -116,6 +116,11 @@ func run(o options) error {
 			return err
 		}
 	}
+	// The operator already works in the terminal of a registered agent, and showing it would move that terminal.
+	if (registration.Folder{Home: o.home}).Registered() {
+		_, err = fmt.Fprintln(o.out, "The registered main agent already runs.")
+		return err
+	}
 	if err := o.launcher.ShowMain(mainSession); err != nil {
 		return err
 	}
