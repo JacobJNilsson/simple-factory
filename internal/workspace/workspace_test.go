@@ -465,6 +465,42 @@ func newWorktree(t *testing.T, id string) (*workspace.Workspaces, task.Task, str
 	return ws, tk, dir
 }
 
+func TestHasRemoteIsFalseForALocalRepoWithNoRemote(t *testing.T) {
+	ws, tk, _ := newWorktree(t, "t1")
+
+	got, err := ws.HasRemote(tk)
+
+	if err != nil || got {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}
+
+func TestHasRemoteIsTrueForALocalRepoWithARemote(t *testing.T) {
+	ws, tk, dir := newWorktree(t, "t1")
+	git(t, dir, "remote", "add", "origin", "file:///elsewhere")
+
+	got, err := ws.HasRemote(tk)
+
+	if err != nil || !got {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}
+
+func TestHasRemoteIsTrueForAURLRepo(t *testing.T) {
+	gitEnv(t)
+	_, url, ws := urlRepo(t)
+	tk := task.Task{ID: "t1", Repo: url}
+	if _, err := ws.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ws.HasRemote(tk)
+
+	if err != nil || !got {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}
+
 func TestHoldsWorkIsFalseForACleanWorktree(t *testing.T) {
 	ws, tk, _ := newWorktree(t, "t7")
 	if held, err := ws.HoldsWork(tk); err != nil || held {

@@ -120,7 +120,7 @@ func workerPrompt(t task.Task) string {
 		prompt += "\n" + holdPush + "\n"
 	}
 	if t.Reopened {
-		prompt += "\nThis workspace and its branch hold the earlier work. The branch may already have an open pull request, which may be merged or closed by now. Address the feedback on top of that work.\n"
+		prompt += "\nThis workspace and its branch hold the earlier work. The branch may already be pushed or integrated into the default branch. Address the feedback on top of that work.\n"
 	}
 	return prompt
 }

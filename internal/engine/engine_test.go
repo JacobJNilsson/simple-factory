@@ -94,7 +94,11 @@ type fakeWorkspaces struct {
 	dirty       map[string]bool
 	beforeCheck func()
 	createErr   error
+	// localOnly makes HasRemote report a repo with no remote.
+	localOnly bool
 }
+
+func (f *fakeWorkspaces) HasRemote(task.Task) (bool, error) { return !f.localOnly, nil }
 
 func (f *fakeWorkspaces) Create(t task.Task) (string, error) {
 	if f.createErr != nil {
@@ -618,7 +622,7 @@ func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
 
 	v.statusShows(t, "t1", "approved")
 	msgs := v.inbox(t, "main")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no pull request") {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no repo") {
 		t.Fatalf("main got %+v", msgs)
 	}
 	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || len(v.ws.removed) != 0 {

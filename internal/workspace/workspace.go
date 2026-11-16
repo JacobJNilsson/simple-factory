@@ -325,6 +325,19 @@ func (w *Workspaces) HoldsWork(t task.Task) (bool, error) {
 	return len(entries) > 0, err
 }
 
+// HasRemote reports whether the task's repo has a remote. A repo that exists only locally has none.
+func (w *Workspaces) HasRemote(t task.Task) (bool, error) {
+	dir := w.dir(t.ID)
+	if _, err := os.Stat(dir); err != nil {
+		dir = w.RepoFolder(t.Repo)
+	}
+	out, err := git(dir, "remote")
+	if err != nil {
+		return false, err
+	}
+	return out != "", nil
+}
+
 // RepoFolder returns the folder that a task's worktree belongs to: a local repo itself, or the clone of a URL.
 // The clone folder is known before the clone exists.
 func (w *Workspaces) RepoFolder(repo string) string {

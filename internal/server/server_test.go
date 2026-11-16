@@ -53,6 +53,7 @@ func (workspaces) Remove(task.Task) error              { return nil }
 func (workspaces) HoldsWork(task.Task) (bool, error)   { return false, nil }
 func (workspaces) Branch(id string) string             { return "sfy/" + id }
 func (workspaces) RepoFolder(repo string) string       { return repo }
+func (workspaces) HasRemote(task.Task) (bool, error)   { return true, nil }
 
 type clock struct{}
 
