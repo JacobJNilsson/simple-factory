@@ -36,6 +36,99 @@ func TestForPrefersAFileInTheHomePromptsFolder(t *testing.T) {
 	}
 }
 
+// writePrompt writes body to <home>/prompts/<rel>.
+func writePrompt(t *testing.T, home, rel, body string) {
+	t.Helper()
+	path := filepath.Join(home, "prompts", rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestForWithoutAdditionsFolderReturnsTheDefault(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "other.d/x.md", "unrelated")
+
+	got, err := prompts.For("worker", home)
+	want, _ := prompts.For("worker", t.TempDir())
+
+	if err != nil || got != want {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestForAppendsAdditionsInNameOrder(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "worker.d/20-b.md", "second")
+	writePrompt(t, home, "worker.d/10-a.md", "first\n")
+	base, _ := prompts.For("worker", t.TempDir())
+
+	got, err := prompts.For("worker", home)
+
+	want := strings.TrimRight(base, "\n") + "\n\nfirst\n\nsecond"
+	if err != nil || got != want {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestForSkipsFilesWithoutTheMdSuffix(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "worker.d/a.txt", "skipped-txt")
+	writePrompt(t, home, "worker.d/b.md.bak", "backup")
+	writePrompt(t, home, "worker.d/c.md", "kept")
+
+	got, err := prompts.For("worker", home)
+
+	if err != nil || !strings.HasSuffix(got, "\n\nkept") || strings.Contains(got, "skipped-txt") || strings.Contains(got, "backup") {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestForAppendsAdditionsAfterAReplacingPrompt(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "reviewer.md", "custom\n")
+	writePrompt(t, home, "reviewer.d/a.md", "extra")
+
+	got, err := prompts.For("reviewer", home)
+
+	if err != nil || got != "custom\n\nextra" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestRoleAppendsAdditionsToTheWorkerRepoPart(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "worker.md", "common")
+	writePrompt(t, home, "worker-repo.md", "repo")
+	writePrompt(t, home, "worker.d/a.md", "A")
+	writePrompt(t, home, "worker-repo.d/a.md", "R")
+
+	with, err := prompts.Role("worker", home, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, _ := prompts.Role("worker", home, false)
+
+	if with != "common\n\nA\n\nrepo\n\nR" || without != "common\n\nA" {
+		t.Fatalf("with %q, without %q", with, without)
+	}
+}
+
+func TestForFailsOnAnUnreadableAddition(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "main.d/a.md", "x")
+	if err := os.Chmod(filepath.Join(home, "prompts", "main.d", "a.md"), 0); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := prompts.For("main", home); err == nil {
+		t.Fatal("want an error")
+	}
+}
+
 func TestForRejectsAnUnknownKind(t *testing.T) {
 	if _, err := prompts.For("../x", t.TempDir()); err == nil {
 		t.Fatal("want an error")

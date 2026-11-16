@@ -34,12 +34,22 @@ func Role(kind, home string, hasRepo bool) (string, error) {
 
 // For returns the prompt for a kind of agent: "main", "worker", "reviewer" or WorkerRepoPart.
 // A file <home>/prompts/<kind>.md replaces the default.
+// The files ending in .md in <home>/prompts/<kind>.d/ follow in name order, each after a blank line.
 func For(kind, home string) (string, error) {
 	switch kind {
 	case "main", "worker", "reviewer", WorkerRepoPart:
 	default:
 		return "", fmt.Errorf("prompts: unknown kind %q", kind)
 	}
+	text, err := base(kind, home)
+	if err != nil {
+		return "", err
+	}
+	return appendAdditions(text, filepath.Join(home, "prompts", kind+".d"))
+}
+
+// base returns the replacing file of a kind, or the embedded default.
+func base(kind, home string) (string, error) {
 	b, err := os.ReadFile(filepath.Join(home, "prompts", kind+".md"))
 	if err == nil {
 		return string(b), nil
@@ -52,4 +62,26 @@ func For(kind, home string) (string, error) {
 		return "", fmt.Errorf("prompts: %w", err)
 	}
 	return string(d), nil
+}
+
+// appendAdditions appends each .md file of dir to text, in name order. A missing dir adds nothing.
+func appendAdditions(text, dir string) (string, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return text, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("prompts: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return "", fmt.Errorf("prompts: %w", err)
+		}
+		text = strings.TrimRight(text, "\n") + "\n\n" + string(b)
+	}
+	return text, nil
 }

@@ -193,7 +193,7 @@ sfy does not ask the multiplexer whether an agent waits for input. The provider 
 
 A use of sfy extends it at these points, without changes to the core:
 
-- **Prompts.** A prompt file in the state folder's `prompts/` replaces the default prompt for that kind of agent. For a worker, `worker.md` replaces the common part and `worker-repo.md` replaces the repo part.
+- **Prompts.** A prompt file in the state folder's `prompts/` replaces the default prompt for that kind of agent. For a worker, `worker.md` replaces the common part and `worker-repo.md` replaces the repo part. The files that end in `.md` in `prompts/<kind>.d/` append to that kind's prompt in name order, each after a blank line, to the default and to a replacing file alike. A missing folder adds nothing, a file that cannot be read is an error, and other files are skipped. The main agent's recorded prompt includes the additions.
 - **Task files.** A task file may carry extra sections. sfy passes the whole file to the worker and the reviewer.
 - **Programs.** Any program can create, list and cancel tasks through the CLI.
 - **Providers.** A new provider is a new adapter that implements the Go interface.
