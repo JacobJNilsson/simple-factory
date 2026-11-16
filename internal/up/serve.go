@@ -127,6 +127,10 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 			_, _ = fmt.Fprintf(log, "%s warning: %v\n", time.Now().Format(time.RFC3339), err)
 		}
 	}()
+	// Sessions that started under an older sfy have no token, and restart keeps them running.
+	if err := claude.IssueLegacyTokens(p.home); err != nil {
+		return err
+	}
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
