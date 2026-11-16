@@ -12,7 +12,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
 
-// Launcher is the engine's Launcher with the calls that sfy up needs for the main agent.
+// Launcher is the engine's Launcher with the calls that starting sfy needs for the main agent.
 type Launcher interface {
 	engine.Launcher
 	// ShowMain shows the main agent's session again with the show_main template.
