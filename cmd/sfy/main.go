@@ -45,6 +45,13 @@ func (a app) run(args []string) int {
 		}
 		return a.report(a.start())
 	}
+	// The environment can be faked, so the allow rules of the settings are the real barrier. This check backs them up.
+	switch args[0] {
+	case "run", "serve", "register", "restart":
+		if cli.Restricted(a.getenv) {
+			return a.report(cli.ErrRestricted)
+		}
+	}
 	switch args[0] {
 	case "--version", "help", "--help", "serve":
 		if len(args) > 1 {
