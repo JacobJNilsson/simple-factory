@@ -12,6 +12,13 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
 
+// Launcher is the engine's Launcher with the calls that sfy up needs for the main agent.
+type Launcher interface {
+	engine.Launcher
+	// ShowMain shows the main agent's session again with the show_main template.
+	ShowMain(name string) error
+}
+
 type launcher struct {
 	mux.Mux
 	p   provider.Provider
@@ -20,8 +27,8 @@ type launcher struct {
 
 // New returns a Launcher that starts the provider's command in a multiplexer session.
 // A failed show goes to log, which may be nil.
-// CONTRACT: the engine takes a Launcher, so New returns the interface.
-func New(m mux.Mux, p provider.Provider, log io.Writer) engine.Launcher {
+// CONTRACT: callers take an interface, so New returns it.
+func New(m mux.Mux, p provider.Provider, log io.Writer) Launcher {
 	return launcher{Mux: m, p: p, log: log}
 }
 

@@ -46,7 +46,11 @@ func restart(o options) error {
 	if err := reportList(o.out, "Stopped", stopped); err != nil {
 		return err
 	}
-	if err := run(o); err != nil {
+	started, _, err := o.ensure()
+	if err != nil {
+		return err
+	}
+	if err := report(o.out, started); err != nil {
 		return err
 	}
 	if !mainAlive {
