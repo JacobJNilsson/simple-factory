@@ -174,7 +174,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 		},
 	}
 	if spec.Kind != "main" {
-		if err := a.sandboxFor(&s); err != nil {
+		if err := a.sandboxFor(&s, a.cfg.SessionRules[spec.Kind].ExcludedCommands); err != nil {
 			return "", err
 		}
 	}
@@ -213,9 +213,9 @@ func marshalSettings(s settings, extra config.SessionValues) ([]byte, error) {
 	return json.MarshalIndent(merged, "", "  ")
 }
 
-// sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands.
+// sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands. The excluded patterns run outside it.
 // A Linux sandbox ignores a write path that does not exist, so each one is created first.
-func (a adapter) sandboxFor(s *settings) error {
+func (a adapter) sandboxFor(s *settings, excluded []string) error {
 	for _, p := range a.cfg.AllowWrite {
 		dir, err := expandHome(p)
 		if err != nil {
@@ -232,7 +232,7 @@ func (a adapter) sandboxFor(s *settings) error {
 			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
 		},
 	}
-	// gh and git push fail inside the macOS sandbox, and the sandbox blocks the sfy socket. The allow rules keep the excluded calls narrow.
+	// git push fails inside the macOS sandbox, and the sandbox blocks the sfy socket. The allow rules keep the excluded calls narrow.
 	s.Sandbox.WeakerNetworkIsolation = a.goos == "darwin"
 	if a.goos == "darwin" {
 		// Go tests bind sockets in their temp folder. allowUnixSockets takes a folder as a prefix and stays narrower than allowAllUnixSockets.
@@ -240,7 +240,7 @@ func (a adapter) sandboxFor(s *settings) error {
 			fmt.Sprintf("/tmp/claude-%d", a.uid), fmt.Sprintf("/private/tmp/claude-%d", a.uid),
 		}}
 	}
-	s.Sandbox.ExcludedCommands = []string{"gh *", "git push *", "sfy *"}
+	s.Sandbox.ExcludedCommands = append([]string{"git push *", "sfy *"}, excluded...)
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
 	return nil
@@ -287,17 +287,10 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 			rules = append(rules, "Bash("+c+" *)")
 		}
 	case "worker":
-		// gh posts as the operator, so only read and create commands pass, and edit passes for the body and the title only.
-		// Merge, close, comment and review do not.
-		rules = append(rules,
-			"Bash(gh pr create *)", "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)",
-			"Bash(gh pr edit * --body-file *)", "Bash(gh pr edit * --title *)",
-			"Bash(gh issue create *)", "Bash(gh issue view *)", "Bash(gh issue list *)", "Bash(gh repo view *)")
 		// A rule with no wildcard matches that command only, so no second branch, force flag or refspec passes.
 		rules = append(rules, "Bash(git push -u origin "+spec.Branch+")", "Bash(git push --force-with-lease origin "+spec.Branch+")")
-	case "reviewer":
-		rules = append(rules, "Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)")
 	}
+	rules = append(rules, a.cfg.SessionRules[spec.Kind].Allow...)
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
 	rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
 	if spec.Kind == "main" {
@@ -316,14 +309,6 @@ func (a adapter) mainReads() []string {
 // A deny rule beats the auto-approval. It cannot match the allowed exact pushes, which have no option before push.
 const pushWithGitOptions = "Bash(git -* push*)"
 
-// prEditStateFlags lists the gh pr edit patterns that a worker may not run. A wildcard allow rule such as
-// gh pr edit * --body-file * also matches a call that adds a state flag, and a deny rule beats an allow rule.
-var prEditStateFlags = []string{
-	"Bash(gh pr edit *--add-*)", "Bash(gh pr edit *--remove-*)", "Bash(gh pr edit *--base*)", "Bash(gh pr edit * -B*)",
-	"Bash(gh pr edit *--milestone*)", "Bash(gh pr edit * -m*)", "Bash(gh pr edit *--reviewer*)",
-	"Bash(gh pr edit *--label*)", "Bash(gh pr edit *--assignee*)", "Bash(gh pr edit *--project*)",
-}
-
 // deny returns the deny rules of a session. The main agent talks to the operator, so it denies nothing.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
@@ -332,7 +317,6 @@ func deny(spec engine.SessionSpec) []string {
 		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":
 		rules = append(rules, "AskUserQuestion", pushWithGitOptions)
-		rules = append(rules, prEditStateFlags...)
 		for _, p := range spec.Protected {
 			p = rulePath(p)
 			// Claude Code applies an Edit rule to Write and NotebookEdit too. The second rule covers a folder's files.

@@ -480,7 +480,13 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 	if err := e.st.AddVerdict(t.ID, t.Round, true, req.Body); err != nil {
 		return "", err
 	}
+	remote := false
 	if t.Repo != "" {
+		if remote, err = e.w.HasRemote(t); err != nil {
+			return "", err
+		}
+	}
+	if remote {
 		// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
 		t.Pushing = true
 		if err := e.save(t); err != nil {
@@ -489,7 +495,7 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 		note := fmt.Sprintf("Review round %d of task %s passed. Push the branch now, then run sfy report pushed <summary>.", t.Round, t.ID)
 		return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(req.Caller.Agent))
 	}
-	return "", e.approve(t, req.Caller.Agent)
+	return "", e.approve(t, req.Caller.Agent, false)
 }
 
 // reportPushed lets the worker of a passed review say that it pushed. The task is approved only now.
@@ -502,18 +508,22 @@ func (e *Engine) reportPushed(req protocol.Request) (string, error) {
 		return "", fmt.Errorf("task %s waits for no push, so sfy report pushed has nothing to report", t.ID)
 	}
 	t.Pushing = false
-	return "", e.approve(t, req.Caller.Agent)
+	return "", e.approve(t, req.Caller.Agent, true)
 }
 
-// approve moves a task to approved and tells main to merge it.
-func (e *Engine) approve(t task.Task, from string) error {
+// approve moves a task to approved and tells main to integrate it. pushed is true when the worker pushed the branch.
+func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 	t.State = task.Approved
 	if err := e.save(t); err != nil {
 		return err
 	}
-	note := fmt.Sprintf("Task %s is approved. It has no pull request. Check its result, then run: sfy task complete %s", t.ID, t.ID)
+	note := fmt.Sprintf("Task %s is approved. It has no repo. Check its result, then run: sfy task complete %s", t.ID, t.ID)
 	if t.Repo != "" {
-		note = fmt.Sprintf("Task %s is approved. Merge the pull request of branch %s, then run: sfy task complete %s", t.ID, e.w.Branch(t.ID), t.ID)
+		where := "The repo has no remote, so the branch exists only locally."
+		if pushed {
+			where = "The repo has a remote, and the worker pushed the branch."
+		}
+		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s into the default branch with plain git, then run: sfy task complete %s", t.ID, where, e.w.Branch(t.ID), e.w.RepoFolder(t.Repo), t.ID)
 	}
 	if err := e.message("main", from, note); err != nil {
 		return err
@@ -523,7 +533,7 @@ func (e *Engine) approve(t task.Task, from string) error {
 }
 
 // holdPush tells the worker of a task with a repo when to push.
-const holdPush = "Commit the work on the task branch and do not push. sfy tells you to push after the review passes."
+const holdPush = "Commit the work on the task branch and do not push. When the repo has a remote, sfy tells you to push after the review passes."
 
 func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	t, err := e.reviewing(req)

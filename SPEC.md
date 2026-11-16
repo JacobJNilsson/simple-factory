@@ -12,7 +12,7 @@ This spec covers version 0.
 - The agent provider sits behind an adapter. Version 0 has one adapter, for Claude Code. The design allows more providers, and several in one sfy process.
 - A multiplexer is a set of command templates in `config.toml`, with no Go code. Version 0 ships a set for tmux. A new multiplexer needs only a new set. `docs/herdr.md` holds an example set for Herdr.
 - The core knows nothing about any one kind of work. The extension points below add that.
-- Version 0 has no web console, cost tracking, remote agents or trust rules. sfy merges nothing itself. The main agent merges through the provider's tools.
+- Version 0 has no web console, cost tracking, remote agents or trust rules. sfy integrates nothing itself. The main agent integrates an approved branch with plain git. sfy needs no other tool than git for this.
 
 ## Agents
 
@@ -38,7 +38,7 @@ sfy enforces the rule for workers and reviewers:
 
 sfy ships a default prompt for each kind of agent: main, worker and reviewer. The prompt tells the agent which `sfy` commands it uses.
 
-The worker prompt has two parts. The common part holds the rules for every task: the task file, the workspace, tools, protected paths, the `sfy report` commands, checks, the summary, failed reviews and the report that ends each turn. A worker on a task with no repo delivers its result as files in the workspace and leaves them there. The repo part holds the rules for git: commits, the task branch, push forms, the push after a passed review, `sfy report pushed` and pull requests. sfy appends the repo part after the common part only when the task file has a `## Repo` section. The common part never mentions git steps. The main and reviewer prompts have no parts.
+The worker prompt has two parts. The common part holds the rules for every task: the task file, the workspace, tools, protected paths, the `sfy report` commands, checks, the summary, failed reviews and the report that ends each turn. A worker on a task with no repo delivers its result as files in the workspace and leaves them there. The repo part holds the rules for git: commits, the task branch, push forms, the push after a passed review and `sfy report pushed`. sfy appends the repo part after the common part only when the task file has a `## Repo` section. The common part never mentions git steps. The main and reviewer prompts have no parts.
 
 ## Tasks
 
@@ -65,20 +65,21 @@ A task moves through these states:
 - A task that the main agent creates starts in `queued`.
 - sfy starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
-- When the reviewer's verdict is `pass` on a task with no repo, the task moves to `approved`. On a task with a repo, it moves to `approved` after the worker reports that it pushed, as the push rules below describe. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent: "Task <id> is approved. Merge the pull request of branch <branch>, then run: sfy task complete <id>". A task with no repo gets a note that says it has no pull request.. A task without a pull request, for example a report, is completed the same way. The main agent checks the result and runs the command.
+- When the reviewer's verdict is `pass` on a task with no repo, the task moves to `approved`. On a task with a repo that has a remote, it moves to `approved` after the worker reports that it pushed, as the push rules below describe. On a task with a repo that has no remote, it moves to `approved` at once. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent. For a repo task the note names the branch, the repo folder, and whether the repo has a remote. For a task with no repo the note says so, and the main agent checks the result and runs `sfy task complete <id>`.
+- The main agent integrates an approved branch of a repo task with plain git, in the repo folder. If the repo has a remote, it runs `git fetch`. It rebases the task branch onto the default branch and fast-forwards the default branch to the task branch with `git merge --ff-only`. If the repo has a remote, it pushes the default branch. It then runs `sfy task complete <id>`. If the rebase conflicts or the push is rejected, it tells the operator, aborts a stopped rebase, and forces nothing.
+- The `## Repo` section of a task is a URL or an absolute path to a local git repo, which may have no remote. A URL gets a clone in the state folder. A local path is used as it is. In both cases the worker gets a worktree on a new branch. sfy finds out whether the repo has a remote with `git remote`.
 - `sfy task feedback` sends feedback on a task in any state to the task's worker and records it on the task. The round and the `review_rounds` limit stay as they are, and the feedback does not count as a failed review. What happens depends on the state:
   - In `new` and `queued`, the state stays. The first message of the task's worker holds the feedback after the task file.
   - In `working` and `feedback`, the state stays. sfy sends the feedback to the running worker as a message.
   - In `review`, sfy ends the running reviewer without a verdict and sends the feedback to the worker. The task moves to `feedback`.
   - In `escalated`, the state stays. When `sfy task resume` returns the task, its worker gets the feedback with the note to go on. A task that resumes in `new` or `queued` gives it to its first worker.
-  - In `approved`, `done` and `cancelled`, the task reopens and moves to `queued`. An archived task stops being archived. When a worker slot is free, sfy starts a new worker in the task's workspace. If sfy removed the workspace, sfy creates it again from the task's branch, or as a new empty folder for a task with no repo. The worker's first message holds the task file and the feedback. It says that the workspace and branch hold the earlier work, and that the branch may already have a pull request.
+  - In `approved`, `done` and `cancelled`, the task reopens and moves to `queued`. An archived task stops being archived. When a worker slot is free, sfy starts a new worker in the task's workspace. If sfy removed the workspace, sfy creates it again from the task's branch, or as a new empty folder for a task with no repo. The worker's first message holds the task file and the feedback. It says that the workspace and branch hold the earlier work, and that the branch may already be pushed or integrated.
   - The worker then goes through the normal flow. The next reviewer gets the feedback text too and checks that the worker addressed it.
-- A task with a repo pushes only after a review passes, in every round. A task with no repo has nothing to push and moves to `approved` on a passed review.
-  - In every round, the worker commits its work on the task branch and does not push. It reports `done`, and a reviewer checks the committed branch, not a pull request. A failed review goes back to the worker as usual.
-  - When the review passes, sfy keeps the worker running and tells it to push now and to open the pull request when the task file asks for one. The task stays in `review` until the worker runs `sfy report pushed`. Then the task moves to `approved`, sfy tells the main agent, and sfy ends the sessions.
-  - The worker pushes to the branch and opens no second pull request while the task's pull request is open. When the pull request is merged or closed, or the task never had one, the worker opens a new one from the same branch.
+- A task with a repo that has a remote pushes only after a review passes, in every round. A task with no repo, and a task on a repo with no remote, has nothing to push and moves to `approved` on a passed review.
+  - In every round, the worker commits its work on the task branch and does not push. It reports `done`, and a reviewer checks the committed branch. A failed review goes back to the worker as usual.
+  - When the review passes, sfy keeps the worker running and tells it to push now. The task stays in `review` until the worker runs `sfy report pushed`. Then the task moves to `approved`, sfy tells the main agent, and sfy ends the sessions.
   - Feedback that arrives while the worker waits to push ends the wait. The task moves to `feedback`.
-- When the main agent runs `sfy task complete`, the task moves to `done`. The main agent merges, and a merge completes a task.
+- When the main agent runs `sfy task complete`, the task moves to `done`. The main agent integrates the branch first, and the integration completes a task.
 - When the verdict is `fail`, sfy sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. sfy first sends the verdict to the worker. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
 - When a task is `done` or `cancelled`, sfy ends any worker and reviewer sessions that still run. It then checks the workspace. A clean worktree, found with `git status --porcelain`, or an empty folder is removed, and the branch stays. A worktree with uncommitted changes or untracked files stays, and so does a folder with files. sfy then tells the main agent that the workspace still holds work, and where it is.
@@ -160,7 +161,8 @@ A command that an agent kind may not run fails with an error that names the comm
 - A worker or a reviewer never waits on a permission prompt. sfy's permission hook denies the call, gives the agent a reason, and records the denial in `sfy.log`.
 - Workers and reviewers get a clean environment. It holds the `SFY_*` variables, the basic shell variables, the provider's own variables and the names in `pass_env`.
 - Workers and reviewers run their sandboxed commands without an allow list. The `allow` setting is the main agent's allow list.
-- Workers may read and create pull requests and issues through gh, and push only the task branch. They may edit the body and the title of a pull request with `gh pr edit`, and no other property such as reviewers, base branch, labels or milestone. They may not merge, close, comment or review. Reviewers may view, diff and check pull requests. Reviewers may not push. These commands run outside the sandbox.
+- Workers may push only the task branch, with the two exact push forms. Reviewers may not push. Pushes run outside the sandbox. The main agent runs git through its allow list.
+- Extra rules for one kind of session come from `[session_rules.<kind>]` in `config.toml`. Its `allow` list adds permission rules to that kind's allow rules, and its `excluded_commands` list adds command patterns that run outside the sandbox. sfy adds no rule for any other tool by itself.
 - Workers and reviewers run `sfy` commands outside the sandbox, because the sandbox blocks the sfy socket. They pass text to sfy only on standard input, so sfy reads no file for them.
 - The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
 - Deny rules protect the paths that the task file names, in every mode.
@@ -181,10 +183,11 @@ A command that an agent kind may not run fails with an error that names the comm
 | `models.main` | `opus` | The main agent's model. |
 | `models.worker` | `sonnet` | The workers' model. |
 | `models.reviewer` | `sonnet` | The reviewers' model. |
-| `allow` | git, gh, gofmt, build, test | The main agent's allow list. |
-| `deny_read` | `~/.ssh`, `~/.aws`, `~/.config/gh`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
+| `allow` | git, gofmt, build, test | The main agent's allow list. |
+| `deny_read` | `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
 | `allow_write` | The user cache folder and `~/go/pkg/mod`. On macOS also the per-user temp folder from `getconf DARWIN_USER_TEMP_DIR`, without its trailing slash | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
+| `session_rules.main`, `.worker`, `.reviewer` | none | Tables with an `allow` list and an `excluded_commands` list. sfy adds them to that kind's permission allow rules and sandbox excluded commands. |
 | `session_settings.main`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy adds them at the top level of that kind's settings file. |
 
 ### Session settings
@@ -224,7 +227,7 @@ sfy does not ask the multiplexer whether an agent waits for input. The provider 
 
 A use of sfy extends it at these points, without changes to the core:
 
-- **Prompts.** A prompt file in the state folder's `prompts/` replaces the default prompt for that kind of agent. For a worker, `worker.md` replaces the common part and `worker-repo.md` replaces the repo part. The files that end in `.md` in `prompts/<kind>.d/` append to that kind's prompt in name order, each after a blank line, to the default and to a replacing file alike. A missing folder adds nothing, a file that cannot be read is an error, and other files are skipped. The main agent's recorded prompt includes the additions.
+- **Prompts.** A prompt file in the state folder's `prompts/` replaces the default prompt for that kind of agent. For a worker, `worker.md` replaces the common part and `worker-repo.md` replaces the repo part. The kinds are `main`, `worker`, `reviewer` and `worker-repo`. The files that end in `.md` in `prompts/<kind>.d/` append to that kind's prompt in name order, each after a blank line, to the default and to a replacing file alike. A missing folder adds nothing, a file that cannot be read is an error, and other files are skipped. The main agent's recorded prompt includes the additions.
 - **Task files.** A task file may carry extra sections. sfy passes the whole file to the worker and the reviewer.
 - **Programs.** Any program can create, list and cancel tasks through the CLI.
 - **Providers.** A new provider is a new adapter that implements the Go interface.

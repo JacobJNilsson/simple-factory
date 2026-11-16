@@ -253,9 +253,33 @@ func TestWorkerPromptWithARepoHasBothParts(t *testing.T) {
 	if !strings.HasPrefix(text, strings.TrimRight(base, "\n")) {
 		t.Error("repo prompt does not start with the common part")
 	}
-	for _, want := range []string{"git push -u origin", "`sfy report pushed", "gh pr create"} {
+	for _, want := range []string{"git push -u origin", "`sfy report pushed", "no remote"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("repo prompt lacks %q", want)
+		}
+	}
+}
+
+func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
+	for _, kind := range []string{"main", "worker", "reviewer", prompts.WorkerRepoPart} {
+		text, err := prompts.For(kind, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if regexp.MustCompile(`(?i)\bgh\b|pull request`).MatchString(text) {
+			t.Errorf("%s prompt names gh or pull requests", kind)
+		}
+	}
+}
+
+func TestMainPromptDescribesThePlainGitIntegration(t *testing.T) {
+	text, err := prompts.For("main", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"git fetch", "Rebase the task branch", "--ff-only", "push the default branch", "no remote"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("main prompt lacks %q", want)
 		}
 	}
 }

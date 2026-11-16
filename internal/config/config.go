@@ -42,6 +42,16 @@ type Config struct {
 	// SessionSettings holds extra top-level keys for each session kind's provider settings file.
 	// The keys are the provider's own, so sfy copies the values without a check.
 	SessionSettings map[string]SessionValues `toml:"session_settings"`
+	// SessionRules holds extra permission rules for each session kind.
+	SessionRules map[string]SessionRule `toml:"session_rules"`
+}
+
+// SessionRule holds the extra rules of one session kind.
+type SessionRule struct {
+	// Allow lists permission rules that sfy adds to the kind's allow rules, for example Bash(git fetch *).
+	Allow []string `toml:"allow"`
+	// ExcludedCommands lists command patterns that a sandboxed session runs outside the sandbox.
+	ExcludedCommands []string `toml:"excluded_commands"`
 }
 
 // SessionValues holds the extra keys of one session kind. Each value is any TOML value.
@@ -56,7 +66,7 @@ type SessionSettingsError struct {
 
 func (e *SessionSettingsError) Error() string {
 	if e.Key == "" {
-		return fmt.Sprintf("config: unknown session kind %q in session_settings", e.Kind)
+		return fmt.Sprintf("config: unknown session kind %q", e.Kind)
 	}
 	return fmt.Sprintf("config: session_settings.%s.%s is reserved, because sfy writes %s itself", e.Kind, e.Key, e.Key)
 }
@@ -104,9 +114,9 @@ func defaults(userTempDir func() (string, error)) Config {
 		Provider:      "claude",
 		Multiplexer:   "tmux",
 		Models:        Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
-		Allow:         []string{"git", "gh", "make", "go", "gofmt"},
+		Allow:         []string{"git", "make", "go", "gofmt"},
 		DenyRead: []string{
-			"~/.ssh", "~/.aws", "~/.config/gh", "~/.gnupg",
+			"~/.ssh", "~/.aws", "~/.gnupg",
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
 		},
 		AllowWrite: defaultAllowWrite(runtime.GOOS, userTempDir),
@@ -167,6 +177,11 @@ func load(home string, userTempDir func() (string, error)) (Config, error) {
 	}
 	if err := validateSessionSettings(c.SessionSettings); err != nil {
 		return Config{}, err
+	}
+	for _, kind := range slices.Sorted(maps.Keys(c.SessionRules)) {
+		if !slices.Contains(sessionKinds, kind) {
+			return Config{}, &SessionSettingsError{Kind: kind}
+		}
 	}
 	return c, nil
 }

@@ -44,9 +44,9 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		Provider:      "claude",
 		Multiplexer:   "tmux",
 		Models:        config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
-		Allow:         []string{"git", "gh", "make", "go", "gofmt"},
+		Allow:         []string{"git", "make", "go", "gofmt"},
 		DenyRead: []string{
-			"~/.ssh", "~/.aws", "~/.config/gh", "~/.gnupg",
+			"~/.ssh", "~/.aws", "~/.gnupg",
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
 		},
 		AllowWrite: []string{wantCache, "~/go/pkg/mod"},
@@ -174,6 +174,31 @@ func TestLoadRefusesAReservedSessionSettingsKeyNamingIt(t *testing.T) {
 		if !errors.As(err, &bad) || bad.Kind != "worker" || bad.Key != key {
 			t.Errorf("%s: want a SessionSettingsError naming the key, got %v", key, err)
 		}
+	}
+}
+
+func TestLoadReadsSessionRulesPerKind(t *testing.T) {
+	home := writeConfig(t, "[session_rules.worker]\nallow = [\"Bash(tool open *)\"]\nexcluded_commands = [\"tool *\"]\n")
+
+	c, err := config.Load(home)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := c.SessionRules["worker"]
+	if len(got.Allow) != 1 || got.Allow[0] != "Bash(tool open *)" || len(got.ExcludedCommands) != 1 || got.ExcludedCommands[0] != "tool *" {
+		t.Errorf("worker rules: %+v", got)
+	}
+}
+
+func TestLoadRefusesAnUnknownSessionRulesKind(t *testing.T) {
+	home := writeConfig(t, "[session_rules.workr]\nallow = [\"x\"]\n")
+
+	_, err := config.Load(home)
+
+	var bad *config.SessionSettingsError
+	if !errors.As(err, &bad) || bad.Kind != "workr" {
+		t.Fatalf("want a SessionSettingsError naming the kind, got %v", err)
 	}
 }
 
