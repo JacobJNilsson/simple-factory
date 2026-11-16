@@ -1331,6 +1331,23 @@ func TestThreeFailedStartsEscalateTheTask(t *testing.T) {
 	}
 }
 
+func TestAFailedPreflightEscalatesAtOnceWithTheFix(t *testing.T) {
+	v := newEnv(t)
+	v.queue(t, 1)
+	v.l.startErr = &engine.PreflightError{Msg: "install it. Run: sudo apt install bubblewrap socat"}
+
+	_ = v.e.Tick()
+
+	v.statusShows(t, "t1", "escalated")
+	msgs := v.inbox(t, "main")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "sudo apt install bubblewrap socat") || !strings.Contains(msgs[0].Body, "sfy task resume t1") {
+		t.Fatalf("got %+v", msgs)
+	}
+	if len(v.l.notified) != 1 || !strings.Contains(v.l.notified[0], "sudo apt install") {
+		t.Fatalf("operator not told: %q", v.l.notified)
+	}
+}
+
 func TestASuccessfulStartResetsTheCountOfFailedStarts(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 1)

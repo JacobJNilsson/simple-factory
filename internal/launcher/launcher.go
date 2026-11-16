@@ -79,6 +79,9 @@ func (l launcher) StartMain(spec engine.SessionSpec) (bool, error) {
 // It starts no session and runs no show template.
 func (l launcher) MainCommand(spec engine.SessionSpec) ([]string, bool, error) {
 	// The provider records a new conversation in Command, so it must answer Resumes first.
+	if err := l.p.Preflight(spec.Kind); err != nil {
+		return nil, false, err
+	}
 	resumed := !spec.Fresh && l.p.Resumes(spec)
 	argv, err := l.p.Command(spec)
 	return argv, resumed, err
@@ -86,6 +89,9 @@ func (l launcher) MainCommand(spec engine.SessionSpec) ([]string, bool, error) {
 
 // begin runs the provider's command in a new session and shows the session.
 func (l launcher) begin(spec engine.SessionSpec) error {
+	if err := l.p.Preflight(spec.Kind); err != nil {
+		return err
+	}
 	argv, err := l.p.Command(spec)
 	if err != nil {
 		return err

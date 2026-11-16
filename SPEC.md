@@ -24,6 +24,8 @@ sfy runs three kinds of agent session. Each session runs in its own terminal. sf
 
 sfy starts each session with an identity in the environment: `SFY_AGENT` holds the session's name, and `SFY_TASK` holds the task id for workers and reviewers. The CLI reads these to know who is calling.
 
+Before it starts any session, sfy asks the provider to check that the session can run. The Claude provider checks that it finds `claude` on PATH or at `~/.local/bin/claude`, and then runs `~/.local/bin/claude` by that path when PATH lacks it. On Linux, for workers and reviewers, it also checks that `bwrap` and `socat` are on PATH and that `bwrap --unshare-user --unshare-net --ro-bind / / true` succeeds. macOS skips the sandbox check, and the main agent runs without the sandbox. A failed check starts no session. The error names the cause and the fix: the apt command or the AppArmor profile. A task whose worker fails this check moves to `escalated` at once, because a retry cannot help, and sfy tells the main agent and the operator. A failed reviewer start returns the error to the worker's `sfy report done`. The sfy process also logs a failed check to `sfy.log` when it starts.
+
 Session names are `main`, `worker-<task>` and `review-<task>-<round>`.
 
 Only the main agent asks the operator questions. A worker or a reviewer with a question runs `sfy report blocked <question>`, and the main agent answers it or escalates it. So a worker or a reviewer that waits at its prompt always waits for a message.
