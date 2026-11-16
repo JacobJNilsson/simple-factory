@@ -118,6 +118,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	}
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
+	eng.SetRegistration(registration.Folder{Home: p.home})
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
 }
 

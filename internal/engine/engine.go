@@ -44,6 +44,13 @@ type Launcher interface {
 	TrustWarning(dir string) string
 }
 
+// Registration tells whether an agent session registered itself as the main agent, which sfy did not start.
+type Registration interface {
+	Registered() bool
+	// Clear forgets the registration and the recorded address.
+	Clear() error
+}
+
 // Workspaces creates and removes the folder of a task.
 type Workspaces interface {
 	Create(task.Task) (dir string, err error)
@@ -73,6 +80,7 @@ type Engine struct {
 	c   Clock
 
 	log     io.Writer
+	reg     Registration
 	mu      sync.Mutex
 	counter int
 	// agents holds what sfy knows of each session, in memory only.
@@ -117,6 +125,16 @@ func (e *Engine) SetLog(w io.Writer) {
 	defer e.mu.Unlock()
 	e.log = w
 }
+
+// SetRegistration tells the engine where to find the registration of the main agent. Without it, no agent counts as registered.
+func (e *Engine) SetRegistration(r Registration) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.reg = r
+}
+
+// registeredMain reports whether the main agent is a session that registered itself.
+func (e *Engine) registeredMain() bool { return e.reg != nil && e.reg.Registered() }
 
 // logf writes one timestamped line to the log, when one is set.
 func (e *Engine) logf(format string, args ...any) {
