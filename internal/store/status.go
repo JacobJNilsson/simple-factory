@@ -33,16 +33,22 @@ func RenderStatus(tasks []task.Task) string {
 	})
 
 	var b strings.Builder
-	b.WriteString("# sfy status\n\n| Id | Title | State | Round | Agents | Last change |\n|---|---|---|---|---|---|\n")
+	fmt.Fprintf(&b, "# sfy status\n\n| Id | Title | State | Round | Agents | Last change (%s) |\n|---|---|---|---|---|---|\n", zoneName())
 	for _, t := range sorted {
 		changed := "-"
 		if !t.Updated.IsZero() {
-			changed = t.Updated.UTC().Format(time.RFC3339)
+			changed = t.Updated.In(time.Local).Format("2006-01-02 15:04")
 		}
 		title := strings.ReplaceAll(t.Title, "|", `\|`)
 		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, t.Label(tasks), t.Round, agents(t), changed)
 	}
 	return b.String()
+}
+
+// zoneName returns the abbreviation of the local time zone as it applies now.
+func zoneName() string {
+	name, _ := time.Now().In(time.Local).Zone()
+	return name
 }
 
 // agents names the sessions that the spec's session names give a task in its state.
