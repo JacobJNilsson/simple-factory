@@ -32,6 +32,9 @@ type Config struct {
 	Multiplexer   string   `toml:"multiplexer"`
 	Models        Models   `toml:"models"`
 	Allow         []string `toml:"allow"`
+	// NoMerge stops the main agent from integrating approved branches. The operator merges them by hand.
+	// A .sfy.toml file sets it for one repo or for the repos below one folder.
+	NoMerge bool `toml:"no_merge"`
 	// DenyRead and AllowWrite are the sandbox paths for workers and reviewers. An empty list stays empty.
 	DenyRead   []string `toml:"deny_read"`
 	AllowWrite []string `toml:"allow_write"`

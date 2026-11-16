@@ -129,6 +129,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	}()
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
+	eng.SetRepoConfig(repoConfig(p.cfg, env))
 	eng.SetRegistration(registration.Folder{Home: p.home})
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
 }
@@ -208,4 +209,11 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
 	}, nil
+}
+
+// repoConfig returns the lookup of the per-repo config: the .sfy.toml files from a repo folder up to the user's home folder, on top of cfg.
+func repoConfig(cfg config.Config, env func(string) string) func(folder string) (config.Config, error) {
+	return func(folder string) (config.Config, error) {
+		return config.ForRepo(cfg, env("HOME"), folder)
+	}
 }

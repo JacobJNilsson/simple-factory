@@ -153,7 +153,7 @@ func TestForRejectsAnUnknownKind(t *testing.T) {
 var allowed = map[string][]string{
 	"worker":   {"report done", "report blocked", "report progress", "report pushed", "inbox", "task list", "task show", "status"},
 	"reviewer": {"verdict pass", "verdict fail", "report blocked", "inbox", "task list", "task show", "status"},
-	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task feedback", "task complete", "task archive",
+	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task feedback", "task complete", "task integrate", "task archive",
 		"send", "escalate", "inbox", "status", "restart"},
 }
 
@@ -190,7 +190,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 	required := map[string][]string{
 		"worker":   {"report done", "report blocked", "report progress", "report pushed", "inbox"},
 		"reviewer": {"verdict pass", "verdict fail", "inbox"},
-		"main":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "send", "escalate", "inbox", "restart"},
+		"main":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "task integrate", "send", "escalate", "inbox", "restart"},
 	}
 	for kind, cmds := range required {
 		text, err := prompts.Role(kind, t.TempDir(), true)
@@ -272,12 +272,12 @@ func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
 	}
 }
 
-func TestMainPromptDescribesThePlainGitIntegration(t *testing.T) {
+func TestMainPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
 	text, err := prompts.For("main", t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"git fetch", "Rebase the task branch", "--ff-only", "push the default branch", "no remote"} {
+	for _, want := range []string{"sfy task integrate <id>", "Never merge, rebase or push by hand", "no-merge", ".sfy.toml", "tell the operator its name"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("main prompt lacks %q", want)
 		}

@@ -116,6 +116,9 @@ type fakeWorkspaces struct {
 	// branchErr makes NewBranch fail. branchesMade counts the names it gave out.
 	branchErr    error
 	branchesMade int
+	// integrated lists the tasks that Integrate ran for. integrateErr makes it fail.
+	integrated   []string
+	integrateErr error
 }
 
 func (f *fakeWorkspaces) HasRemote(task.Task) (bool, error) { return !f.localOnly, nil }
@@ -138,6 +141,10 @@ func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 }
 func (f *fakeWorkspaces) LegacyBranch(id string) string { return "sfy/" + id }
 func (f *fakeWorkspaces) RepoFolder(repo string) string { return "/folder/" + repo }
+func (f *fakeWorkspaces) Integrate(t task.Task) error {
+	f.integrated = append(f.integrated, t.ID)
+	return f.integrateErr
+}
 
 func (f *fakeWorkspaces) NewBranch(t task.Task) (string, error) {
 	if f.branchErr != nil {

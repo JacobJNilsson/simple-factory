@@ -61,6 +61,19 @@ preferredNotifChannel = "notifications_disabled"
 
 A table that sets `permissions`, `hooks` or `sandbox` is a config error, because sfy writes those keys itself. An unknown kind is also a config error.
 
+## Per-repo config
+
+A `.sfy.toml` file sets per-repo keys. sfy reads it in the repo folder and in each parent folder up to `$HOME`. The nearest file wins, key by key, and all of them apply on top of `~/.sfy/config.toml`. For a task whose repo is a URL, the repo folder is the clone in `repos/` of the state folder. SPEC.md describes the lookup in full.
+
+The only key so far is `no_merge`. With `no_merge = true`, `sfy task integrate` refuses, and the approval note tells the main agent to leave the branch for you. You merge it by hand, then the main agent runs `sfy task complete`. One file covers every work repo below its folder:
+
+```toml
+# ~/Developer/work/.sfy.toml
+no_merge = true
+```
+
+A key that sfy does not know, and a global-only key such as `max_workers` or `multiplexer`, is an error that names the file. The main agent's settings deny `git push`, `git merge`, `git rebase` and `gh pr merge` in every repo, so it cannot merge around the setting.
+
 ## Session rules
 
 A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `main`, `worker` and `reviewer`. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.
@@ -73,7 +86,7 @@ allow = ["Bash(<tool> pr create *)"]
 excluded_commands = ["<tool> *"]
 ```
 
-The worker instructions go in `prompts/worker-repo.d/pr.md`. They tell the worker to open the pull request after `git push`. The main agent instructions go in `prompts/main.d/pr.md`. They tell it to merge the pull request instead of the git steps of the default prompt. Replace `<tool>` with the command that talks to your hosting service.
+The worker instructions go in `prompts/worker-repo.d/pr.md`. They tell the worker to open the pull request after `git push`. The main agent instructions go in `prompts/main.d/pr.md`. They tell it to merge the pull request instead of running `sfy task integrate`. Replace `<tool>` with the command that talks to your hosting service. The main agent's settings deny `gh pr merge`, so the tool must be another command, or you merge the pull request yourself.
 
 ## Terminal tools
 
