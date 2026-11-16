@@ -173,7 +173,7 @@ func TestDeliverAppendsToTheNoteFileOfASessionWhoseHooksRan(t *testing.T) {
 func TestCommandRemovesTheNoteOfAnEarlierSessionWithTheSameName(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
-	hooksRan(t, home, "worker-t1")
+	hooksRan(t, home)
 	if ok, err := p.Deliver("worker-t1", "old note", ""); err != nil || !ok {
 		t.Fatalf("ok %v, err %v", ok, err)
 	}
