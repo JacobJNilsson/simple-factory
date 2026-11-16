@@ -25,6 +25,7 @@ const (
 
 const usage = `usage:
   sfy                  start sfy (operator only)
+  sfy up               same as sfy (operator only)
   sfy help
   sfy task new <file|->
   sfy task list [--archived]

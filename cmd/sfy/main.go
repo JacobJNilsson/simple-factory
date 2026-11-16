@@ -34,7 +34,10 @@ type app struct {
 }
 
 func (a app) run(args []string) int {
-	if len(args) == 0 {
+	if len(args) == 0 || args[0] == "up" {
+		if len(args) > 1 {
+			return cli.Misuse(a.stderr, "up takes no arguments")
+		}
 		// An agent that runs sfy by accident must not start a second sfy.
 		if a.getenv("SFY_AGENT") != "" {
 			cli.PrintUsage(a.stderr)
@@ -55,8 +58,6 @@ func (a app) run(args []string) int {
 	case "help", "--help":
 		cli.PrintUsage(a.stdout)
 		return 0
-	case "up":
-		return a.report(fmt.Errorf("sfy up is removed. Run sfy instead"))
 	case "serve":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
