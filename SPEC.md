@@ -16,7 +16,7 @@ This spec covers version 0.
 
 ## Agents
 
-sfy runs three kinds of agent session. Each session runs in its own terminal. sfy runs the multiplexer's `show` template for each session. A worker that stops at the provider's trust dialog needs the operator to attach to its session.
+sfy runs three kinds of agent session. Each session runs in its own terminal. sfy runs the multiplexer's `show_main` template for the main agent and its `show` template for each worker and reviewer. Without `show_main`, the main agent uses `show`. A worker that stops at the provider's trust dialog needs the operator to attach to its session.
 
 - **The main agent** is the one the operator talks to. It creates tasks, prepares the tasks that others create, answers workers, and cancels tasks. It escalates to the operator when it cannot decide. sfy sets no limit on what it may decide.
 - **A worker** does one task. It runs in the task's workspace and stays alive through the task's review rounds.
@@ -184,7 +184,8 @@ A template set lives under `[multiplexers.<name>]` in `config.toml`. Each templa
 | `alive` | yes | Exits 0 if session `{name}` still runs. |
 | `stop` | yes | Ends session `{name}`. |
 | `notify` | no | Draws the operator's attention to session `{name}`, with `{text}` as the message. |
-| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of every agent. A failure goes to `sfy.log` and does not fail the start. |
+| `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of a worker or reviewer, and of the main agent when `show_main` is empty. A failure goes to `sfy.log` and does not fail the start. |
+| `show_main` | no | Makes the main agent's session `{name}` visible to the operator. sfy runs it after the main agent starts, in place of `show`. An empty `show` with a `show_main` hides workers and reviewers. |
 
 sfy does not ask the multiplexer whether an agent waits for input. The provider adapter tells it.
 

@@ -50,6 +50,16 @@ func TestFromMapAcceptsOptionalShow(t *testing.T) {
 	}
 }
 
+func TestFromMapAcceptsOptionalShowMain(t *testing.T) {
+	got, err := FromMap(map[string]string{"start": "a", "send": "b", "alive": "c", "stop": "d", "show_main": "e"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ShowMain != "e" || got.Show != "" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestBuiltinRejectsUnknownName(t *testing.T) {
 	if _, ok := Builtin("nope"); ok {
 		t.Error("unknown builtin must not exist")
@@ -190,6 +200,45 @@ func TestShowFailureIsAnError(t *testing.T) {
 	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Show: "echo boom >&2; exit 1"})
 	if err := m.Show("n"); err == nil {
 		t.Fatal("want an error")
+	}
+}
+
+func showSet(show, showMain string) Templates {
+	return Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Show: show, ShowMain: showMain}
+}
+
+func TestShowMainRunsTheShowMainTemplate(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(showSet("echo show >> "+shellQuote(out), "echo show_main >> "+shellQuote(out)))
+	if err := m.ShowMain("main"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	if string(got) != "show_main\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestShowMainFallsBackToShow(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(showSet("echo show >> "+shellQuote(out), ""))
+	if err := m.ShowMain("main"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	if string(got) != "show\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestShowWithEmptyShowDoesNothingForAWorker(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(showSet("", "echo show_main >> "+shellQuote(out)))
+	if err := m.Show("worker-t1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatal("show_main ran for a worker")
 	}
 }
 

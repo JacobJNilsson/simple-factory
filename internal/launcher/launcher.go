@@ -26,6 +26,7 @@ func New(m mux.Mux, p provider.Provider, log io.Writer) engine.Launcher {
 }
 
 // Start asks the provider for the session's command, runs it in a new session, and shows the session.
+// The main agent runs the show_main template and every other agent runs the show template.
 // A failed show leaves the start successful, because the agent runs either way.
 func (l launcher) Start(spec engine.SessionSpec) error {
 	argv, err := l.p.Command(spec)
@@ -35,7 +36,11 @@ func (l launcher) Start(spec engine.SessionSpec) error {
 	if err := l.Mux.Start(spec.Name, spec.Dir, argv); err != nil {
 		return err
 	}
-	if err := l.Show(spec.Name); err != nil && l.log != nil {
+	show := l.Show
+	if spec.Kind == "main" {
+		show = l.ShowMain
+	}
+	if err := show(spec.Name); err != nil && l.log != nil {
 		_, _ = fmt.Fprintf(l.log, "%s show of %s failed: %v\n", time.Now().Format(time.RFC3339), spec.Name, err)
 	}
 	return nil
