@@ -59,5 +59,5 @@ You may run only these sfy commands.
 
 ## The task file
 
-A task file starts with a title line, `# <title>`. It has a Description section and a Goal section. It may have Repo, Check and Protected sections.
+A task file starts with a title line, `# <title>`. It has a Description section and a Goal section. It may have Repo, Check, Type and Protected sections. The Type section holds a Conventional Commits type such as `feat` or `fix`. It sets the prefix of the task's branch, which has the form `<type>/<slug>`. Without it, sfy takes the type from the title.
 The Goal states how a reviewer decides that the task is done. The Protected section lists the paths that the worker must not edit.

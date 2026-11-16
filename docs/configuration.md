@@ -45,7 +45,7 @@ Use the same `SFY_HOME` for every other sfy command that targets that folder, su
 
 The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`.
 
-The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in each worker branch, so that task is `sfy/sfy-work-t1`. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
+The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in the branch of a task that started before branches took the form `<type>/<slug>`, so that task is `sfy/sfy-work-t1`. New branches carry no prefix. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
 
 ## Session settings
 

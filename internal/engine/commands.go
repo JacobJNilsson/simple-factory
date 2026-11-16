@@ -124,7 +124,11 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	if t.Archived {
 		b.WriteString("Archived: yes\n")
 	}
-	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n\n%s", t.Round, t.Progress, t.Markdown())
+	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n", t.Round, t.Progress)
+	if branch := e.branchOf(t); branch != "" {
+		fmt.Fprintf(&b, "Branch: %s\n", branch)
+	}
+	fmt.Fprintf(&b, "\n%s", t.Markdown())
 	for _, v := range verdicts {
 		if v.Feedback {
 			fmt.Fprintf(&b, "\n## Feedback, after round %d\n\n%s\n", v.Round, v.Body)
@@ -163,7 +167,7 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	}
 	edited.State, edited.Round, edited.Source = t.State, t.Round, t.Source
 	edited.Progress, edited.Dir, edited.Pending, edited.Reopened = t.Progress, t.Dir, t.Pending, t.Reopened
-	edited.Pushing = t.Pushing
+	edited.Pushing, edited.Branch = t.Pushing, t.Branch
 	if err := e.save(edited); err != nil {
 		return "", err
 	}
@@ -553,7 +557,7 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 		if pushed {
 			where = "The repo has a remote, and the worker pushed the branch."
 		}
-		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s into the default branch with plain git, then run: sfy task complete %s", t.ID, where, e.w.Branch(t.ID), e.w.RepoFolder(t.Repo), t.ID)
+		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s into the default branch with plain git, then run: sfy task complete %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
 	}
 	if err := e.message("main", from, note); err != nil {
 		return err
