@@ -111,9 +111,37 @@ var forms = map[string]form{
 	"hook":            {words: 1, ids: 1, stdin: true},
 }
 
+// Agent returns the session name of the caller. A started agent has it in SFY_AGENT.
+// A registered agent has no such variable, so the provider names its session, and the registered id maps it to main.
+// The operator and every other session get an empty name.
+func Agent(env func(string) string) string {
+	if agent := env("SFY_AGENT"); agent != "" {
+		return agent
+	}
+	id := claude.CurrentSession(env)
+	if id == "" {
+		return ""
+	}
+	if record, ok := registration.Read(config.Home(env)); ok && record.ID == id {
+		return "main"
+	}
+	return ""
+}
+
+// WithIdentity returns env with SFY_AGENT set to the caller's session name, as Agent finds it.
+func WithIdentity(env func(string) string) func(string) string {
+	agent := Agent(env)
+	return func(key string) string {
+		if key == "SFY_AGENT" {
+			return agent
+		}
+		return env(key)
+	}
+}
+
 // parse builds the request for a command line. It reads a file argument, and reads stdin for "-" and for hooks.
 func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Request, error) {
-	req := protocol.Request{Caller: protocol.Caller{Agent: env("SFY_AGENT"), Task: env("SFY_TASK")}}
+	req := protocol.Request{Caller: protocol.Caller{Agent: Agent(env), Task: env("SFY_TASK")}}
 	name, f, ok := lookup(args)
 	if !ok {
 		return req, &usageError{"unknown or incomplete command"}
