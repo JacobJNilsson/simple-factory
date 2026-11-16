@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -21,16 +22,37 @@ func runBrew(environ []string, args ...string) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-// updater holds the two steps of sfy restart --update, so that tests replace them.
+// updater holds the steps of sfy restart --update, so that tests replace them.
 type updater struct {
+	// brewInstalled reports whether Homebrew installed the running binary.
+	brewInstalled func() bool
 	// brew runs brew with the given arguments and returns what brew printed.
 	brew func(environ []string, args ...string) ([]byte, error)
-	// rerun runs sfy restart through the upgraded binary.
-	rerun func(environ []string, stdout, stderr io.Writer) error
+	// release downloads the newest GitHub release over the running binary and returns the binary's path.
+	release func(ctx context.Context, stdout io.Writer) (string, error)
+	// rerun runs sfy restart through the upgraded binary. An empty bin means the sfy that PATH names.
+	rerun func(bin string, environ []string, stdout, stderr io.Writer) error
 }
 
-// systemUpdater runs the real brew and the real upgraded binary.
-func systemUpdater() updater { return updater{brew: runBrew, rerun: runNewBinary} }
+// systemUpdater uses the real brew, the real GitHub release and the real upgraded binary.
+// version is the running sfy version, as sfy --version prints it.
+func systemUpdater(version string) updater {
+	return updater{
+		brewInstalled: func() bool {
+			exe, err := os.Executable()
+			return err == nil && brewManaged(exe)
+		},
+		brew: runBrew,
+		release: func(ctx context.Context, stdout io.Writer) (string, error) {
+			r, err := systemRelease(version, stdout)
+			if err != nil {
+				return "", err
+			}
+			return r.target, r.update(ctx)
+		},
+		rerun: runNewBinary,
+	}
+}
 
 // brewError reports a failed brew command and carries what brew printed.
 type brewError struct {
@@ -45,12 +67,15 @@ func (e *brewError) Error() string {
 
 func (e *brewError) Unwrap() error { return e.err }
 
-// runNewBinary runs sfy restart through the sfy binary that PATH names, which is the upgraded one.
+// runNewBinary runs sfy restart through the upgraded binary, which bin names or, when bin is empty, PATH names.
 // The new binary reads and validates the config. The error is the text that it printed.
-func runNewBinary(environ []string, stdout, stderr io.Writer) error {
-	path, err := exec.LookPath("sfy")
-	if err != nil {
-		return err
+func runNewBinary(bin string, environ []string, stdout, stderr io.Writer) error {
+	path := bin
+	if path == "" {
+		var err error
+		if path, err = exec.LookPath("sfy"); err != nil {
+			return err
+		}
 	}
 	var errBuf bytes.Buffer
 	cmd := exec.CommandContext(context.Background(), path, "restart")
@@ -69,12 +94,21 @@ func runNewBinary(environ []string, stdout, stderr io.Writer) error {
 }
 
 // updateAndRestart upgrades sfy before it reads the config, because a config written for the new version can fail the old one.
+// A Homebrew install upgrades through brew. Any other install downloads the newest release.
 // A failed upgrade stops before anything restarts. After the upgrade, the new binary restarts sfy and validates the config.
 func (u updater) updateAndRestart(environ []string, stdout, stderr io.Writer) error {
-	if err := upgrade(options{environ: environ, brew: u.brew, out: stdout}); err != nil {
-		return err
+	bin := ""
+	if u.brewInstalled() {
+		if err := upgrade(options{environ: environ, brew: u.brew, out: stdout}); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		if bin, err = u.release(context.Background(), stdout); err != nil {
+			return err
+		}
 	}
-	return u.rerun(environ, stdout, stderr)
+	return u.rerun(bin, environ, stdout, stderr)
 }
 
 // brewRun runs one brew command and wraps a failure in a brewError that carries brew's output.
