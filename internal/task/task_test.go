@@ -47,6 +47,19 @@ func TestParseReadsOptionalSections(t *testing.T) {
 	}
 }
 
+func TestParseReadsAfterAsCommaSpaceOrLineSeparatedIds(t *testing.T) {
+	for _, after := range []string{"t1, t2", "t1 t2", "t1\nt2", "- t1\n- t2", "t1,t2\n"} {
+		got, err := task.Parse("# A\n\n## Description\n\nd\n\n## Goal\n\ng\n\n## After\n\n" + after + "\n")
+
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got.After, []string{"t1", "t2"}) {
+			t.Errorf("%q gave %v", after, got.After)
+		}
+	}
+}
+
 func TestMarkdownRoundTripKeepsEveryField(t *testing.T) {
 	in := task.Task{
 		Title:       "Fix it",
@@ -55,6 +68,7 @@ func TestMarkdownRoundTripKeepsEveryField(t *testing.T) {
 		Repo:        "git@example.com:x/y.git",
 		Check:       "make check",
 		Protected:   []string{"a/b", "c.go"},
+		After:       []string{"t1", "t4"},
 		Extra:       "## Notes\n\nSome notes.\n\n## Links\n\n- one\n- two",
 	}
 

@@ -92,6 +92,8 @@ type Engine struct {
 	agents map[string]*agentState
 	// startFails counts the failed starts in a row of each task.
 	startFails map[string]int
+	// depNoted holds the "task>dependency" pairs for which sfy told main that the dependency is cancelled.
+	depNoted map[string]bool
 	// down is true after sfy down stopped the sessions. The server then ends the sfy process.
 	down atomic.Bool
 }
@@ -150,7 +152,7 @@ func (e *Engine) logf(format string, args ...any) {
 
 // New returns an Engine that works through the given store and interfaces.
 func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
-	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}}
+	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, depNoted: map[string]bool{}}
 }
 
 type kind string

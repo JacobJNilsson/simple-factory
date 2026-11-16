@@ -3,8 +3,11 @@ package task
 
 import (
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // State is a step in a task's life.
@@ -32,6 +35,8 @@ type Task struct {
 	Repo        string
 	Check       string
 	Protected   []string
+	// After lists the ids of tasks that must be done before sfy starts this task's worker.
+	After []string
 	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
 	Extra string
 
@@ -120,7 +125,7 @@ func Parse(md string) (Task, error) {
 		}
 		body := strings.Trim(strings.Join(buf, "\n"), "\n")
 		switch name {
-		case "Description", "Goal", "Repo", "Check", "Protected":
+		case "Description", "Goal", "Repo", "Check", "Protected", "After":
 			if _, seen := sections[name]; seen && dup == "" {
 				dup = name
 			}
@@ -182,8 +187,39 @@ func Parse(md string) (Task, error) {
 			t.Protected = append(t.Protected, p)
 		}
 	}
+	for _, id := range strings.FieldsFunc(sections["After"], func(r rune) bool { return r == ',' || unicode.IsSpace(r) }) {
+		if id != "-" {
+			t.After = append(t.After, id)
+		}
+	}
 	t.Extra = strings.Join(extra, "\n\n")
 	return t, nil
+}
+
+// Number returns the number in a task id such as t12, or 0 for any other text.
+func Number(id string) int {
+	n, _ := strconv.Atoi(strings.TrimPrefix(id, "t"))
+	return n
+}
+
+// WaitingOn returns the ids in the task's After list whose task is not done, in list order.
+// An id that names no task in all counts as not done. An archived done task counts as done.
+func (t Task) WaitingOn(all []Task) []string {
+	var waiting []string
+	for _, id := range t.After {
+		if !slices.ContainsFunc(all, func(o Task) bool { return o.ID == id && o.State == Done }) {
+			waiting = append(waiting, id)
+		}
+	}
+	return waiting
+}
+
+// Label returns the state for a list or a table. A queued task that waits on others shows them, as in "queued (after t6, t8)".
+func (t Task) Label(all []Task) string {
+	if waiting := t.WaitingOn(all); t.State == Queued && len(waiting) > 0 {
+		return fmt.Sprintf("%s (after %s)", t.State, strings.Join(waiting, ", "))
+	}
+	return string(t.State)
 }
 
 func firstLine(s string) string {
@@ -205,6 +241,12 @@ func (t Task) Markdown() string {
 		b.WriteString("\n## Protected\n\n")
 		for _, p := range t.Protected {
 			fmt.Fprintf(&b, "- %s\n", p)
+		}
+	}
+	if len(t.After) > 0 {
+		b.WriteString("\n## After\n\n")
+		for _, id := range t.After {
+			fmt.Fprintf(&b, "%s\n", id)
 		}
 	}
 	if t.Extra != "" {

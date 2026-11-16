@@ -42,7 +42,8 @@ The worker prompt has two parts. The common part holds the rules for every task:
 
 ## Tasks
 
-- A task file, `task.md`, holds a description and a goal. It may also name a repo, a check command, and paths that the worker must not edit.
+- A task file, `task.md`, holds a description and a goal. It may also name a repo, a check command, paths that the worker must not edit, and tasks that must finish first.
+- The optional `## After` section lists task ids. Write one per line, or separate them with commas or spaces. A line may start with `- `. sfy starts the task's worker only when every listed task is `done`, and an archived `done` task counts. `sfy task new` and `sfy task edit` reject an id that names no task, the task's own id, and an id newer than the task. Only older ids are allowed, so a cycle cannot form. The section orders starts only. It sets no merge order and reaches no other state folder.
 - A task can deliver anything: a code change, a document, an answer. A reviewer decides when a task is approved.
 - A task on a repo gets its own git worktree on a new branch. A task with no repo gets an empty folder.
 - sfy gives each task an id of the form `t<n>`, counting up from `t1`.
@@ -63,7 +64,8 @@ A task moves through these states:
 
 - A task that a program or the operator creates starts in `new`, and sfy tells the main agent. The main agent adds context, for example from its notes, and may replace the task file at any time before the task is approved or cancelled. It then queues the task, cancels it, or escalates it.
 - A task that the main agent creates starts in `queued`.
-- sfy starts a worker for the oldest `queued` task when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
+- A `queued` task with an `## After` list waits while any listed task is not `done`. `status.md`, `sfy task list` and `sfy task show` show it as `queued (after t6, t8)`, with the ids that are not yet done. Other `queued` tasks may start ahead of it. When a listed task is `cancelled`, the waiting task can never start. sfy tells the main agent once, "Task <id> waits for <dep>, which is cancelled", and the task stays `queued` until the main agent edits or cancels it.
+- sfy starts a worker for the oldest `queued` task that does not wait when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
 - When the reviewer's verdict is `pass` on a task with no repo, the task moves to `approved`. On a task with a repo that has a remote, it moves to `approved` after the worker reports that it pushed, as the push rules below describe. On a task with a repo that has no remote, it moves to `approved` at once. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent. For a repo task the note names the branch, the repo folder, and whether the repo has a remote. For a task with no repo the note says so, and the main agent checks the result and runs `sfy task complete <id>`.
 - The main agent integrates an approved branch of a repo task with plain git, in the repo folder. If the repo has a remote, it runs `git fetch`. It rebases the task branch onto the default branch and fast-forwards the default branch to the task branch with `git merge --ff-only`. If the repo has a remote, it pushes the default branch. It then runs `sfy task complete <id>`. If the rebase conflicts or the push is rejected, it tells the operator, aborts a stopped rebase, and forces nothing.

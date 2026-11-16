@@ -39,12 +39,12 @@ func (e *Engine) startQueued() error {
 			running++
 		}
 	}
-	var errs []error
+	errs := []error{e.noteCancelledDeps(tasks)}
 	for _, t := range tasks {
 		if running >= e.cfg.MaxWorkers {
 			break
 		}
-		if t.State != task.Queued {
+		if t.State != task.Queued || len(t.WaitingOn(tasks)) > 0 {
 			continue
 		}
 		if err := e.startWorker(t); err != nil {
@@ -52,6 +52,44 @@ func (e *Engine) startQueued() error {
 			continue
 		}
 		running++
+	}
+	return errors.Join(errs...)
+}
+
+// noteCancelledDeps tells main once for each queued task that waits for a cancelled task.
+// The waiting task stays queued, and main edits or cancels it.
+func (e *Engine) noteCancelledDeps(tasks []task.Task) error {
+	state := map[string]task.State{}
+	for _, t := range tasks {
+		state[t.ID] = t.State
+	}
+	current := map[string]bool{}
+	var errs []error
+	for _, t := range tasks {
+		if t.State != task.Queued {
+			continue
+		}
+		for _, dep := range t.After {
+			if state[dep] != task.Cancelled {
+				continue
+			}
+			key := t.ID + ">" + dep
+			current[key] = true
+			if e.depNoted[key] {
+				continue
+			}
+			note := fmt.Sprintf("Task %s waits for %s, which is cancelled. Edit or cancel task %s.", t.ID, dep, t.ID)
+			if err := e.message("main", "sfy", note); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			e.depNoted[key] = true
+		}
+	}
+	for key := range e.depNoted {
+		if !current[key] {
+			delete(e.depNoted, key)
+		}
 	}
 	return errors.Join(errs...)
 }

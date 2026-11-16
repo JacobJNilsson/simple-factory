@@ -40,7 +40,7 @@ func RenderStatus(tasks []task.Task) string {
 			changed = t.Updated.UTC().Format(time.RFC3339)
 		}
 		title := strings.ReplaceAll(t.Title, "|", `\|`)
-		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, t.State, t.Round, agents(t), changed)
+		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, t.Label(tasks), t.Round, agents(t), changed)
 	}
 	return b.String()
 }

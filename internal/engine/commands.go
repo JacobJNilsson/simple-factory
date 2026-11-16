@@ -61,6 +61,9 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 	if t.ID, err = e.st.NextID(); err != nil {
 		return "", err
 	}
+	if err := e.checkAfter(t); err != nil {
+		return "", err
+	}
 	t.Updated = e.c.Now()
 	if err := e.st.Create(t); err != nil {
 		return "", err
@@ -98,7 +101,7 @@ func (e *Engine) taskList(req protocol.Request) (string, error) {
 		if t.Archived != archived {
 			continue
 		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, t.State, t.Title)
+		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, t.Label(tasks), t.Title)
 	}
 	return b.String(), nil
 }
@@ -112,8 +115,12 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	tasks, err := e.st.Tasks()
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "State: %s\n", t.State)
+	fmt.Fprintf(&b, "State: %s\n", t.Label(tasks))
 	if t.Archived {
 		b.WriteString("Archived: yes\n")
 	}
@@ -150,7 +157,11 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	if t.Dir != "" && !slices.Equal(edited.Protected, t.Protected) {
 		return "", fmt.Errorf("task %s has a workspace, so its protected paths are fixed", t.ID)
 	}
-	edited.ID, edited.State, edited.Round, edited.Source = t.ID, t.State, t.Round, t.Source
+	edited.ID = t.ID
+	if err := e.checkAfter(edited); err != nil {
+		return "", err
+	}
+	edited.State, edited.Round, edited.Source = t.State, t.Round, t.Source
 	edited.Progress, edited.Dir, edited.Pending, edited.Reopened = t.Progress, t.Dir, t.Pending, t.Reopened
 	edited.Pushing = t.Pushing
 	if err := e.save(edited); err != nil {
@@ -160,6 +171,25 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	return "", e.noteWorker(t)
+}
+
+// checkAfter rejects an After id that is the task's own id, names no task, or is newer than the task.
+// Only older ids may appear, so a cycle cannot form.
+func (e *Engine) checkAfter(t task.Task) error {
+	for _, dep := range t.After {
+		if dep == t.ID {
+			return fmt.Errorf("task %s cannot wait for itself", t.ID)
+		}
+		if _, err := e.st.Task(dep); errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("## After names %q, which is no task", dep)
+		} else if err != nil {
+			return err
+		}
+		if task.Number(dep) > task.Number(t.ID) {
+			return fmt.Errorf("task %s cannot wait for %s, which is newer. A task may wait only for an older task", t.ID, dep)
+		}
+	}
+	return nil
 }
 
 // noteWorker tells a worker to read its changed task file. A pane that no longer takes the note is no failure, because the message waits in the inbox.
