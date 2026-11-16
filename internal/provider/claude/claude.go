@@ -190,7 +190,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			return "", err
 		}
 	}
-	b, err := marshalSettings(s, a.cfg.SessionSettings[spec.Kind])
+	b, err := marshalSettings(s, a.extraSettings(spec.Kind))
 	if err != nil {
 		return "", fmt.Errorf("claude: %w", err)
 	}
@@ -207,6 +207,20 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 		return "", fmt.Errorf("claude: %w", err)
 	}
 	return path, nil
+}
+
+// extraSettings returns the extra top-level keys for a session kind.
+// Workers and reviewers turn off prompt suggestions by default, and a config table can override that.
+func (a adapter) extraSettings(kind string) config.SessionValues {
+	configured := a.cfg.SessionSettings[kind]
+	if kind == "main" {
+		return configured
+	}
+	extra := config.SessionValues{"promptSuggestionEnabled": false}
+	for k, v := range configured {
+		extra[k] = v
+	}
+	return extra
 }
 
 // marshalSettings encodes s. Without extra keys the output is the struct's own encoding.

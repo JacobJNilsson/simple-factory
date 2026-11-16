@@ -61,6 +61,8 @@ preferredNotifChannel = "notifications_disabled"
 
 A table that sets `permissions`, `hooks` or `sandbox` is a config error, because sfy writes those keys itself. An unknown kind is also a config error.
 
+Worker and reviewer files set `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. To turn them back on, set `promptSuggestionEnabled = true` in `[session_settings.worker]` or `[session_settings.reviewer]`. The main agent keeps Claude Code's default.
+
 ## Per-repo config
 
 A `.sfy.toml` file sets per-repo keys. sfy reads it in the repo folder and in each parent folder up to `$HOME`. The nearest file wins, key by key, and all of them apply on top of `~/.sfy/config.toml`. For a task whose repo is a URL, the repo folder is the clone in `repos/` of the state folder. SPEC.md describes the lookup in full.
