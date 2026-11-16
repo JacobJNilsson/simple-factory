@@ -20,6 +20,20 @@ func TestForReturnsTheEmbeddedWorkerPrompt(t *testing.T) {
 	}
 }
 
+func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
+	for _, kind := range []string{"main", "worker", "reviewer"} {
+		got, err := prompts.For(kind, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"hook feedback", "not from the operator", "typed note"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s prompt lacks %q", kind, want)
+			}
+		}
+	}
+}
+
 func TestForPrefersAFileInTheHomePromptsFolder(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, "prompts"), 0o700); err != nil {

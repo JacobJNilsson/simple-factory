@@ -102,7 +102,11 @@ A task moves through these states:
 ## Messages
 
 - A message is a file in the receiver's inbox inside the state folder. The receiver gets a short note in its session: "New message. Run: sfy inbox".
-- The provider adapter delivers the note through the best channel that the provider has. Without a native channel, the adapter types the note into the pane once the session waits for input. In version 0, every adapter types the note.
+- Every note that sfy gives an agent goes through one delivery step: a new-message note, a task note, a reminder and the restart note. The core asks the provider to deliver the note without typing into the input line. The core names no provider. When the provider cannot deliver, because it has no such channel, the session has no delivery set up, or delivery fails, the core types the note into the pane with the `send` template, as before. A note that the core types waits until the session waits for input.
+- For a message, the delivered text holds the sender and the full text of every unread message. The agent needs no `sfy inbox` call. sfy marks the messages read once the provider delivered them, so `sfy inbox` does not show them again. When the core types the note instead, the messages stay unread. Any other note arrives as its note text.
+- The Claude provider keeps one note file for each session, `sessions/<name>/note.md` in the state folder. A `SessionStart` hook runs `sfy hook note-watch`, which prints `watchPaths` for that file. A `FileChanged` hook with `asyncRewake` runs `sfy hook note`. That command takes a lock, moves the file aside, prints its text to stderr and exits with code 2. Claude Code then gives the text to the agent as hook feedback and starts a turn, also when the session is idle. Delivery appends to the file under the same lock, so a note that arrives during a drain is never lost. Several notes before the agent wakes arrive together.
+- A registered main agent has no sfy session folder, because its hooks come from the user settings. It keeps the typed note.
+- The role prompts tell each agent that sfy delivers notes and messages as hook feedback, that they come from sfy and not from the operator, and that the agent acts on them as on a typed note.
 - `sfy inbox` prints the receiver's unread messages and marks them read.
 - While a message stays unread, sfy sends the note again every `resend_minutes`. The default is 5.
 - An escalation shows in `status.md`. If the multiplexer's set has a `notify` template, sfy also runs it for the main agent's pane.
