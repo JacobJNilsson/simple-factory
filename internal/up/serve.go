@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -41,8 +42,12 @@ type parts struct {
 	cfg      config.Config
 	bin      string
 	mux      mux.Mux
+	whoami   func() (string, error)
 	launcher launcher.Launcher
 }
+
+// execInPlace replaces the sfy process with argv. It returns only when the replacement fails.
+func execInPlace(argv []string) error { return syscall.Exec(argv[0], argv, os.Environ()) }
 
 func newParts(env func(string) string) (parts, error) {
 	home := config.Home(env)
@@ -58,8 +63,11 @@ func newParts(env func(string) string) (parts, error) {
 	if err != nil {
 		return parts{}, err
 	}
-	m = mux.Prefixed(m, config.Prefix(home, env))
-	return parts{home: home, cfg: cfg, bin: bin, mux: m, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
+	// Registered sits inside Prefixed, so a recorded address stays as the terminal tool printed it.
+	prefix := config.Prefix(home, env)
+	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home)), prefix)
+	who, _ := m.(mux.Whoamier)
+	return parts{home: home, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, launcher: launcher.New(m, claude.New(cfg, home, bin), logAppender{path: filepath.Join(home, logName)})}, nil
 }
 
 // logAppender appends to sfy.log on each write, so a plain sfy and sfy serve both log without holding the file open.
@@ -176,7 +184,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 	}
 	return options{
 		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
-		mux: p.mux, launcher: p.launcher, warn: stderr, brew: runBrew,
+		mux: p.mux, launcher: p.launcher, warn: stderr, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
 	}, nil

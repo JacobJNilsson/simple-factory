@@ -79,6 +79,8 @@ type fakeLauncher struct {
 	trustAsked []string
 	// resumes is what StartMain reports.
 	resumes bool
+	// commands lists the specs that MainCommand received.
+	commands []engine.SessionSpec
 }
 
 func (l *fakeLauncher) TrustWarning(dir string) string {
@@ -99,6 +101,15 @@ func (l *fakeLauncher) StartMain(s engine.SessionSpec) (bool, error) {
 	l.specs = append(l.specs, s)
 	l.alive[s.Name] = true
 	return l.resumes, nil
+}
+
+// MainCommand records the spec and returns a fixed argv.
+func (l *fakeLauncher) MainCommand(s engine.SessionSpec) ([]string, bool, error) {
+	if l.err != nil {
+		return nil, false, l.err
+	}
+	l.commands = append(l.commands, s)
+	return []string{"/bin/sfy", "run", "env-file", "--", "claude"}, l.resumes, nil
 }
 
 type rig struct {

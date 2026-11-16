@@ -19,6 +19,9 @@ type Launcher interface {
 	ShowMain(name string) error
 	// StartMain starts the main agent. It resumes the last conversation when it can, and reports whether it did.
 	StartMain(spec engine.SessionSpec) (resumed bool, err error)
+	// MainCommand prepares the main agent's session and returns the argv that runs it, without starting a session.
+	// The caller runs the argv in its own terminal. resumed reports whether the argv resumes the last conversation.
+	MainCommand(spec engine.SessionSpec) (argv []string, resumed bool, err error)
 }
 
 type launcher struct {
@@ -68,6 +71,15 @@ func (l launcher) StartMain(spec engine.SessionSpec) (bool, error) {
 	}
 	spec.Fresh = true
 	return false, l.begin(spec)
+}
+
+// MainCommand returns the provider's argv for the main agent and whether it resumes the last conversation.
+// It starts no session and runs no show template.
+func (l launcher) MainCommand(spec engine.SessionSpec) ([]string, bool, error) {
+	// The provider records a new conversation in Command, so it must answer Resumes first.
+	resumed := !spec.Fresh && l.p.Resumes(spec)
+	argv, err := l.p.Command(spec)
+	return argv, resumed, err
 }
 
 // begin runs the provider's command in a new session and shows the session.

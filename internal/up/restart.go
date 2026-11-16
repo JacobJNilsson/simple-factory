@@ -46,7 +46,7 @@ func restart(o options) error {
 	if err := reportList(o.out, "Stopped", stopped); err != nil {
 		return err
 	}
-	started, _, err := o.ensure()
+	started, _, err := o.ensure(false)
 	if err != nil {
 		return err
 	}
