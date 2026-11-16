@@ -38,8 +38,8 @@ func (a app) run(args []string) int {
 		if len(args) > 1 {
 			return cli.Misuse(a.stderr, "up takes no arguments")
 		}
-		// An agent that runs sfy by accident must not start a second sfy.
-		if a.getenv("SFY_AGENT") != "" {
+		// An agent that runs sfy by accident must not start a second sfy. A registered agent counts as an agent.
+		if cli.Agent(a.getenv) != "" {
 			cli.PrintUsage(a.stderr)
 			return 1
 		}
@@ -84,7 +84,7 @@ func (a app) run(args []string) int {
 		if len(args) != 2 || args[1] != "install" {
 			return cli.Misuse(a.stderr, "usage: sfy hooks install")
 		}
-		if a.getenv("SFY_AGENT") != "" {
+		if cli.Agent(a.getenv) != "" {
 			cli.PrintUsage(a.stderr)
 			return 1
 		}
@@ -94,7 +94,7 @@ func (a app) run(args []string) int {
 		if len(args) > 1 && !update {
 			return a.report(fmt.Errorf("usage: sfy restart [--update]"))
 		}
-		return a.report(up.Restart(os.Environ(), a.getenv, a.stdout, a.stderr, update))
+		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, update))
 	}
 	return cli.Run(args, a.getenv, a.stdin, a.stdout, a.stderr)
 }
