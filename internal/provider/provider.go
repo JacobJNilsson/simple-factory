@@ -11,8 +11,13 @@ type Provider interface {
 	// Resumes reports whether Command would resume the recorded conversation of the main agent in spec.
 	Resumes(spec engine.SessionSpec) bool
 	// Deliver gives text to the running session without typing into its input line.
-	// It returns false, with nothing delivered, when the provider has no such way or the session has no delivery set up.
-	Deliver(name, text string) (delivered bool, err error)
+	// It returns false, with nothing delivered, when the provider has no such way or the running session has no delivery set up.
+	// A non-empty messageID names the stored message that the text carries. It stays unread until the session takes the text.
+	Deliver(name, text, messageID string) (delivered bool, err error)
+	// Stuck reports whether delivered text waits for a session that cannot take it.
+	Stuck(name string) bool
+	// Drain takes the stuck text that is no stored message and returns it.
+	Drain(name string) (string, error)
 	// Preflight checks that a session of the given kind can start, for example that the agent CLI and its sandbox exist.
 	// A failure is an *engine.PreflightError, and starting the session again cannot fix it.
 	Preflight(kind string) error

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,25 @@ func notePath(t *testing.T) string {
 	return path
 }
 
+// drain returns the texts of the drained entries, separated by blank lines.
+func drain(path string) (string, error) {
+	entries, err := claude.DrainNote(path)
+	texts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		texts = append(texts, e.Text)
+	}
+	return strings.Join(texts, "\n\n"), err
+}
+
+// hooksRan makes the session start hook run for name, as Claude Code does at the start of a session.
+func hooksRan(t *testing.T, home, name string) {
+	t.Helper()
+	path, _ := claude.NotePath(home, name)
+	if _, err := claude.WatchNote(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNotePathLivesInTheSessionFolder(t *testing.T) {
 	got, ok := claude.NotePath("/home/sfy", "worker-t1")
 
@@ -42,12 +62,12 @@ func TestNotePathRefusesAnUnsafeName(t *testing.T) {
 func TestSeveralNotesBeforeADrainArriveTogether(t *testing.T) {
 	path := notePath(t)
 	for _, n := range []string{"first", "second\n"} {
-		if err := claude.AppendNote(path, n); err != nil {
+		if err := claude.AppendNote(path, "", n); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	got, err := claude.DrainNote(path)
+	got, err := drain(path)
 
 	if err != nil || got != "first\n\nsecond" {
 		t.Fatalf("got %q, %v", got, err)
@@ -56,14 +76,14 @@ func TestSeveralNotesBeforeADrainArriveTogether(t *testing.T) {
 
 func TestDrainMovesTheFileAside(t *testing.T) {
 	path := notePath(t)
-	if err := claude.AppendNote(path, "once"); err != nil {
+	if err := claude.AppendNote(path, "", "once"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := claude.DrainNote(path); err != nil {
+	if _, err := drain(path); err != nil {
 		t.Fatal(err)
 	}
 
-	again, err := claude.DrainNote(path)
+	again, err := drain(path)
 
 	if err != nil || again != "" {
 		t.Fatalf("second drain returned %q, %v", again, err)
@@ -74,7 +94,7 @@ func TestDrainMovesTheFileAside(t *testing.T) {
 }
 
 func TestDrainWithoutAFileReturnsNothing(t *testing.T) {
-	got, err := claude.DrainNote(notePath(t))
+	got, err := drain(notePath(t))
 
 	if err != nil || got != "" {
 		t.Fatalf("got %q, %v", got, err)
@@ -86,11 +106,11 @@ func TestDrainKeepsTheNoteOfAnEarlierFailedDrain(t *testing.T) {
 	if err := os.WriteFile(path+".taken", []byte("old\n\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := claude.AppendNote(path, "new"); err != nil {
+	if err := claude.AppendNote(path, "", "new"); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := claude.DrainNote(path)
+	got, err := drain(path)
 
 	if err != nil || got != "old\n\nnew" {
 		t.Fatalf("got %q, %v", got, err)
@@ -105,21 +125,21 @@ func TestNoNoteIsLostWhenWrittenDuringDrains(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := range total {
-			if err := claude.AppendNote(path, fmt.Sprintf("note-%03d", i)); err != nil {
+			if err := claude.AppendNote(path, "", fmt.Sprintf("note-%03d", i)); err != nil {
 				t.Error(err)
 			}
 		}
 	}()
 	var drained strings.Builder
 	for range 50 {
-		got, err := claude.DrainNote(path)
+		got, err := drain(path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		drained.WriteString(got + "\n")
 	}
 	wg.Wait()
-	last, err := claude.DrainNote(path)
+	last, err := drain(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,17 +153,18 @@ func TestNoNoteIsLostWhenWrittenDuringDrains(t *testing.T) {
 	}
 }
 
-func TestDeliverAppendsToTheNoteFileOfASessionWithSettings(t *testing.T) {
+func TestDeliverAppendsToTheNoteFileOfASessionWhoseHooksRan(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
+	hooksRan(t, home, "worker-t1")
 
-	ok, err := p.Deliver("worker-t1", "From main:\nPlease rebase.")
+	ok, err := p.Deliver("worker-t1", "From main:\nPlease rebase.", "")
 	if err != nil || !ok {
 		t.Fatalf("ok %v, err %v", ok, err)
 	}
 
 	path, _ := claude.NotePath(home, "worker-t1")
-	got, err := claude.DrainNote(path)
+	got, err := drain(path)
 	if err != nil || got != "From main:\nPlease rebase." {
 		t.Fatalf("got %q, %v", got, err)
 	}
@@ -152,7 +173,8 @@ func TestDeliverAppendsToTheNoteFileOfASessionWithSettings(t *testing.T) {
 func TestCommandRemovesTheNoteOfAnEarlierSessionWithTheSameName(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
-	if ok, err := p.Deliver("worker-t1", "old note"); err != nil || !ok {
+	hooksRan(t, home, "worker-t1")
+	if ok, err := p.Deliver("worker-t1", "old note", ""); err != nil || !ok {
 		t.Fatalf("ok %v, err %v", ok, err)
 	}
 
@@ -166,10 +188,112 @@ func TestCommandRemovesTheNoteOfAnEarlierSessionWithTheSameName(t *testing.T) {
 	}
 }
 
+func TestDeliverDeclinesASessionStartedWithOldSettings(t *testing.T) {
+	p, home := setup(t, bin)
+	// An older sfy wrote the settings without the note hooks, so no SessionStart hook ever ran.
+	path, _ := claude.NotePath(home, "main")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), "settings.json"), []byte(`{"hooks":{"Stop":[]}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := p.Deliver("main", "hi", "")
+
+	if err != nil || ok {
+		t.Fatalf("ok %v, err %v", ok, err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("Deliver wrote a note file: %v", err)
+	}
+}
+
+func TestANewStartMustProveItsHooksAgain(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+	hooksRan(t, home, "worker-t1")
+
+	command(t, p, worker())
+
+	if ok, err := p.Deliver("worker-t1", "hi", ""); err != nil || ok {
+		t.Fatalf("ok %v, err %v", ok, err)
+	}
+}
+
+func TestAMessageEntryKeepsItsIDAndStaysApartFromAPlainNote(t *testing.T) {
+	path := notePath(t)
+	for _, e := range []claude.Entry{{ID: "m1", Text: "From main:\none"}, {Text: "plain"}} {
+		if err := claude.AppendNote(path, e.ID, e.Text); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := claude.DrainNote(path)
+
+	want := []claude.Entry{{ID: "m1", Text: "From main:\none"}, {Text: "plain"}}
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestANoteFileFromAnOlderSfyCountsAsOnePlainNote(t *testing.T) {
+	path := notePath(t)
+	if err := os.WriteFile(path, []byte("Task t1 is approved.\n\nTask t2 is blocked.\n\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := claude.DrainNote(path)
+
+	if err != nil || len(got) != 1 || got[0].ID != "" || got[0].Text != "Task t1 is approved.\n\nTask t2 is blocked." {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestStuckTextOfASessionWithoutHooksIsDrainedWithoutItsMessages(t *testing.T) {
+	p, home := setup(t, bin)
+	path, _ := claude.NotePath(home, "main")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := claude.AppendNote(path, "", "Task t1 is approved."); err != nil {
+		t.Fatal(err)
+	}
+	if err := claude.AppendNote(path, "m1", "From worker-t1:\nblocked"); err != nil {
+		t.Fatal(err)
+	}
+	if !p.Stuck("main") {
+		t.Fatal("the text does not count as stuck")
+	}
+
+	got, err := p.Drain("main")
+
+	if err != nil || got != "Task t1 is approved." {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if p.Stuck("main") {
+		t.Fatal("the text stayed stuck after the drain")
+	}
+}
+
+func TestTextForASessionWithHooksIsNotStuck(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+	hooksRan(t, home, "worker-t1")
+	path, _ := claude.NotePath(home, "worker-t1")
+	if err := claude.AppendNote(path, "", "hi"); err != nil {
+		t.Fatal(err)
+	}
+
+	if p.Stuck("worker-t1") {
+		t.Fatal("a session with working hooks has no stuck text")
+	}
+}
+
 func TestDeliverDeclinesASessionThatSfyDidNotSetUp(t *testing.T) {
 	p, home := setup(t, bin)
 
-	ok, err := p.Deliver("main", "hi")
+	ok, err := p.Deliver("main", "hi", "")
 
 	if err != nil || ok {
 		t.Fatalf("ok %v, err %v", ok, err)
@@ -182,7 +306,7 @@ func TestDeliverDeclinesASessionThatSfyDidNotSetUp(t *testing.T) {
 func TestDeliverDeclinesAnUnsafeSessionName(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	if ok, err := p.Deliver("../worker-t1", "hi"); err != nil || ok {
+	if ok, err := p.Deliver("../worker-t1", "hi", ""); err != nil || ok {
 		t.Fatalf("ok %v, err %v", ok, err)
 	}
 }

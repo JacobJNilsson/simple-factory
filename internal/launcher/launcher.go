@@ -110,11 +110,19 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 }
 
 // Deliver asks the provider to deliver text without typing into the pane.
-func (l launcher) Deliver(name, text string) (bool, error) { return l.p.Deliver(name, text) }
+func (l launcher) Deliver(name, text, messageID string) (bool, error) {
+	return l.p.Deliver(name, text, messageID)
+}
+
+// Stuck asks the provider whether delivered text waits for a session that cannot take it.
+func (l launcher) Stuck(name string) bool { return l.p.Stuck(name) }
+
+// Drain asks the provider for the stuck text that is no stored message.
+func (l launcher) Drain(name string) (string, error) { return l.p.Drain(name) }
 
 // Note delivers text through the provider and types it when the provider cannot deliver.
 func (l launcher) Note(name, text string) error {
-	if delivered, err := l.p.Deliver(name, text); err == nil && delivered {
+	if delivered, err := l.p.Deliver(name, text, ""); err == nil && delivered {
 		return nil
 	}
 	return l.Send(name, text)

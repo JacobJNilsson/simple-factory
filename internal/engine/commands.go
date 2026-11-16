@@ -620,7 +620,13 @@ func (e *Engine) inbox(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return formatMessages(msgs), e.st.MarkRead(req.Caller.Agent, messageIDs(msgs))
+	// The provider's stuck text covers notes that no hook drained. Stuck messages are unread, so msgs already holds them.
+	stuck, derr := e.l.Drain(req.Caller.Agent)
+	out := formatMessages(msgs)
+	if stuck != "" {
+		out += stuck + "\n"
+	}
+	return out, errors.Join(derr, e.st.MarkRead(req.Caller.Agent, messageIDs(msgs)))
 }
 
 func (e *Engine) escalate(req protocol.Request) (string, error) {

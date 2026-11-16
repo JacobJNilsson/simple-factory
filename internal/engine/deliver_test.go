@@ -23,22 +23,46 @@ func TestAMessageForAnAgentThatWaitsGoesThroughTheProviderWithItsSenderAndText(t
 	}
 }
 
-func TestADeliveredMessageIsMarkedRead(t *testing.T) {
+func TestADeliveredMessageStaysUnreadUntilTheSessionTakesIt(t *testing.T) {
 	v := newEnv(t)
 	v.l.canDeliver = true
 	waitingWorker(v, t)
 
 	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
 
-	if got := v.inbox(t, "worker-t1"); len(got) != 0 {
+	if got := v.inbox(t, "worker-t1"); len(got) != 1 {
 		t.Fatalf("unread after delivery: %+v", got)
 	}
-	if a := v.run("worker-t1", "", "inbox", ""); a.Text != "" {
+	if a := v.run("worker-t1", "", "inbox", ""); a.Text != "From main:\nPlease rebase.\n\n" {
 		t.Fatalf("sfy inbox shows %q", a.Text)
 	}
 }
 
-func TestSeveralUnreadMessagesArriveInOneDelivery(t *testing.T) {
+func TestInboxShowsTheTextThatNoHookDrained(t *testing.T) {
+	v := newEnv(t)
+	v.l.drained = "Task t1 is approved."
+
+	a := v.run("worker-t1", "", "inbox", "")
+
+	if a.Text != "Task t1 is approved.\n" {
+		t.Fatalf("sfy inbox shows %q", a.Text)
+	}
+}
+
+func TestATypedNoteForASessionWithStuckTextPointsToInbox(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.stuck = true
+
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	want := []string{"worker-t1: " + reminder, "worker-t1: You have undelivered notes. Run: sfy inbox"}
+	if !slices.Equal(v.l.sent, want) {
+		t.Fatalf("typed %q, want %q", v.l.sent, want)
+	}
+}
+
+func TestSeveralUnreadMessagesAreDeliveredOneByOne(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 	mustOK(t, v.run("main", "", "send", "", "worker-t1", "one"))
@@ -48,11 +72,8 @@ func TestSeveralUnreadMessagesArriveInOneDelivery(t *testing.T) {
 	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
 
-	if want := []string{"worker-t1: From main:\none\n\nFrom main:\ntwo"}; !slices.Equal(v.l.delivered, want) {
+	if want := []string{"worker-t1: From main:\none", "worker-t1: From main:\ntwo"}; !slices.Equal(v.l.delivered, want) {
 		t.Fatalf("delivered %q, want %q", v.l.delivered, want)
-	}
-	if got := v.inbox(t, "worker-t1"); len(got) != 0 {
-		t.Fatalf("unread after delivery: %+v", got)
 	}
 }
 

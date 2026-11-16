@@ -42,7 +42,12 @@ type Launcher interface {
 	Notify(name, text string) error
 	// Deliver gives text to the agent through the provider, without typing into the pane.
 	// It returns false, with nothing delivered, when the provider cannot. The caller then types the text with Send.
-	Deliver(name, text string) (delivered bool, err error)
+	// A non-empty messageID names the stored message that the text carries. It stays unread until the agent takes the text.
+	Deliver(name, text, messageID string) (delivered bool, err error)
+	// Stuck reports whether delivered text waits for a session that cannot take it.
+	Stuck(name string) bool
+	// Drain takes the stuck text that is no stored message and returns it.
+	Drain(name string) (string, error)
 	// TrustWarning returns a warning when the provider would stop an agent at a trust prompt for dir.
 	TrustWarning(dir string) string
 }
