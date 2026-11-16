@@ -26,7 +26,7 @@ type NotRunningError struct {
 }
 
 func (e *NotRunningError) Error() string {
-	return fmt.Sprintf("the sfy process does not run (no server on %s). Start it with: sfy up", e.Socket)
+	return fmt.Sprintf("the sfy process does not run (no server on %s). Start it with: sfy", e.Socket)
 }
 
 // ErrAlreadyRunning reports that another sfy process holds the socket folder's lock.

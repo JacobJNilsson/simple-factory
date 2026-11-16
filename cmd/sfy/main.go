@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,15 +19,45 @@ var version = "dev"
 
 func main() {
 	// The exit code is the process result, so main exits with it after run returns.
-	os.Exit(run(os.Args[1:]))
+	a := app{getenv: os.Getenv, stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr}
+	a.start = func() error { return up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr) }
+	os.Exit(a.run(os.Args[1:]))
 }
 
-func run(args []string) int {
-	if len(args) == 1 && args[0] == "--version" {
-		fmt.Println(version)
-		return 0
+// app holds what the commands need, so a test can replace the start.
+type app struct {
+	getenv         func(string) string
+	stdin          io.Reader
+	stdout, stderr io.Writer
+	// start starts the sfy process and the main agent.
+	start func() error
+}
+
+func (a app) run(args []string) int {
+	if len(args) == 0 {
+		// An agent that runs sfy by accident must not start a second sfy.
+		if a.getenv("SFY_AGENT") != "" {
+			cli.PrintUsage(a.stderr)
+			return 1
+		}
+		return a.report(a.start())
 	}
-	if len(args) > 0 && args[0] == "serve" {
+	switch args[0] {
+	case "--version", "help", "--help", "serve":
+		if len(args) > 1 {
+			return cli.Misuse(a.stderr, fmt.Sprintf("%s takes no arguments", args[0]))
+		}
+	}
+	switch args[0] {
+	case "--version":
+		_, _ = fmt.Fprintln(a.stdout, version)
+		return 0
+	case "help", "--help":
+		cli.PrintUsage(a.stdout)
+		return 0
+	case "up":
+		return a.report(fmt.Errorf("sfy up is removed. Run sfy instead"))
+	case "serve":
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
 		// After the first signal the default action returns, so a second signal ends the process.
@@ -34,28 +65,23 @@ func run(args []string) int {
 			<-ctx.Done()
 			stop()
 		}()
-		return report(up.Serve(ctx, os.Getenv, os.Stderr))
-	}
-	if len(args) > 0 && args[0] == "run" {
+		return a.report(up.Serve(ctx, a.getenv, a.stderr))
+	case "run":
 		// On success the process becomes the command, so run returns only on an error.
-		return report(envrun.Run(args[1:]))
-	}
-	if len(args) > 0 && args[0] == "up" {
-		return report(up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr))
-	}
-	if len(args) > 0 && args[0] == "restart" {
+		return a.report(envrun.Run(args[1:]))
+	case "restart":
 		update := len(args) == 2 && args[1] == "--update"
 		if len(args) > 1 && !update {
-			return report(fmt.Errorf("usage: sfy restart [--update]"))
+			return a.report(fmt.Errorf("usage: sfy restart [--update]"))
 		}
-		return report(up.Restart(os.Environ(), os.Getenv, os.Stdout, os.Stderr, update))
+		return a.report(up.Restart(os.Environ(), a.getenv, a.stdout, a.stderr, update))
 	}
-	return cli.Run(args, os.Getenv, os.Stdin, os.Stdout, os.Stderr)
+	return cli.Run(args, a.getenv, a.stdin, a.stdout, a.stderr)
 }
 
-func report(err error) int {
+func (a app) report(err error) int {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sfy: %v\n", err)
+		_, _ = fmt.Fprintf(a.stderr, "sfy: %v\n", err)
 		return 1
 	}
 	return 0
