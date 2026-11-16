@@ -43,51 +43,63 @@ func TestParseTrimsBackticksFromProtectedPaths(t *testing.T) {
 	}
 }
 
-// editReplaces names the fields that an edit takes from the task file. Every other field is state and survives.
-var editReplaces = map[string]bool{
-	"Title": true, "Description": true, "Goal": true, "Repo": true, "Check": true,
-	"Protected": true, "After": true, "Type": true, "Extra": true,
+// taskFields mirrors task.Task field for field. The conversion below stops compiling when task.Task gains,
+// loses or reorders a field, which forces this file to say whether an edit keeps or replaces the new field.
+type taskFields struct {
+	ID          string
+	Title       string
+	Description string
+	Goal        string
+	Repo        string
+	Check       string
+	Type        string
+	Protected   []string
+	After       []string
+	Extra       string
+
+	State    task.State
+	Before   task.State
+	Round    int
+	Archived bool
+	Source   string
+	Progress string
+	Pending  []string
+	Reopened bool
+	Pushing  bool
+	Branch   string
+	Dir      string
+	Updated  time.Time
 }
 
-// fill sets every field of a task to a non-zero value that carries the given tag.
-func fill(t *testing.T, tag string) task.Task {
-	t.Helper()
-	var tk task.Task
-	v := reflect.ValueOf(&tk).Elem()
-	for i := range v.NumField() {
-		f, name := v.Field(i), v.Type().Field(i).Name
-		switch f.Kind() {
-		case reflect.String:
-			f.SetString(tag + name)
-		case reflect.Int:
-			f.SetInt(7)
-		case reflect.Bool:
-			f.SetBool(true)
-		case reflect.Slice:
-			f.Set(reflect.ValueOf([]string{tag + name}))
-		case reflect.Struct:
-			f.Set(reflect.ValueOf(time.Unix(1000, 0)))
-		default:
-			t.Fatalf("field %s has kind %s, teach fill about it", name, f.Kind())
-		}
-	}
-	return tk
-}
+var _ = taskFields(task.Task{})
 
 func TestWithFileFieldsOfReplacesExactlyTheFileFields(t *testing.T) {
-	stored, edited := fill(t, "stored-"), fill(t, "edited-")
+	stored := task.Task{
+		ID: "s-ID", Title: "s-Title", Description: "s-Description", Goal: "s-Goal", Repo: "s-Repo",
+		Check: "s-Check", Type: "s-Type", Protected: []string{"s-Protected"}, After: []string{"s-After"},
+		Extra: "s-Extra", State: "s-State", Before: "s-Before", Round: 3,
+		Archived: true, Source: "s-Source", Progress: "s-Progress", Pending: []string{"s-Pending"},
+		Reopened: true, Pushing: true, Branch: "s-Branch", Dir: "s-Dir", Updated: time.Unix(1000, 0),
+	}
+	edited := task.Task{
+		ID: "e-ID", Title: "e-Title", Description: "e-Description", Goal: "e-Goal", Repo: "e-Repo",
+		Check: "e-Check", Type: "e-Type", Protected: []string{"e-Protected"}, After: []string{"e-After"},
+		Extra: "e-Extra", State: "e-State", Before: "e-Before", Round: 9,
+		Archived: false, Source: "e-Source", Progress: "e-Progress", Pending: []string{"e-Pending"},
+		Reopened: false, Pushing: false, Branch: "e-Branch", Dir: "e-Dir", Updated: time.Unix(2000, 0),
+	}
+	// File fields come from edited, and every other field comes from stored.
+	want := task.Task{
+		ID: "s-ID", Title: "e-Title", Description: "e-Description", Goal: "e-Goal", Repo: "e-Repo",
+		Check: "e-Check", Type: "e-Type", Protected: []string{"e-Protected"}, After: []string{"e-After"},
+		Extra: "e-Extra", State: "s-State", Before: "s-Before", Round: 3,
+		Archived: true, Source: "s-Source", Progress: "s-Progress", Pending: []string{"s-Pending"},
+		Reopened: true, Pushing: true, Branch: "s-Branch", Dir: "s-Dir", Updated: time.Unix(1000, 0),
+	}
 
 	got := stored.WithFileFieldsOf(edited)
 
-	g, s, e := reflect.ValueOf(got), reflect.ValueOf(stored), reflect.ValueOf(edited)
-	for i := range g.NumField() {
-		name := g.Type().Field(i).Name
-		want := s.Field(i).Interface()
-		if editReplaces[name] {
-			want = e.Field(i).Interface()
-		}
-		if !reflect.DeepEqual(g.Field(i).Interface(), want) {
-			t.Errorf("field %s: got %v, want %v", name, g.Field(i).Interface(), want)
-		}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
 	}
 }
