@@ -191,6 +191,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 	return options{
 		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
 		mux: p.mux, launcher: p.launcher, warn: stderr, brew: runBrew, whoami: p.whoami, exec: execInPlace,
+		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
 	}, nil
