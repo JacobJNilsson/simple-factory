@@ -2,6 +2,7 @@ package claude_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
@@ -41,8 +42,10 @@ func TestPreflight(t *testing.T) {
 			if !errors.As(err, &pre) {
 				t.Fatalf("want a PreflightError, got %v", err)
 			}
-			if pre.Cause != tt.want {
-				t.Fatalf("cause = %q, want %q", pre.Cause, tt.want)
+			// The message text is free-form, so the want value copies it and a separate check demands a fix.
+			want := &engine.PreflightError{Cause: tt.want, Msg: pre.Msg}
+			if !reflect.DeepEqual(pre, want) {
+				t.Fatalf("error = %+v, want cause %q", pre, tt.want)
 			}
 			if pre.Msg == "" {
 				t.Fatal("the error names no fix")
