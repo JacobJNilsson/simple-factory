@@ -26,6 +26,8 @@ func TestDispatch(t *testing.T) {
 		{"up takes no arguments", []string{"up", "--help"}, "", 2, false, "", "usage:"},
 		{"agent sfy register prints usage", []string{"register"}, "worker-t1", 1, false, "", "usage:"},
 		{"register takes no arguments", []string{"register", "x"}, "", 2, false, "", "usage:"},
+		{"agent sfy hooks install prints usage", []string{"hooks", "install"}, "main", 1, false, "", "usage:"},
+		{"hooks needs install", []string{"hooks"}, "", 2, false, "", "usage:"},
 		{"help takes no arguments", []string{"help", "x"}, "", 2, false, "", "usage:"},
 		{"--help takes no arguments", []string{"--help", "x"}, "", 2, false, "", "usage:"},
 		{"serve takes no arguments", []string{"serve", "--help"}, "", 2, false, "", "usage:"},

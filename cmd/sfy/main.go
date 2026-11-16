@@ -80,6 +80,15 @@ func (a app) run(args []string) int {
 			return 1
 		}
 		return a.report(up.Register(os.Environ(), a.getenv, a.stdout, a.stderr))
+	case "hooks":
+		if len(args) != 2 || args[1] != "install" {
+			return cli.Misuse(a.stderr, "usage: sfy hooks install")
+		}
+		if a.getenv("SFY_AGENT") != "" {
+			cli.PrintUsage(a.stderr)
+			return 1
+		}
+		return a.report(up.InstallHooks(a.getenv, a.stdout))
 	case "restart":
 		update := len(args) == 2 && args[1] == "--update"
 		if len(args) > 1 && !update {
