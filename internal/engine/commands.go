@@ -325,6 +325,11 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 	if t.Before == "" {
 		return "", fmt.Errorf("task %s has no recorded state to return to", t.ID)
 	}
+	if active(task.Task{State: t.Before}) {
+		if err := e.refuseGone("worker-" + t.ID); err != nil {
+			return "", err
+		}
+	}
 	t.State, t.Before = t.Before, ""
 	pending := t.Pending
 	if active(t) {
@@ -371,7 +376,25 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 	if err := e.live(req.Args[0]); err != nil {
 		return "", err
 	}
+	if req.Args[0] != "main" {
+		if err := e.refuseGone(req.Args[0]); err != nil {
+			return "", err
+		}
+	}
 	return "", e.message(req.Args[0], req.Caller.Agent, body)
+}
+
+// refuseGone fails when the session of an agent no longer runs, because nobody would read a message for it.
+// The error suggests the commands that start a new worker or end the task.
+func (e *Engine) refuseGone(agent string) error {
+	if alive, err := e.l.Alive(agent); err != nil || alive {
+		return nil
+	}
+	id := strings.TrimPrefix(agent, "worker-")
+	if k, _ := kindOf(agent); k == reviewer {
+		id = strings.Split(agent, "-")[1]
+	}
+	return fmt.Errorf("the session of %s is gone, so nobody would read the message. Run sfy task feedback %s <text> to start a new worker, or sfy task cancel %s", agent, id, id)
 }
 
 // live fails unless the named agent runs now: main, a worker of a task in work, or a reviewer of the task's current round.

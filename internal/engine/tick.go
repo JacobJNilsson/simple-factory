@@ -226,14 +226,8 @@ func (e *Engine) resendNotes() error {
 		s := e.agent(name)
 		down := false
 		if name == "main" {
-			alive, err := e.l.Alive(name)
-			down = err == nil && !alive
-			if err != nil && !s.aliveFailLogged {
-				e.logf("alive check of %s failed: %v", name, err)
-				s.aliveFailLogged = true
-			} else if err == nil {
-				s.aliveFailLogged = false
-			}
+			alive, known := e.probe(name)
+			down = known && !alive
 			if !down {
 				s.skipLogged = false
 			}
@@ -277,10 +271,46 @@ func (e *Engine) retryCleanup() error {
 			errs = append(errs, e.endSessions(t))
 		}
 		if (t.State == task.Done || t.State == task.Cancelled) && t.Dir != "" {
-			errs = append(errs, e.cleanup(t))
+			errs = append(errs, e.retryOne(t))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// cleanupBackoff is how many retries a cleanup skips after a liveness check that errored.
+const cleanupBackoff = 10
+
+// retryOne runs the cleanup of one task. A check that cannot tell whether a session runs makes the next retries wait.
+func (e *Engine) retryOne(t task.Task) error {
+	if e.cleanupWait[t.ID] > 0 {
+		e.cleanupWait[t.ID]--
+		return nil
+	}
+	err := e.cleanup(t)
+	if errors.Is(err, errAliveUnknown) {
+		e.cleanupWait[t.ID] = cleanupBackoff
+	}
+	return err
+}
+
+// aliveErrTicks is how many ticks in a row an alive check may fail before sfy tells main.
+const aliveErrTicks = 3
+
+// probe runs the alive check of a session and counts its failures. It logs the first failure of a run.
+// known is false when the check failed, so the caller cannot tell whether the session runs.
+func (e *Engine) probe(name string) (alive, known bool) {
+	s := e.agent(name)
+	alive, err := e.l.Alive(name)
+	if err == nil {
+		s.aliveErrs, s.aliveErr, s.aliveTold = 0, nil, false
+		return alive, true
+	}
+	s.aliveErrs++
+	s.aliveErr = err
+	if s.aliveErrs == 1 {
+		e.logf("alive check of %s failed: %v", name, err)
+	}
+	return false, false
 }
 
 // checkWorkers tells main once when a worker session is gone, and again only after the worker runs again.
@@ -296,12 +326,15 @@ func (e *Engine) checkWorkers() error {
 			continue
 		}
 		name := "worker-" + t.ID
-		alive, err := e.l.Alive(name)
-		if err != nil {
-			errs = append(errs, err)
+		alive, known := e.probe(name)
+		s := e.agent(name)
+		if !known {
+			if s.aliveErrs >= aliveErrTicks && !s.aliveTold {
+				s.aliveTold = true
+				errs = append(errs, e.message("main", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, s.aliveErr)))
+			}
 			continue
 		}
-		s := e.agent(name)
 		switch {
 		case alive:
 			s.gone = false

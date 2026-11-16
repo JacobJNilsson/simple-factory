@@ -2,6 +2,7 @@ package claude_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -145,6 +146,23 @@ func TestDeliverAppendsToTheNoteFileOfASessionWithSettings(t *testing.T) {
 	got, err := claude.DrainNote(path)
 	if err != nil || got != "From main:\nPlease rebase." {
 		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestCommandRemovesTheNoteOfAnEarlierSessionWithTheSameName(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+	if ok, err := p.Deliver("worker-t1", "old note"); err != nil || !ok {
+		t.Fatalf("ok %v, err %v", ok, err)
+	}
+
+	command(t, p, worker())
+
+	path, _ := claude.NotePath(home, "worker-t1")
+	for _, f := range []string{path, path + ".lock"} {
+		if _, err := os.Stat(f); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s survived the session start: %v", f, err)
+		}
 	}
 }
 

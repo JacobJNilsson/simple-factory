@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -53,6 +54,9 @@ const (
 // noteMessages tells an agent about its unread messages. The agent is busy until its next turn ends.
 // The provider delivers the senders and texts, and sfy marks the messages read. Otherwise sfy types the new-message note.
 func (e *Engine) noteMessages(name, why string) error {
+	if !e.reachable(name) {
+		return nil
+	}
 	s := e.agent(name)
 	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
 	unread, err := e.st.Unread(name)
@@ -75,6 +79,9 @@ func (e *Engine) noteMessages(name, why string) error {
 
 // note tells an agent a line of text. The provider delivers it, and sfy types it when the provider cannot.
 func (e *Engine) note(name, text string) error {
+	if !e.reachable(name) {
+		return nil
+	}
 	delivered, err := e.deliver(name, text)
 	if err != nil {
 		e.logf("delivery to %s failed, so sfy types the note: %v", name, err)
@@ -142,10 +149,32 @@ func (e *Engine) stop(name string) error {
 	if err == nil {
 		return nil
 	}
-	if alive, aerr := e.l.Alive(name); aerr == nil && !alive {
+	alive, aerr := e.l.Alive(name)
+	if aerr != nil {
+		return errors.Join(err, fmt.Errorf("%w of %s: %w", errAliveUnknown, name, aerr))
+	}
+	if !alive {
 		return nil
 	}
 	return err
+}
+
+// errAliveUnknown marks a failure that follows from an alive check that could not tell whether a session runs.
+var errAliveUnknown = errors.New("cannot tell whether the session runs")
+
+// reachable reports whether a note can arrive. A session that is gone gets no note, and its messages stay unread.
+// The log names the skip once, until the session lives again.
+func (e *Engine) reachable(name string) bool {
+	s := e.agent(name)
+	if alive, err := e.l.Alive(name); err != nil || alive {
+		s.skipLogged = false
+		return true
+	}
+	if !s.skipLogged {
+		e.logf("note skipped for %s: its session is not alive", name)
+		s.skipLogged = true
+	}
+	return false
 }
 
 // endSessions stops the worker and every reviewer of a task, and forgets their state.

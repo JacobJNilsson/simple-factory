@@ -179,6 +179,7 @@ if [ $rc -ne 0 ]; then printf '%s\n' "$out" >&2; exit 2; fi
 case $out in
   *'"child":null'*|*'"child": null'*) exit 1;;
   *'"child"'*) exit 0;;
+  *'"last_exit"'*) exit 1;;
 esac
 exit 2
 '''
