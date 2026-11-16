@@ -6,7 +6,9 @@ This page holds the details of running sfy. SPEC.md holds the full behaviour. Th
 
 Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
 
-`sfy restart --update` first updates the tap and runs `brew upgrade sfy`. It restarts only when that succeeds.
+`sfy restart --update` first upgrades sfy and restarts only when that succeeds. When Homebrew installed the running binary, it updates the tap and runs `brew upgrade sfy`. Otherwise it downloads the newest release from GitHub, checks the SHA-256 sum, writes the binary next to the running one and renames it over the running one. It never calls sudo. If the folder is not writable, such as a root-owned `/usr/local/bin`, it prints a `sudo install` command with the path of the downloaded file and exits with an error. A user-writable location such as `~/.local/bin/sfy` avoids this.
+
+The new sfy process gets the environment of the shell that ran `sfy restart`, including its `PATH`. A restart from a login shell therefore gives the workers the same `PATH`, so they find `claude`.
 
 ## Stop and start
 
