@@ -171,7 +171,7 @@ func (e *Engine) noteWorker(t task.Task) error {
 	if !e.agent(name).waiting {
 		return nil
 	}
-	return e.ignoreGone(name, e.typeNote(name, "task file changed"))
+	return e.ignoreGone(name, e.noteMessages(name, "task file changed"))
 }
 
 func (e *Engine) taskQueue(req protocol.Request) (string, error) {
@@ -320,7 +320,7 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 			continue
 		}
 		if e.agent(name).waiting {
-			errs = append(errs, e.ignoreGone(name, e.typeNote(name, "new message")))
+			errs = append(errs, e.ignoreGone(name, e.noteMessages(name, "new message")))
 		}
 	}
 	return "", errors.Join(errs...)
@@ -556,13 +556,7 @@ func (e *Engine) inbox(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var b strings.Builder
-	ids := make([]string, 0, len(msgs))
-	for _, m := range msgs {
-		fmt.Fprintf(&b, "From %s:\n%s\n\n", m.From, m.Body)
-		ids = append(ids, m.ID)
-	}
-	return b.String(), e.st.MarkRead(req.Caller.Agent, ids)
+	return formatMessages(msgs), e.st.MarkRead(req.Caller.Agent, messageIDs(msgs))
 }
 
 func (e *Engine) escalate(req protocol.Request) (string, error) {
@@ -626,7 +620,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 		return "", errors.Join(append(errs, err)...)
 	}
 	if len(unread) > 0 && e.noteDue(name, unread) {
-		errs = append(errs, e.typeNote(name, "turn ended"))
+		errs = append(errs, e.noteMessages(name, "turn ended"))
 	}
 	return "", errors.Join(errs...)
 }
@@ -644,7 +638,7 @@ func (e *Engine) hookIdle(req protocol.Request) (string, error) {
 	if err != nil || len(unread) == 0 || !e.noteDue(name, unread) {
 		return "", err
 	}
-	return "", e.typeNote(name, "idle")
+	return "", e.noteMessages(name, "idle")
 }
 
 // remind types the reminder for a missing report. After maxReminders it tells main once and types nothing.
@@ -657,7 +651,7 @@ func (e *Engine) remind(name string, s *agentState) error {
 		return e.message("main", "sfy", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
 	}
 	s.waiting, s.hookSince = false, false
-	return e.l.Send(name, noReportNote)
+	return e.note(name, noReportNote)
 }
 
 // hookPermission runs when an agent's permission prompt opens.

@@ -43,6 +43,8 @@ func (l *launcher) Stop(string) error           { return nil }
 func (l *launcher) Notify(string, string) error { return nil }
 func (l *launcher) TrustWarning(string) string  { return "" }
 
+func (l *launcher) Deliver(string, string) (bool, error) { return false, nil }
+
 type workspaces struct{}
 
 func (workspaces) Create(t task.Task) (string, error)  { return "/work/" + t.ID, nil }

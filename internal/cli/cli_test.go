@@ -135,6 +135,8 @@ func (quietLauncher) Stop(string) error              { return nil }
 func (quietLauncher) Notify(string, string) error    { return nil }
 func (quietLauncher) TrustWarning(string) string     { return "" }
 
+func (quietLauncher) Deliver(string, string) (bool, error) { return false, nil }
+
 type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC) }

@@ -15,6 +15,8 @@ import (
 // Launcher is the engine's Launcher with the calls that starting sfy needs for the main agent.
 type Launcher interface {
 	engine.Launcher
+	// Note tells the agent a line of text. The provider delivers it, and the pane gets it typed when the provider cannot.
+	Note(name, text string) error
 	// ShowMain shows the main agent's session again with the show_main template.
 	ShowMain(name string) error
 	// StartMain starts the main agent. It resumes the last conversation when it can, and reports whether it did.
@@ -99,6 +101,17 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 		_, _ = fmt.Fprintf(l.log, "%s show of %s failed: %v\n", time.Now().Format(time.RFC3339), spec.Name, err)
 	}
 	return nil
+}
+
+// Deliver asks the provider to deliver text without typing into the pane.
+func (l launcher) Deliver(name, text string) (bool, error) { return l.p.Deliver(name, text) }
+
+// Note delivers text through the provider and types it when the provider cannot deliver.
+func (l launcher) Note(name, text string) error {
+	if delivered, err := l.p.Deliver(name, text); err == nil && delivered {
+		return nil
+	}
+	return l.Send(name, text)
 }
 
 // TrustWarning asks the provider whether it would stop at a trust prompt for dir.

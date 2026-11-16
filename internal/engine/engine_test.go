@@ -33,6 +33,21 @@ type fakeLauncher struct {
 	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
 	warning    string
 	trustAsked []string
+	// canDeliver makes Deliver take the text. deliverErr makes it fail. delivered lists the texts that it took.
+	canDeliver bool
+	deliverErr error
+	delivered  []string
+}
+
+func (f *fakeLauncher) Deliver(name, text string) (bool, error) {
+	if f.deliverErr != nil {
+		return false, f.deliverErr
+	}
+	if !f.canDeliver {
+		return false, nil
+	}
+	f.delivered = append(f.delivered, name+": "+text)
+	return true, nil
 }
 
 func (f *fakeLauncher) Start(s engine.SessionSpec) error {

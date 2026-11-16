@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
 // ErrNotAllowed reports that a worker or reviewer ran sfy restart.
@@ -70,7 +72,12 @@ func (o options) noteMain() error {
 	if changed {
 		note += " Your prompt changed. Read the new text in " + mainPromptPath(o.home) + " with the Read tool."
 	}
-	if err := o.launcher.Send(mainSession, note); err != nil {
+	// A registered main agent has no sfy session folder, so its note is typed.
+	send := o.launcher.Note
+	if (registration.Folder{Home: o.home}).Registered() {
+		send = o.launcher.Send
+	}
+	if err := send(mainSession, note); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintln(o.out, "Told the main agent.")

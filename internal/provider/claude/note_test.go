@@ -132,6 +132,43 @@ func TestNoNoteIsLostWhenWrittenDuringDrains(t *testing.T) {
 	}
 }
 
+func TestDeliverAppendsToTheNoteFileOfASessionWithSettings(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+
+	ok, err := p.Deliver("worker-t1", "From main:\nPlease rebase.")
+	if err != nil || !ok {
+		t.Fatalf("ok %v, err %v", ok, err)
+	}
+
+	path, _ := claude.NotePath(home, "worker-t1")
+	got, err := claude.DrainNote(path)
+	if err != nil || got != "From main:\nPlease rebase." {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestDeliverDeclinesASessionThatSfyDidNotSetUp(t *testing.T) {
+	p, home := setup(t, bin)
+
+	ok, err := p.Deliver("main", "hi")
+
+	if err != nil || ok {
+		t.Fatalf("ok %v, err %v", ok, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "sessions")); !os.IsNotExist(err) {
+		t.Fatalf("Deliver created files: %v", err)
+	}
+}
+
+func TestDeliverDeclinesAnUnsafeSessionName(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	if ok, err := p.Deliver("../worker-t1", "hi"); err != nil || ok {
+		t.Fatalf("ok %v, err %v", ok, err)
+	}
+}
+
 func TestWatchNoteNamesTheFileInTheSessionStartOutput(t *testing.T) {
 	path := notePath(t)
 
