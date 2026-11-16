@@ -76,7 +76,8 @@ A task moves through these states:
 - sfy starts a worker for the oldest `queued` task that does not wait when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done`, the task moves to `review`, and sfy starts a reviewer.
 - When the reviewer's verdict is `pass` on a task with no repo, the task moves to `approved`. On a task with a repo that has a remote, it moves to `approved` after the worker reports that it pushed, as the push rules below describe. On a task with a repo that has no remote, it moves to `approved` at once. sfy ends the worker and reviewer sessions, keeps the workspace, and tells the main agent. For a repo task the note names the branch, the repo folder, and whether the repo has a remote. For a task with no repo the note says so, and the main agent checks the result and runs `sfy task complete <id>`.
-- The main agent integrates an approved branch of a repo task with plain git, in the repo folder. If the repo has a remote, it runs `git fetch`. It rebases the task branch onto the default branch and fast-forwards the default branch to the task branch with `git merge --ff-only`. If the repo has a remote, it pushes the default branch. It then runs `sfy task complete <id>`. If the rebase conflicts or the push is rejected, it tells the operator, aborts a stopped rebase, and forces nothing.
+- The main agent integrates an approved branch of a repo task with `sfy task integrate <id>`. In the repo folder, sfy runs `git fetch` when the repo has a remote, then fast-forwards the default branch to its remote copy. The default branch is the one that `origin/HEAD` names, or the checked-out branch when the repo has no remote. The repo folder must have it checked out. sfy rebases the task branch onto the default branch, fast-forwards the default branch to the task branch with `git merge --ff-only`, and pushes the default branch when the repo has a remote. It then moves the task to `done`. If a step fails, for example on a rebase conflict or a rejected push, sfy aborts a stopped rebase, forces nothing, and leaves the task `approved`. The main agent then tells the operator.
+- A repo can be set to no-merge, as the section Per-repo configuration describes. `sfy task integrate` then refuses, and its error names the branch. The error tells the main agent to leave the branch for the operator. The approval note says the same, and names the branch and the repo folder. The operator merges the branch by hand, and the main agent runs `sfy task complete <id>` when the operator says it is merged. The main agent's settings deny `git push`, `git merge`, `git rebase` and `gh pr merge`, with and without a git option before the verb, so the main agent cannot integrate by hand. sfy refuses to integrate when it cannot read the repo's `.sfy.toml` files, and the approval note then treats the repo as no-merge.
 - The `## Repo` section of a task is a URL or an absolute path to a local git repo, which may have no remote. A URL gets a clone in the state folder. A local path is used as it is. In both cases the worker gets a worktree on a new branch. sfy finds out whether the repo has a remote with `git remote`.
 - `sfy task feedback` sends feedback on a task in any state to the task's worker and records it on the task. The round and the `review_rounds` limit stay as they are, and the feedback does not count as a failed review. What happens depends on the state:
   - In `new` and `queued`, the state stays. The first message of the task's worker holds the feedback after the task file.
@@ -89,7 +90,7 @@ A task moves through these states:
   - In every round, the worker commits its work on the task branch and does not push. It reports `done`, and a reviewer checks the committed branch. A failed review goes back to the worker as usual.
   - When the review passes, sfy keeps the worker running and tells it to push now. The task stays in `review` until the worker runs `sfy report pushed`. Then the task moves to `approved`, sfy tells the main agent, and sfy ends the sessions.
   - Feedback that arrives while the worker waits to push ends the wait. The task moves to `feedback`.
-- When the main agent runs `sfy task complete`, the task moves to `done`. The main agent integrates the branch first, and the integration completes a task.
+- When the main agent runs `sfy task complete`, the task moves to `done`. A successful `sfy task integrate` moves the task to `done` too.
 - When the verdict is `fail`, sfy sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. sfy first sends the verdict to the worker. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
 - When a task is `done` or `cancelled`, sfy ends any worker and reviewer sessions that still run. It then checks the workspace. A clean worktree, found with `git status --porcelain`, or an empty folder is removed, and the branch stays. A worktree with uncommitted changes or untracked files stays, and so does a folder with files. sfy then tells the main agent that the workspace still holds work, and where it is.
@@ -143,6 +144,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task list [--archived]` | anyone | Lists the tasks and their states, without archived tasks. With `--archived`, lists only the archived tasks. |
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
 | `sfy task complete <id>` | main agent, operator | Moves an `approved` task to `done` and cleans up. Fails for a task in any other state. |
+| `sfy task integrate <id>` | main agent, operator | Integrates the branch of an `approved` repo task into the default branch, as the state rules describe, then moves the task to `done` and cleans up. It refuses in a no-merge repo and names the branch. It fails for a task with no repo and for a task in any other state. |
 | `sfy task feedback <id> <text>` | main agent, operator | Sends feedback on a task in any state to its worker and records it on the task. A task in `approved`, `done` or `cancelled` reopens. The lifecycle above describes each state. `sfy task show` lists the feedback with the verdicts. |
 | `sfy task archive <id>` | main agent, operator | Archives a `done` or `cancelled` task. The task keeps its state, files, verdicts and id, and its workspace and branch stay. Fails for any other state and for an archived task. `sfy task show` still prints it and says that it is archived. |
 | `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. Works in any state except `done` and `cancelled`. |
@@ -174,7 +176,7 @@ A command that an agent kind may not run fails with an error that names the comm
 - A worker or a reviewer never waits on a permission prompt. sfy's permission hook denies the call, gives the agent a reason, and records the denial in `sfy.log`.
 - Workers and reviewers get a clean environment. It holds the `SFY_*` variables, the basic shell variables, the provider's own variables and the names in `pass_env`.
 - Workers and reviewers run their sandboxed commands without an allow list. The `allow` setting is the main agent's allow list.
-- Workers may push only the task branch, with the two exact push forms. Reviewers may not push. Pushes run outside the sandbox. The main agent runs git through its allow list.
+- Workers may push only the task branch, with the two exact push forms. Reviewers may not push. Pushes run outside the sandbox. The main agent runs git through its allow list, but its deny rules refuse `git push`, `git merge`, `git rebase` and `gh pr merge`. sfy runs the integration itself.
 - Extra rules for one kind of session come from `[session_rules.<kind>]` in `config.toml`. Its `allow` list adds permission rules to that kind's allow rules, and its `excluded_commands` list adds command patterns that run outside the sandbox. sfy adds no rule for any other tool by itself.
 - Workers and reviewers run `sfy` commands outside the sandbox, because the sandbox blocks the sfy socket. They pass text to sfy only on standard input, so sfy reads no file for them.
 - The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
@@ -200,6 +202,7 @@ A command that an agent kind may not run fails with an error that names the comm
 | `deny_read` | `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
 | `allow_write` | The user cache folder and `~/go/pkg/mod`. On macOS also the per-user temp folder from `getconf DARWIN_USER_TEMP_DIR`, without its trailing slash | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
+| `no_merge` | `false` | When true, the main agent leaves approved branches for the operator. A `.sfy.toml` file can set it per repo. |
 | `session_rules.main`, `.worker`, `.reviewer` | none | Tables with an `allow` list and an `excluded_commands` list. sfy adds them to that kind's permission allow rules and sandbox excluded commands. |
 | `session_settings.main`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy adds them at the top level of that kind's settings file. |
 
@@ -216,6 +219,27 @@ preferredNotifChannel = "notifications_disabled"
 ```
 
 sfy keeps its own keys. A table that sets `permissions`, `hooks` or `sandbox` is a config error that names the key. A kind other than `main`, `worker` or `reviewer` is a config error. Without the tables, the settings files stay as they are.
+
+### Per-repo configuration
+
+A `.sfy.toml` file holds the settings of one repo or of every repo below one folder. It holds only per-repo settings. The first one is `no_merge`.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `no_merge` | the value in `config.toml`, `false` | When true, `sfy task integrate` refuses, and the main agent leaves the approved branch for the operator to merge by hand. |
+
+- **Which folder counts.** For a task whose `## Repo` is a local path, the folder is that path. For a task whose `## Repo` is a URL, the folder is the clone that sfy keeps in `repos/` of the state folder, which exists after the first task of that URL starts. So a `.sfy.toml` in `repos/` or in the state folder covers URL repos. The file is not searched for in the task's worktree.
+- **Lookup.** sfy reads `.sfy.toml` in that folder and in each parent folder up to `$HOME`. It stops at `$HOME`. A folder outside `$HOME` counts alone, with no parent. sfy reads the files again on each use, so an edit applies at once.
+- **Precedence.** The nearest file wins, key by key. A key that the nearest file leaves out comes from the next file up, and then from `config.toml`.
+- **Refusals.** A key that sfy does not know is an error. So is a global-only key, such as `multiplexer`, `max_workers` or `multiplexers`. The error names the file and the key. While a file has an error, `sfy task integrate` refuses for the repos below it.
+
+For example, this file at `~/Developer/work/.sfy.toml` makes the operator the only one who merges in every work repo below it:
+
+```toml
+no_merge = true
+```
+
+A file in one repo, such as `~/Developer/work/sandbox/.sfy.toml`, can set `no_merge = false` to allow the main agent to integrate there again.
 
 ## Multiplexer templates
 

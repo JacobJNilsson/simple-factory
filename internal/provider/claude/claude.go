@@ -318,10 +318,22 @@ func (a adapter) mainReads() []string {
 // A deny rule beats the auto-approval. It cannot match the allowed exact pushes, which have no option before push.
 const pushWithGitOptions = "Bash(git -* push*)"
 
-// deny returns the deny rules of a session. The main agent talks to the operator, so it denies nothing.
+// mainDeny keeps the main agent from integrating by hand. sfy task integrate does it and honors a repo's no-merge setting.
+// A rule cannot name the default branch, so each rule covers the whole verb, with and without a git option before it.
+// A rule without a wildcard covers the bare command. git merge and git rebase act on the current branch of the folder they run in.
+var mainDeny = []string{
+	"Bash(git push*)", pushWithGitOptions,
+	"Bash(git merge)", "Bash(git merge *)", "Bash(git -* merge)", "Bash(git -* merge *)",
+	"Bash(git rebase)", "Bash(git rebase *)", "Bash(git -* rebase)", "Bash(git -* rebase *)",
+	"Bash(gh pr merge*)",
+}
+
+// deny returns the deny rules of a session. The main agent denies only the direct forms of integration.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
 	switch spec.Kind {
+	case "main":
+		return slices.Clone(mainDeny)
 	case "reviewer":
 		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":

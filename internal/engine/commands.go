@@ -248,6 +248,45 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 	return "", e.cleanup(t)
 }
 
+// NoMergeError reports an integration that the repo config forbids. The operator merges Branch by hand.
+type NoMergeError struct {
+	Task, Branch, Repo string
+}
+
+func (e *NoMergeError) Error() string {
+	return fmt.Sprintf("repo %s is set to no-merge. Do not integrate task %s. Leave branch %s for the operator to merge by hand, and tell the operator", e.Repo, e.Task, e.Branch)
+}
+
+// taskIntegrate brings the branch of an approved task into the default branch, then completes the task.
+// A repo with no_merge set refuses, and so does a repo whose .sfy.toml files cannot be read.
+func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
+	t, err := e.load(req)
+	if err != nil {
+		return "", err
+	}
+	if err := need(t, task.Approved); err != nil {
+		return "", err
+	}
+	if t.Repo == "" {
+		return "", fmt.Errorf("task %s has no repo, so there is nothing to integrate. Run sfy task complete %s", t.ID, t.ID)
+	}
+	cfg, err := e.configFor(t)
+	if err != nil {
+		return "", err
+	}
+	if cfg.NoMerge {
+		return "", &NoMergeError{Task: t.ID, Branch: e.branchOf(t), Repo: e.w.RepoFolder(t.Repo)}
+	}
+	if err := e.w.Integrate(t); err != nil {
+		return "", err
+	}
+	t.State = task.Done
+	if err := e.save(t); err != nil {
+		return "", err
+	}
+	return "", e.cleanup(t)
+}
+
 // taskFeedback sends feedback on a task to its worker and records it. The round stays as it is.
 // A task in a state with no worker keeps the feedback for its next worker. A finished task goes back to queued.
 func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
@@ -577,7 +616,14 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 		if pushed {
 			where = "The repo has a remote, and the worker pushed the branch."
 		}
-		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s into the default branch with plain git, then run: sfy task complete %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s with: sfy task integrate %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+		// A repo whose config cannot be read counts as no-merge, because the safe side is to leave the merge to the operator.
+		if cfg, err := e.configFor(t); err != nil || cfg.NoMerge {
+			note = fmt.Sprintf("Task %s is approved. %s The repo is set to no-merge, so do not integrate it. Leave branch %s of the repo folder %s for the operator to merge by hand, and tell the operator in the chat. When the operator has merged it, run: sfy task complete %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+			if err != nil {
+				note += fmt.Sprintf("\n\nThe repo config could not be read: %v", err)
+			}
+		}
 	}
 	if err := e.message("main", from, note); err != nil {
 		return err

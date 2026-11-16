@@ -249,14 +249,20 @@ func TestReviewerSettingsDenyEveryEdit(t *testing.T) {
 	}
 }
 
-func TestMainSettingsKeepQuestionsAndEdits(t *testing.T) {
+func TestMainSettingsDenyOnlyTheDirectFormsOfIntegration(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
 
 	s := readSettings(t, home, "main")
 
-	if len(s.Permissions.Deny) != 0 {
-		t.Errorf("main denies %v", s.Permissions.Deny)
+	want := []string{
+		"Bash(git push*)", "Bash(git -* push*)",
+		"Bash(git merge)", "Bash(git merge *)", "Bash(git -* merge)", "Bash(git -* merge *)",
+		"Bash(git rebase)", "Bash(git rebase *)", "Bash(git -* rebase)", "Bash(git -* rebase *)",
+		"Bash(gh pr merge*)",
+	}
+	if !slices.Equal(want, s.Permissions.Deny) {
+		t.Errorf("main deny rules = %v, want %v", s.Permissions.Deny, want)
 	}
 	if hookOf(t, s, "Stop").Command == "" {
 		t.Error("main has no Stop hook")

@@ -97,7 +97,7 @@ func TestTheTaskIsApprovedOnlyAfterTheWorkerReportsThePush(t *testing.T) {
 		t.Fatalf("got %+v", tk)
 	}
 	got := v.inbox(t, "main")
-	if len(got) != 1 || !strings.Contains(got[0].Body, "task complete t1") {
+	if len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") {
 		t.Fatalf("main got %v", got)
 	}
 	if !slices.Contains(v.l.stopped, "worker-t1") {
@@ -191,7 +191,7 @@ func TestAPassedFirstReviewTellsTheWorkerToPushAndApprovesAfterTheReport(t *test
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
-	if got := v.inbox(t, "main"); len(got) != 1 || !strings.Contains(got[0].Body, "task complete t1") || !strings.Contains(got[0].Body, "worker pushed") {
+	if got := v.inbox(t, "main"); len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") || !strings.Contains(got[0].Body, "worker pushed") {
 		t.Fatalf("main got %v", got)
 	}
 }
@@ -210,7 +210,7 @@ func TestAPassedReviewOnARepoWithNoRemoteApprovesWithoutAPush(t *testing.T) {
 		t.Fatalf("got %+v", tk)
 	}
 	got := v.inbox(t, "main")
-	if len(got) != 1 || !strings.Contains(got[0].Body, "no remote") || !strings.Contains(got[0].Body, "task complete t1") {
+	if len(got) != 1 || !strings.Contains(got[0].Body, "no remote") || !strings.Contains(got[0].Body, "task integrate t1") {
 		t.Fatalf("main got %v", got)
 	}
 	if !slices.Contains(v.l.stopped, "worker-t1") {
