@@ -89,6 +89,9 @@ A task moves through these states:
 
 - One long-running sfy process is the only writer of sfy state. The CLI sends each command to that process over a Unix socket. Agents never write state files.
 - The state folder is `~/.sfy` by default. `SFY_HOME` overrides it.
+- Several state folders can run side by side, each with its own `config.toml`, tasks, notes, sfy process and main agent. `SFY_HOME=<folder> sfy up` starts the one in `<folder>`.
+- Each state folder has a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`.
+- sfy puts the prefix in front of every session name that it gives to the terminal tool, such as `sfy-work-main`, `sfy-work-sfy` and `sfy-work-worker-t1`. It puts the prefix in worker branches too, as in `sfy/sfy-work-t1`. Agent names in messages, notes, `sfy send`, `status.md` and `SFY_AGENT` carry no prefix.
 - The store is plain files behind one Go interface, so another store can replace it later.
 - Each task has a folder, `tasks/<id>/`, with `task.md`, its state, its verdicts and its messages. The state includes the task's workspace folder, which is empty after sfy removed or kept the workspace, and the worker's last progress report.
 - sfy rewrites `status.md` on every state change. It lists each task with its title, state, round, agents and the time of its last change. Escalated tasks stand above all others. Within each group, the task with the newest last change comes first, a task without a change time comes last, and the higher id comes first when two times are equal. It leaves out archived tasks.

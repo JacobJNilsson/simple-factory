@@ -26,6 +26,20 @@ A file `<home>/prompts/<kind>.md` replaces the default prompt of a kind of agent
 
 Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. If the main agent's session ended, sfy resumes the main agent's last Claude conversation. It records the conversation id in `sessions/main/conversation-id` in the state folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the main agent's session still runs, `sfy` runs the `show_main` template again, so the main agent appears in your terminal. Workers and reviewers always start new conversations.
 
+## Run a second main agent
+
+Each state folder holds its own tasks, notes, config, sfy process and main agent. To run a second main agent, put a `config.toml` in a new folder and start sfy with that folder:
+
+```
+SFY_HOME=~/.sfy-work sfy up
+```
+
+Use the same `SFY_HOME` for every other sfy command that targets that folder, such as `sfy down`.
+
+The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`.
+
+The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in each worker branch, so that task is `sfy/sfy-work-t1`. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
+
 ## Terminal tools
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`.
