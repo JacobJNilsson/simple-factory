@@ -40,12 +40,16 @@ type fakeLauncher struct {
 	deliverErr error
 	delivered  []string
 	// stuck is what Stuck reports, and drained is what Drain returns once.
-	stuck   bool
-	drained string
+	stuck    bool
+	drained  string
+	drainErr error
 }
 
 func (f *fakeLauncher) Stuck(string) bool { return f.stuck }
 func (f *fakeLauncher) Drain(string) (string, error) {
+	if f.drainErr != nil {
+		return "", f.drainErr
+	}
 	d := f.drained
 	f.drained = ""
 	return d, nil

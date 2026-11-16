@@ -79,7 +79,10 @@ func (a adapter) Stuck(name string) bool {
 // A stored message stays unread, so sfy inbox shows it from the store.
 func (a adapter) Drain(name string) (string, error) {
 	path, ok := NotePath(a.home, name)
-	if !ok {
+	if !ok || Ready(a.home, name) {
+		return "", nil
+	}
+	if _, err := os.Stat(filepath.Dir(path)); errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}
 	entries, err := DrainNote(path)

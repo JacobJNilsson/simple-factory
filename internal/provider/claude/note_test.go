@@ -276,6 +276,35 @@ func TestStuckTextOfASessionWithoutHooksIsDrainedWithoutItsMessages(t *testing.T
 	}
 }
 
+func TestDrainOfAnAgentWithoutASessionFolderReturnsNothing(t *testing.T) {
+	p, _ := setup(t, bin)
+
+	got, err := p.Drain("main")
+
+	if err != nil || got != "" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+func TestDrainLeavesTheNotesOfASessionWithHooksToTheHook(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+	hooksRan(t, home, "worker-t1")
+	path, _ := claude.NotePath(home, "worker-t1")
+	if err := claude.AppendNote(path, "", "hi"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := p.Drain("worker-t1")
+
+	if err != nil || got != "" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if left, _ := drain(path); left != "hi" {
+		t.Fatalf("the note was taken: %q", left)
+	}
+}
+
 func TestTextForASessionWithHooksIsNotStuck(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
