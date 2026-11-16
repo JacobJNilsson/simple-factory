@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestFromMapNamesMissingTemplate(t *testing.T) {
@@ -152,8 +154,47 @@ func TestNotifyFillsTemplate(t *testing.T) {
 	}
 }
 
+// herdrSet loads the example config in docs/herdr.md and returns its template set.
+func herdrSet(t *testing.T) Templates {
+	t.Helper()
+	doc, err := os.ReadFile(filepath.Join("..", "..", "docs", "herdr.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, ok := strings.Cut(string(doc), "```toml\n")
+	if !ok {
+		t.Fatal("docs/herdr.md has no toml block")
+	}
+	block, _, ok := strings.Cut(rest, "```")
+	if !ok {
+		t.Fatal("docs/herdr.md toml block does not end")
+	}
+	var cfg struct {
+		Multiplexer  string                       `toml:"multiplexer"`
+		Multiplexers map[string]map[string]string `toml:"multiplexers"`
+	}
+	if _, err := toml.Decode(block, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Multiplexer != "herdr" {
+		t.Fatalf("multiplexer = %q, want herdr", cfg.Multiplexer)
+	}
+	set, err := FromMap(cfg.Multiplexers["herdr"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
+}
+
+func TestHerdrExampleHidesWorkersAndShowsTheMainAgent(t *testing.T) {
+	set := herdrSet(t)
+	if set.Show != "" || set.ShowMain == "" {
+		t.Fatalf("show %q, show_main %q", set.Show, set.ShowMain)
+	}
+}
+
 func TestHerdrAliveFailsWhenHcIsMissing(t *testing.T) {
-	set, _ := Builtin("herdr")
+	set := herdrSet(t)
 	t.Setenv("PATH", t.TempDir())
 	alive, err := Runner(set).Alive("sfy-test-x")
 	if err == nil || alive {
@@ -250,7 +291,7 @@ func TestShowWithoutTemplateDoesNothing(t *testing.T) {
 }
 
 func TestHerdrShowPassesTheAddressToHerdrApp(t *testing.T) {
-	set, _ := Builtin("herdr")
+	set := herdrSet(t)
 	bin := t.TempDir()
 	out := filepath.Join(t.TempDir(), "out")
 	stub := func(name, body string) {
@@ -261,7 +302,7 @@ func TestHerdrShowPassesTheAddressToHerdrApp(t *testing.T) {
 	stub("hc", `echo '{"address":"t6z","agent":"sleep","name":"main","state":"live","turn":0}'`)
 	stub("herdr-app", `echo "$@" > `+shellQuote(out))
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	if err := Runner(set).Show("main"); err != nil {
+	if err := Runner(set).ShowMain("main"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -286,12 +327,12 @@ func herdrStubs(t *testing.T, herdrApp string) {
 }
 
 func TestHerdrShowRetriesUntilTheTerminalIsKnown(t *testing.T) {
-	set, _ := Builtin("herdr")
+	set := herdrSet(t)
 	count := filepath.Join(t.TempDir(), "count")
 	herdrStubs(t, `echo x >> `+shellQuote(count)+`
 if [ $(wc -l < `+shellQuote(count)+`) -le 2 ]; then echo '{"error":"no running terminal"}'; exit 1; fi
 echo '{"pending": true}'`)
-	if err := Runner(set).Show("main"); err != nil {
+	if err := Runner(set).ShowMain("main"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(count)
@@ -301,11 +342,11 @@ echo '{"pending": true}'`)
 }
 
 func TestHerdrShowFailureCarriesHerdrAppOutput(t *testing.T) {
-	set, _ := Builtin("herdr")
+	set := herdrSet(t)
 	count := filepath.Join(t.TempDir(), "count")
 	herdrStubs(t, `echo x >> `+shellQuote(count)+`
 echo '{"error":"no running terminal \"main\""}'; exit 1`)
-	err := Runner(set).Show("main")
+	err := Runner(set).ShowMain("main")
 	var ce *commandError
 	if !errors.As(err, &ce) || !strings.Contains(ce.stderr, "no running terminal") {
 		t.Fatalf("want herdr-app's message in the error, got %v", err)
@@ -317,13 +358,13 @@ echo '{"error":"no running terminal \"main\""}'; exit 1`)
 }
 
 func TestHerdrShowFailsWithoutAnAddress(t *testing.T) {
-	set, _ := Builtin("herdr")
+	set := herdrSet(t)
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "hc"), []byte("#!/bin/sh\necho '{\"name\":\"main\"}'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	if err := Runner(set).Show("main"); err == nil {
+	if err := Runner(set).ShowMain("main"); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -419,7 +460,7 @@ func TestHerdrSet(t *testing.T) {
 	if err := exec.CommandContext(context.Background(), "hc", "server", "status").Run(); err != nil {
 		t.Skip("hc server is not running")
 	}
-	set, _ := Builtin("herdr")
+	set := herdrSet(t)
 	name := uniqueName()
 	exerciseSet(t, Runner(set), name, func() string {
 		out, _ := exec.CommandContext(context.Background(), "hc", "read", name).Output()

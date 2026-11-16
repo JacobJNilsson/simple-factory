@@ -13,3 +13,11 @@ Each pushed tag `v*` triggers a release. GoReleaser builds sfy for macOS and Lin
 ## Install a new build
 
 Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The running sfy process keeps the old code until you restart it. Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
+
+## Terminal tools
+
+sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`.
+
+The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`.
+
+`docs/herdr.md` holds an example set for Herdr. See SPEC.md for every template.

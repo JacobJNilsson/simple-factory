@@ -10,7 +10,7 @@ This spec covers version 0.
 
 - sfy is written in Go and ships as one binary, `sfy`.
 - The agent provider sits behind an adapter. Version 0 has one adapter, for Claude Code. The design allows more providers, and several in one sfy process.
-- A multiplexer is a set of command templates in `config.toml`, with no Go code. Version 0 ships sets for tmux and Herdr. A new multiplexer needs only a new set.
+- A multiplexer is a set of command templates in `config.toml`, with no Go code. Version 0 ships a set for tmux. A new multiplexer needs only a new set. `docs/herdr.md` holds an example set for Herdr.
 - The core knows nothing about any one kind of work. The extension points below add that.
 - Version 0 has no web console, cost tracking, remote agents or trust rules. sfy merges nothing itself. The main agent merges through the provider's tools.
 
@@ -203,7 +203,7 @@ A use of sfy extends it at these points, without changes to the core:
 
 ## Platforms
 
-sfy runs on Linux and macOS, with tmux or Herdr.
+sfy runs on Linux and macOS, with tmux, or with another multiplexer that has a template set. See `docs/herdr.md`.
 
 docs/rex.md has an example config for Rex.
 

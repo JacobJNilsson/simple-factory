@@ -50,11 +50,8 @@ func FromMap(m map[string]string) (Templates, error) {
 
 // Builtin returns a shipped template set by name.
 func Builtin(name string) (Templates, bool) {
-	switch name {
-	case "tmux":
+	if name == "tmux" {
 		return tmuxSet, true
-	case "herdr":
-		return herdrSet, true
 	}
 	return Templates{}, false
 }
@@ -65,33 +62,6 @@ var tmuxSet = Templates{
 	Send:  "tmux send-keys -t ={name}: -l -- {text} && tmux send-keys -t ={name}: Enter",
 	Alive: "tmux has-session -t ={name}",
 	Stop:  "tmux kill-session -t ={name}",
-}
-
-// A finished terminal stays listed and hc get exits 0 for it, so Alive checks the state.
-// Exit 1 means missing or finished. Any other hc failure exits 2, so Alive reports an error and not "gone".
-var herdrSet = Templates{
-	Start: "hc run --bg --name {name} --cwd {dir} --no-parent --no-notify -- {command}",
-	Send:  "hc send {name} -- {text}",
-	Alive: `out=$(hc get {name} --json 2>&1); rc=$?
-case $out in *'"kind":"not_found"'*) exit 1;; esac
-if [ $rc -ne 0 ]; then printf '%s\n' "$out" >&2; exit 2; fi
-case $out in *'"state":"live"'*) exit 0;; esac
-exit 1`,
-	Stop: "hc kill {name}",
-	// A background terminal has no pane. herdr-app needs its address, which hc get prints in the JSON.
-	Show: `out=$(hc get {name} --json) || exit 1
-addr=$(printf '%s' "$out" | sed -n 's/.*"address":"\([^"]*\)".*/\1/p')
-[ -n "$addr" ] || { echo "no address for {name}" >&2; exit 1; }
-# The Herdr app learns a new terminal a moment after hc run returns, so keep retries until it knows it.
-i=0
-while :; do
-  res=$(herdr-app do terminal.keep --terminal "$addr" 2>&1) && exit 0
-  i=$((i+1))
-  [ $i -lt 10 ] || break
-  sleep "${SFY_SHOW_WAIT:-0.5}"
-done
-printf '%s\n' "$res" >&2
-exit 1`,
 }
 
 // A template that runs longer than this is killed and reported as an error.
