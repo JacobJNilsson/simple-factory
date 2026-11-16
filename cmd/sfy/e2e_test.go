@@ -76,8 +76,11 @@ func newRig(t *testing.T) (home string, sfy runSfy) {
 	if out, err := exec.CommandContext(context.Background(), "go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
-	if err := os.WriteFile(filepath.Join(fakeDir, "claude"), []byte(fakeClaude), 0o700); err != nil {
-		t.Fatal(err)
+	// The sandbox preflight looks for bwrap and socat and runs bwrap once, so fakes keep the test independent of the machine.
+	for name, script := range map[string]string{"claude": fakeClaude, "bwrap": "#!/bin/sh\nexit 0\n", "socat": "#!/bin/sh\nexit 0\n"} {
+		if err := os.WriteFile(filepath.Join(fakeDir, name), []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	sock := fmt.Sprintf("sfy-e2e-%d", rand.Uint32())
