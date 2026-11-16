@@ -10,13 +10,15 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 )
 
-// execRecorder replaces the real exec. It records each argv and returns err.
+// execRecorder replaces the real exec. It records each folder and argv and returns err.
 type execRecorder struct {
+	dirs  []string
 	argvs [][]string
 	err   error
 }
 
-func (e *execRecorder) exec(argv []string) error {
+func (e *execRecorder) exec(dir string, argv []string) error {
+	e.dirs = append(e.dirs, dir)
 	e.argvs = append(e.argvs, argv)
 	return e.err
 }
@@ -64,13 +66,37 @@ func TestUpRunsTheMainAgentInPlaceWhenWhoamiPrintsAnAddress(t *testing.T) {
 	}
 }
 
+func TestUpRunsTheMainAgentInTheStateFolder(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{r.o.home}; !reflect.DeepEqual(rec.dirs, want) {
+		t.Fatalf("exec folders %v, want %v", rec.dirs, want)
+	}
+}
+
+func TestUpFallsBackToStartWhenTheFolderChangeFails(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	rec.err = errors.New("chdir failed")
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.l.specs) != 1 {
+		t.Fatalf("starts %v, want one start", r.l.specs)
+	}
+	if _, ok := readAddress(t, r.o); ok {
+		t.Error("the address stayed after the failed change")
+	}
+}
+
 func TestUpStartsTheSfyProcessBeforeItReplacesItself(t *testing.T) {
 	r, rec := inPlaceRig(t, "dev", nil)
-	r.o.exec = func(argv []string) error {
+	r.o.exec = func(dir string, argv []string) error {
 		if len(r.m.starts) != 1 {
 			t.Errorf("the sfy process must run before the exec, starts %v", r.m.starts)
 		}
-		return rec.exec(argv)
+		return rec.exec(dir, argv)
 	}
 	if err := run(r.o); err != nil {
 		t.Fatal(err)

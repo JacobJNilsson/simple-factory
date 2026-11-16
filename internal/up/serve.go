@@ -46,8 +46,13 @@ type parts struct {
 	launcher launcher.Launcher
 }
 
-// execInPlace replaces the sfy process with argv. It returns only when the replacement fails.
-func execInPlace(argv []string) error { return syscall.Exec(argv[0], argv, os.Environ()) }
+// execInPlace changes into dir and replaces the sfy process with argv. It returns only when one of the two fails.
+func execInPlace(dir string, argv []string) error {
+	if err := os.Chdir(dir); err != nil {
+		return err
+	}
+	return syscall.Exec(argv[0], argv, os.Environ())
+}
 
 func newParts(env func(string) string) (parts, error) {
 	home := config.Home(env)
