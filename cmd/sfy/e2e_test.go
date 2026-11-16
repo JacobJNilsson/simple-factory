@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 )
 
 // fakeClaude acts like the agent CLI. It runs the Stop hook command from its settings file after each turn.
@@ -108,6 +110,9 @@ stop = "` + tm + ` kill-session -t ={name}"
 	return home, func(agent, stdin string, args ...string) (string, error) {
 		cmd := exec.CommandContext(context.Background(), bin, args...)
 		cmd.Env = append(append([]string{}, env...), "SFY_AGENT="+agent)
+		if agent != "" {
+			cmd.Env = append(cmd.Env, "SFY_TOKEN="+claude.ReadToken(home, agent))
+		}
 		cmd.Stdin = strings.NewReader(stdin)
 		out, err := cmd.CombinedOutput()
 		return string(out), err

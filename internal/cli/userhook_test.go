@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -119,6 +121,27 @@ func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
 		if got := sessionOwnHook(c.args); got != c.want {
 			t.Errorf("%s: sessionOwnHook = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
+	home := t.TempDir()
+	token, err := claude.IssueToken(home, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registration.Write(home, registration.Record{ID: "s-main"}); err != nil {
+		t.Fatal(err)
+	}
+	env := envOf(map[string]string{"SFY_HOME": home})
+
+	req, acts, err := userHookRequest("idle", env, strings.NewReader(strings.Replace(permissionInput, "%s", "s-main", 1)))
+
+	if err != nil || !acts {
+		t.Fatalf("acts %v, err %v", acts, err)
+	}
+	if want := (protocol.Caller{Agent: "main", Token: token}); req.Caller != want {
+		t.Fatalf("caller %+v, want %+v", req.Caller, want)
 	}
 }
 
