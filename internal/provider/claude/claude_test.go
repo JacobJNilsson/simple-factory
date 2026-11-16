@@ -885,7 +885,39 @@ func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
 	if string(plain) != string(empty) {
 		t.Errorf("files differ:\n%s\n%s", plain, empty)
 	}
-	if !strings.HasPrefix(string(plain), "{\n  \"sandbox\"") {
-		t.Errorf("field order changed: %.40s", plain)
+}
+
+func TestMainSettingsKeepTheFieldOrderAndNoSuggestionKey(t *testing.T) {
+	home := t.TempDir()
+	command(t, claude.New(config.Config{}, home, bin), mainSpec())
+	b, err := os.ReadFile(settingsPath(home, mainSpec().Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(b), "{\n  \"permissions\"") || strings.Contains(string(b), "promptSuggestionEnabled") {
+		t.Errorf("main settings changed: %.60s", b)
+	}
+}
+
+func TestWorkerAndReviewerTurnOffPromptSuggestions(t *testing.T) {
+	for _, kind := range []string{"worker", "reviewer"} {
+		if got := extraSettings(t, kind, config.Config{})["promptSuggestionEnabled"]; got != false {
+			t.Errorf("%s: promptSuggestionEnabled = %v, want false", kind, got)
+		}
+	}
+	if _, ok := extraSettings(t, "main", config.Config{})["promptSuggestionEnabled"]; ok {
+		t.Error("main got promptSuggestionEnabled")
+	}
+}
+
+func TestConfigOverridesPromptSuggestionDefault(t *testing.T) {
+	cfg := config.Config{SessionSettings: map[string]config.SessionValues{
+		"worker":   {"promptSuggestionEnabled": true},
+		"reviewer": {"promptSuggestionEnabled": true},
+	}}
+	for _, kind := range []string{"worker", "reviewer"} {
+		if got := extraSettings(t, kind, cfg)["promptSuggestionEnabled"]; got != true {
+			t.Errorf("%s: promptSuggestionEnabled = %v, want true", kind, got)
+		}
 	}
 }
