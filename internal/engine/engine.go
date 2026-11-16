@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -74,6 +75,8 @@ type Engine struct {
 	agents map[string]*agentState
 	// startFails counts the failed starts in a row of each task.
 	startFails map[string]int
+	// down is true after sfy down stopped the sessions. The server then ends the sfy process.
+	down atomic.Bool
 }
 
 // agentState tracks when a session may take a note.
@@ -181,6 +184,7 @@ var commands = map[string]command{
 	"task feedback":   {(*Engine).taskFeedback, []kind{operator, main}},
 	"task complete":   {(*Engine).taskComplete, []kind{operator, main}},
 	"task archive":    {(*Engine).taskArchive, []kind{operator, main}},
+	"down":            {(*Engine).downCommand, []kind{operator}},
 	"send":            {(*Engine).send, []kind{main}},
 	"report done":     {(*Engine).reportDone, []kind{worker}},
 	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},

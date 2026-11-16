@@ -125,6 +125,10 @@ func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Dur
 			defer wg.Done()
 			defer conns.remove(conn)
 			handle(conn, eng)
+			// The answer is written, so the connection can close with the process.
+			if eng.Stopping() {
+				cancel()
+			}
 		}()
 	}
 }

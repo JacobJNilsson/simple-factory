@@ -17,6 +17,9 @@ func active(t task.Task) bool {
 func (e *Engine) Tick() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.down.Load() {
+		return nil
+	}
 	var errs []error
 	for _, step := range []func() error{e.startQueued, e.resendNotes, e.retryCleanup, e.checkWorkers} {
 		errs = append(errs, step())

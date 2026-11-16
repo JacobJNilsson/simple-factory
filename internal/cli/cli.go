@@ -42,6 +42,7 @@ const usage = `usage:
   sfy inbox
   sfy escalate <id> <text...>
   sfy status
+  sfy down             stop all agents and the sfy process (operator only)
   sfy hook <event>
 `
 
@@ -100,6 +101,7 @@ var forms = map[string]form{
 	"inbox":           {words: 1},
 	"escalate":        {words: 1, ids: 1, text: true},
 	"status":          {words: 1},
+	"down":            {words: 1},
 	"hook":            {words: 1, ids: 1, stdin: true},
 }
 
@@ -208,6 +210,10 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 	}
 	ans, err := server.Call(filepath.Join(config.Home(env), "sfy.sock"), req)
 	var nr *server.NotRunningError
+	if errors.As(err, &nr) && req.Command == "down" {
+		_, _ = fmt.Fprintln(stdout, "sfy is not running.")
+		return exitOK
+	}
 	if errors.As(err, &nr) {
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitNotRunning
