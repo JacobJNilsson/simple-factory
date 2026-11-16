@@ -621,12 +621,16 @@ func (e *Engine) inbox(req protocol.Request) (string, error) {
 		return "", err
 	}
 	// The provider's stuck text covers notes that no hook drained. Stuck messages are unread, so msgs already holds them.
+	// A failed drain is only logged, so the messages still reach the agent.
 	stuck, derr := e.l.Drain(req.Caller.Agent)
+	if derr != nil {
+		e.logf("draining the stuck notes of %s failed: %v", req.Caller.Agent, derr)
+	}
 	out := formatMessages(msgs)
 	if stuck != "" {
 		out += stuck + "\n"
 	}
-	return out, errors.Join(derr, e.st.MarkRead(req.Caller.Agent, messageIDs(msgs)))
+	return out, e.st.MarkRead(req.Caller.Agent, messageIDs(msgs))
 }
 
 func (e *Engine) escalate(req protocol.Request) (string, error) {
