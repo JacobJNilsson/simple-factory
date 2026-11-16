@@ -77,7 +77,7 @@ func (e *MissingError) Error() string {
 
 // FormatError reports a task file whose structure Parse cannot read.
 type FormatError struct {
-	// Problem is "duplicate section" or "text before the title".
+	// Problem is "duplicate section", "more than one line in" or "text before the title".
 	Problem string
 	// Section names the duplicated section, and is empty for the other problems.
 	Section string
@@ -184,16 +184,26 @@ func Parse(md string) (Task, error) {
 	}
 	t.Description = sections["Description"]
 	t.Goal = sections["Goal"]
-	t.Repo = firstLine(sections["Repo"])
-	t.Check = firstLine(sections["Check"])
-	if typ := strings.ToLower(firstLine(sections["Type"])); typ != "" {
+	var err error
+	if t.Repo, err = oneLine("Repo", sections["Repo"]); err != nil {
+		return Task{}, err
+	}
+	if t.Check, err = oneLine("Check", sections["Check"]); err != nil {
+		return Task{}, err
+	}
+	typ, err := oneLine("Type", sections["Type"])
+	if err != nil {
+		return Task{}, err
+	}
+	if typ = strings.ToLower(typ); typ != "" {
 		if !slices.Contains(Types, typ) {
 			return Task{}, &FormatError{Problem: "invalid section", Section: "Type"}
 		}
 		t.Type = typ
 	}
 	for _, line := range strings.Split(sections["Protected"], "\n") {
-		if p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- ")); p != "" {
+		p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
+		if p = strings.TrimSpace(strings.Trim(p, "`")); p != "" {
 			t.Protected = append(t.Protected, p)
 		}
 	}
@@ -232,9 +242,30 @@ func (t Task) Label(all []Task) string {
 	return string(t.State)
 }
 
-func firstLine(s string) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
-	return strings.TrimSpace(line)
+// oneLine returns the single non-empty line of a section body, or empty for a blank body.
+func oneLine(section, body string) (string, error) {
+	var lines []string
+	for _, l := range strings.Split(body, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	switch len(lines) {
+	case 0:
+		return "", nil
+	case 1:
+		return lines[0], nil
+	}
+	return "", &FormatError{Problem: "more than one line in", Section: section}
+}
+
+// WithFileFieldsOf returns a copy of t whose fields from the task file come from edited.
+// Every state field of t stays, so a new state field survives an edit without a change here.
+func (t Task) WithFileFieldsOf(edited Task) Task {
+	t.Title, t.Description, t.Goal = edited.Title, edited.Description, edited.Goal
+	t.Repo, t.Check, t.Protected = edited.Repo, edited.Check, edited.Protected
+	t.After, t.Type, t.Extra = edited.After, edited.Type, edited.Extra
+	return t
 }
 
 // Markdown writes the task file that Parse reads.
