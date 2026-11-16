@@ -93,6 +93,8 @@ type options struct {
 	// exec runs argv in the folder dir in place of the sfy process, as a started session runs in its folder.
 	// It returns only when it fails.
 	exec func(dir string, argv []string) error
+	// session returns the id of the agent session that runs the command, or an empty string.
+	session func() string
 }
 
 // mainAddressPath is the file that records the address of a main agent that runs in the operator's terminal.

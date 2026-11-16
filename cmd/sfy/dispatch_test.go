@@ -24,6 +24,8 @@ func TestDispatch(t *testing.T) {
 		{"operator sfy up starts", []string{"up"}, "", 0, true, "", ""},
 		{"agent sfy up prints usage", []string{"up"}, "main", 1, false, "", "usage:"},
 		{"up takes no arguments", []string{"up", "--help"}, "", 2, false, "", "usage:"},
+		{"agent sfy register prints usage", []string{"register"}, "worker-t1", 1, false, "", "usage:"},
+		{"register takes no arguments", []string{"register", "x"}, "", 2, false, "", "usage:"},
 		{"help takes no arguments", []string{"help", "x"}, "", 2, false, "", "usage:"},
 		{"--help takes no arguments", []string{"--help", "x"}, "", 2, false, "", "usage:"},
 		{"serve takes no arguments", []string{"serve", "--help"}, "", 2, false, "", "usage:"},

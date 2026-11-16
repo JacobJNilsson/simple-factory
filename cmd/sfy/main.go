@@ -70,6 +70,16 @@ func (a app) run(args []string) int {
 	case "run":
 		// On success the process becomes the command, so run returns only on an error.
 		return a.report(envrun.Run(args[1:]))
+	case "register":
+		if len(args) > 1 {
+			return cli.Misuse(a.stderr, "register takes no arguments")
+		}
+		// A started agent has its role already, and only a session that sfy did not start registers.
+		if a.getenv("SFY_AGENT") != "" {
+			cli.PrintUsage(a.stderr)
+			return 1
+		}
+		return a.report(up.Register(os.Environ(), a.getenv, a.stdout, a.stderr))
 	case "restart":
 		update := len(args) == 2 && args[1] == "--update"
 		if len(args) > 1 && !update {
