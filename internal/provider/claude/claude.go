@@ -117,7 +117,19 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if spec.Kind != "main" {
 		argv = append(argv, "--permission-mode", "acceptEdits")
 	}
-	argv = append(argv, "--settings", path, "--append-system-prompt", role, spec.Prompt)
+	prompt := spec.Prompt
+	argv = append(argv, "--settings", path, "--append-system-prompt", role)
+	if spec.Kind == "main" {
+		conversation, resumed, err := a.mainConversation(spec)
+		if err != nil {
+			return nil, err
+		}
+		argv = append(argv, conversation...)
+		if resumed && spec.ResumePrompt != "" {
+			prompt = spec.ResumePrompt
+		}
+	}
+	argv = append(argv, prompt)
 	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.
 	return envrun.Wrap(filepath.Dir(path), env, clean, a.sfyBin, argv)
 }

@@ -17,6 +17,8 @@ type Launcher interface {
 	engine.Launcher
 	// ShowMain shows the main agent's session again with the show_main template.
 	ShowMain(name string) error
+	// StartMain starts the main agent. It resumes the last conversation when it can, and reports whether it did.
+	StartMain(spec engine.SessionSpec) (resumed bool, err error)
 }
 
 type launcher struct {
@@ -24,6 +26,10 @@ type launcher struct {
 	p   provider.Provider
 	log io.Writer
 }
+
+// resumeGrace is how long a resumed main agent must run before sfy counts the resume as working.
+// It is long enough for a failed resume to exit. Tests shorten it.
+var resumeGrace = 2 * time.Second
 
 // New returns a Launcher that starts the provider's command in a multiplexer session.
 // A failed show goes to log, which may be nil.
@@ -36,6 +42,36 @@ func New(m mux.Mux, p provider.Provider, log io.Writer) Launcher {
 // The main agent runs the show_main template and every other agent runs the show template.
 // A failed show leaves the start successful, because the agent runs either way.
 func (l launcher) Start(spec engine.SessionSpec) error {
+	if spec.Kind == "main" {
+		_, err := l.StartMain(spec)
+		return err
+	}
+	return l.begin(spec)
+}
+
+// StartMain starts the main agent and resumes its last conversation when the provider can.
+// When the resumed session ends within the grace time, it starts a new conversation instead.
+func (l launcher) StartMain(spec engine.SessionSpec) (bool, error) {
+	if spec.Fresh || !l.p.Resumes(spec) {
+		return false, l.begin(spec)
+	}
+	if err := l.begin(spec); err != nil {
+		return false, err
+	}
+	time.Sleep(resumeGrace)
+	alive, err := l.Alive(spec.Name)
+	if err != nil {
+		return false, err
+	}
+	if alive {
+		return true, nil
+	}
+	spec.Fresh = true
+	return false, l.begin(spec)
+}
+
+// begin runs the provider's command in a new session and shows the session.
+func (l launcher) begin(spec engine.SessionSpec) error {
 	argv, err := l.p.Command(spec)
 	if err != nil {
 		return err

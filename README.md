@@ -18,6 +18,10 @@ Run `make install` to build sfy and install it with `go install ./cmd/sfy`. The 
 
 A file `<home>/prompts/<kind>.md` replaces the default prompt of a kind of agent. The kinds are `main`, `worker`, `reviewer` and `worker-repo`. To add lines without a copy of the whole prompt, put files that end in `.md` in `<home>/prompts/<kind>.d/`. sfy appends them in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the main agent when an addition to its prompt changed.
 
+## Start sfy again
+
+Run `sfy` from any terminal. If the main agent's session ended, sfy resumes the main agent's last Claude conversation. It records the conversation id in `sessions/main/conversation-id` in the state folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the main agent's session still runs, `sfy` runs the `show_main` template again, so the main agent appears in your terminal. Workers and reviewers always start new conversations.
+
 ## Terminal tools
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`.
