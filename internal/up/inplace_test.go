@@ -103,6 +103,55 @@ func TestUpStartsTheSfyProcessBeforeItReplacesItself(t *testing.T) {
 	}
 }
 
+func TestUpShowsTheMainAgentBeforeItReplacesItself(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	var addressAtShow string
+	execsAtShow := -1
+	r.m.onShowMain = func() {
+		addressAtShow, _ = readAddress(t, r.o)
+		execsAtShow = len(rec.argvs)
+	}
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(r.m.shownMain, []string{"main"}) {
+		t.Fatalf("shown %v, want the main agent once", r.m.shownMain)
+	}
+	if addressAtShow != "dev" || execsAtShow != 0 {
+		t.Errorf("at show: address %q, execs %d, want dev and 0", addressAtShow, execsAtShow)
+	}
+	if len(rec.argvs) != 1 {
+		t.Errorf("execs %v, want one", rec.argvs)
+	}
+}
+
+func TestUpStartsInPlaceWhenShowMainFails(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	r.m.showMainErr = errors.New("no pane layout")
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.argvs) != 1 {
+		t.Fatalf("execs %v, want one", rec.argvs)
+	}
+	if !strings.Contains(r.err.String(), "no pane layout") {
+		t.Errorf("warning %q does not name the failure", r.err.String())
+	}
+	if got, ok := readAddress(t, r.o); !ok || got != "dev" {
+		t.Errorf("recorded address %q, %v, want dev", got, ok)
+	}
+}
+
+func TestUpDoesNotShowMainWhenTheStartGoesThroughTheSet(t *testing.T) {
+	r := newRig(t)
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.m.shownMain) != 0 {
+		t.Errorf("up showed the main agent itself: %v", r.m.shownMain)
+	}
+}
+
 func TestUpFallsBackToStartWithoutWhoami(t *testing.T) {
 	r := newRig(t)
 	if err := run(r.o); err != nil {
@@ -237,6 +286,7 @@ func TestUpShowsTheRecordedMainAgentAndStartsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.m.alive["dev"] = true
+	r.m.shownMain = nil
 	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "main", mainAddressPath(r.o.home))}
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
