@@ -47,7 +47,7 @@ func TestFatalAcceptErrorEndsServe(t *testing.T) {
 	wrap := func(ln net.Listener) net.Listener { return failingListener{ln, boom} }
 
 	done := make(chan error, 1)
-	go func() { done <- serve(context.Background(), socket, eng, time.Hour, io.Discard, wrap) }()
+	go func() { done <- serve(context.Background(), socket, eng, time.Hour, io.Discard, defaultMaxLine, wrap) }()
 	select {
 	case err = <-done:
 	case <-time.After(5 * time.Second):

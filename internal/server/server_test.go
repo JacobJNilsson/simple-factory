@@ -121,14 +121,7 @@ func start(t *testing.T, socket string, eng *engine.Engine, tick time.Duration, 
 	r := &running{cancel: cancel, done: make(chan error, 1)}
 	go func() { r.done <- server.Serve(ctx, socket, eng, tick, log) }()
 	t.Cleanup(r.stop)
-	for i := 0; i < 1000; i++ {
-		if c, err := dial(socket); err == nil {
-			_ = c.Close()
-			return r
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("server did not start")
+	waitForSocket(t, socket)
 	return r
 }
 
@@ -346,10 +339,18 @@ func TestPanicInTickIsLoggedAndTicksContinue(t *testing.T) {
 }
 
 func TestRequestOverTheLimitIsRefused(t *testing.T) {
-	defer server.SetMaxLine(1024)()
 	eng, _, _ := newEngine(t)
 	socket := newSocket(t)
-	start(t, socket, eng, time.Hour, io.Discard)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- server.ServeWithMaxLine(ctx, socket, eng, time.Hour, io.Discard, 1024) }()
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("Serve: %v", err)
+		}
+	})
+	waitForSocket(t, socket)
 	ans, err := server.Call(socket, protocol.Request{Command: "task new", Body: strings.Repeat("x", 4096)})
 	if err != nil {
 		t.Fatal(err)
