@@ -75,7 +75,7 @@ func (a adapter) claudePath() (string, bool) {
 // Every kind needs the claude binary. On Linux, workers and reviewers also need a working sandbox.
 func (a adapter) Preflight(kind string) error {
 	if _, ok := a.claudePath(); !ok {
-		return &engine.PreflightError{Msg: "the claude binary is not on PATH and not at ~/.local/bin/claude. " +
+		return &engine.PreflightError{Cause: engine.CauseProgramMissing, Msg: "the claude binary is not on PATH and not at ~/.local/bin/claude. " +
 			"The process that runs sfy may have a shorter PATH than your shell. Install Claude Code, or start sfy with the folder of claude on PATH."}
 	}
 	if kind == "main" || a.goos != "linux" {
@@ -88,7 +88,7 @@ func (a adapter) Preflight(kind string) error {
 		}
 	}
 	if len(missing) > 0 {
-		return &engine.PreflightError{Msg: "the Claude Code sandbox needs " + strings.Join(missing, " and ") +
+		return &engine.PreflightError{Cause: engine.CauseToolsMissing, Msg: "the Claude Code sandbox needs " + strings.Join(missing, " and ") +
 			", which is not installed. Run: " + aptFix}
 	}
 	out, err := a.sys.run("bwrap", "--unshare-user", "--unshare-net", "--ro-bind", "/", "/", "true")
@@ -97,7 +97,7 @@ func (a adapter) Preflight(kind string) error {
 		if out != "" {
 			msg += " (" + out + ")"
 		}
-		return &engine.PreflightError{Msg: msg + ". " + apparmorFix}
+		return &engine.PreflightError{Cause: engine.CauseSandboxBlocked, Msg: msg + ". " + apparmorFix}
 	}
 	return nil
 }
