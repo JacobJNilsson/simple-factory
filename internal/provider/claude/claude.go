@@ -173,7 +173,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			return "", err
 		}
 	}
-	b, err := json.MarshalIndent(s, "", "  ")
+	b, err := marshalSettings(s, a.cfg.SessionSettings[spec.Kind])
 	if err != nil {
 		return "", fmt.Errorf("claude: %w", err)
 	}
@@ -186,6 +186,26 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 		return "", fmt.Errorf("claude: %w", err)
 	}
 	return path, nil
+}
+
+// marshalSettings encodes s. Without extra keys the output is the struct's own encoding.
+// With extra keys, the output has sfy's keys and the extra keys at the top level, sorted by name.
+// The config load has already refused extra keys that sfy writes itself.
+func marshalSettings(s settings, extra config.SessionValues) ([]byte, error) {
+	b, err := json.MarshalIndent(s, "", "  ")
+	if err != nil || len(extra) == 0 {
+		return b, err
+	}
+	var merged config.SessionValues
+	if err := json.Unmarshal(b, &merged); err != nil {
+		return nil, err
+	}
+	for k, v := range extra {
+		if _, taken := merged[k]; !taken {
+			merged[k] = v
+		}
+	}
+	return json.MarshalIndent(merged, "", "  ")
 }
 
 // sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands.

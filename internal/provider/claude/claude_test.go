@@ -764,3 +764,63 @@ func TestReviewerHasNoPushAllowRule(t *testing.T) {
 		}
 	}
 }
+
+func extraSettings(t *testing.T, kind string, cfg config.Config) config.SessionValues {
+	t.Helper()
+	home := t.TempDir()
+	p := claude.New(cfg, home, bin)
+	spec := map[string]engine.SessionSpec{"main": mainSpec(), "worker": worker(), "reviewer": reviewerSpec()}[kind]
+	command(t, p, spec)
+	b, err := os.ReadFile(settingsPath(home, spec.Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m config.SessionValues
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func TestSessionSettingsReachOnlyTheirKind(t *testing.T) {
+	cfg := config.Config{SessionSettings: map[string]config.SessionValues{
+		"worker":   {"extraKey": "w"},
+		"reviewer": {"extraKey": "r", "n": 3},
+	}}
+
+	w := extraSettings(t, "worker", cfg)
+	if w["extraKey"] != "w" {
+		t.Errorf("worker: %v", w["extraKey"])
+	}
+	if _, ok := w["permissions"]; !ok {
+		t.Error("worker lost its permissions")
+	}
+	r := extraSettings(t, "reviewer", cfg)
+	if r["extraKey"] != "r" || r["n"] != float64(3) {
+		t.Errorf("reviewer: %v", r)
+	}
+	if _, ok := extraSettings(t, "main", cfg)["extraKey"]; ok {
+		t.Error("main got a key from another kind")
+	}
+}
+
+func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
+	read := func(cfg config.Config) []byte {
+		home := t.TempDir()
+		command(t, claude.New(cfg, home, bin), worker())
+		b, err := os.ReadFile(settingsPath(home, worker().Name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	plain := read(config.Config{})
+	empty := read(config.Config{SessionSettings: map[string]config.SessionValues{"worker": {}}})
+
+	if string(plain) != string(empty) {
+		t.Errorf("files differ:\n%s\n%s", plain, empty)
+	}
+	if !strings.HasPrefix(string(plain), "{\n  \"sandbox\"") {
+		t.Errorf("field order changed: %.40s", plain)
+	}
+}

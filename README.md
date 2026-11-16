@@ -49,6 +49,20 @@ The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. 
 
 The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in each worker branch, so that task is `sfy/sfy-work-t1`. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
 
+## Session settings
+
+sfy writes a settings file for each agent session. To add keys to the file of one kind of session, use a `[session_settings.<kind>]` table in `~/.sfy/config.toml`. The kinds are `main`, `worker` and `reviewer`. sfy copies the keys to the top level of that kind's file, and the provider decides what they mean. This example stops notifications from workers and reviewers:
+
+```toml
+[session_settings.worker]
+preferredNotifChannel = "notifications_disabled"
+
+[session_settings.reviewer]
+preferredNotifChannel = "notifications_disabled"
+```
+
+A table that sets `permissions`, `hooks` or `sandbox` is a config error, because sfy writes those keys itself. An unknown kind is also a config error.
+
 ## Terminal tools
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`.
