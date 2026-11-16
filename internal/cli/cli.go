@@ -265,9 +265,18 @@ var sessionHookEvents = []string{"turn-ended", "permission", "idle", "note", "no
 // ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the main agent run.
 var ErrRestricted = errors.New("a worker or a reviewer may not run this command")
 
+// sessionOwnHook reports whether args are a hook form that a started session runs itself.
+// The user settings run "hook --user <event>" in every session, and that form stays silent for a started agent.
+func sessionOwnHook(args []string) bool {
+	if len(args) == 2 {
+		return slices.Contains(sessionHookEvents, args[1])
+	}
+	return len(args) == 3 && args[1] == "--user" && slices.Contains(userHookEvents, args[2])
+}
+
 // Run executes one sfy command and returns the exit code.
 func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) >= 1 && args[0] == "hook" && Restricted(env) && (len(args) != 2 || !slices.Contains(sessionHookEvents, args[1])) {
+	if len(args) >= 1 && args[0] == "hook" && Restricted(env) && !sessionOwnHook(args) {
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", ErrRestricted)
 		return exitFailed
 	}
