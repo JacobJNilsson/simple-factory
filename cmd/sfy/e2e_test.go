@@ -118,7 +118,7 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	if out, err := sfy("", ""); err != nil {
 		t.Fatalf("start: %v\n%s", err, out)
 	}
-	if out, err := sfy("", ""); err != nil || !strings.Contains(out, "Everything already runs.") {
+	if out, err := sfy("", ""); err != nil || !strings.Contains(out, "The main agent already runs and was shown.") {
 		t.Fatalf("second start: %v\n%s", err, out)
 	}
 	task := "# Write a note\n\n## Description\n\nWrite one line.\n\n## Goal\n\nA note exists.\n"

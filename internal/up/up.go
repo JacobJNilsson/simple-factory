@@ -13,6 +13,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
+	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 )
@@ -71,7 +72,7 @@ type options struct {
 	environ []string
 	// mux runs the sfy process, and launcher starts the main agent.
 	mux      mux.Mux
-	launcher engine.Launcher
+	launcher launcher.Launcher
 	// answers reports whether a sfy process answers on its socket.
 	answers func() bool
 	// wait limits how long run waits for the socket, and poll sets the pause between checks.
@@ -84,45 +85,66 @@ type options struct {
 }
 
 // run starts what is missing: notes.md, the sfy process and the main agent.
+// When the main agent already runs, it shows the main agent again, so the operator gets it where they started sfy.
 func run(o options) error {
-	if err := os.MkdirAll(o.home, 0o700); err != nil {
+	started, mainAlive, err := o.ensure()
+	if err != nil {
 		return err
+	}
+	if !mainAlive {
+		return report(o.out, started)
+	}
+	if len(started) > 0 {
+		if err := reportList(o.out, "Started", started); err != nil {
+			return err
+		}
+	}
+	if err := o.launcher.ShowMain(mainSession); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(o.out, "The main agent already runs and was shown.")
+	return err
+}
+
+// ensure starts what is missing and returns what it started. It reports whether the main agent ran before.
+func (o options) ensure() (started []string, mainAlive bool, err error) {
+	if err := os.MkdirAll(o.home, 0o700); err != nil {
+		return nil, false, err
 	}
 	if err := ensureNotes(filepath.Join(o.home, "notes.md")); err != nil {
-		return err
+		return nil, false, err
 	}
-	var started []string
 	serveStarted := false
 	if !o.answers() {
 		if err := o.startServe(); err != nil {
-			return err
+			return nil, false, err
 		}
 		serveStarted = true
 		started = append(started, "the sfy process")
 	}
 	alive, err := o.launcher.Alive(mainSession)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
 	if !alive {
 		if w := o.launcher.TrustWarning(o.home); w != "" {
 			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
 		}
 		if _, err := recordMainPrompt(o.home); err != nil {
-			return err
+			return nil, false, err
 		}
 		spec := engine.SessionSpec{
 			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
 		}
 		if err := o.launcher.Start(spec); err != nil {
 			if serveStarted {
-				return &mainFailedError{err: err}
+				return nil, false, &mainFailedError{err: err}
 			}
-			return err
+			return nil, false, err
 		}
 		started = append(started, "the main agent")
 	}
-	return report(o.out, started)
+	return started, alive, nil
 }
 
 func report(out io.Writer, started []string) error {

@@ -32,6 +32,8 @@ type fakeMux struct {
 	// stops lists the sessions that Stop ended. stubborn makes the socket answer after the sfy session stops.
 	stops    []string
 	stubborn bool
+	// shownMain lists the sessions that ShowMain showed.
+	shownMain []string
 }
 
 func (m *fakeMux) probe() bool {
@@ -62,7 +64,10 @@ func (m *fakeMux) Stop(name string) error {
 }
 func (m *fakeMux) Notify(string, string) error { return nil }
 func (m *fakeMux) Show(string) error           { return nil }
-func (m *fakeMux) ShowMain(string) error       { return nil }
+func (m *fakeMux) ShowMain(name string) error {
+	m.shownMain = append(m.shownMain, name)
+	return nil
+}
 
 // fakeLauncher records the main agent's spec and marks its session alive.
 type fakeLauncher struct {
@@ -151,8 +156,33 @@ func TestSecondUpStartsNothing(t *testing.T) {
 	if len(r.m.starts) != 1 || len(r.l.specs) != 1 {
 		t.Errorf("second run started more: %v %v", r.m.starts, r.l.specs)
 	}
-	if !strings.Contains(r.out.String(), "already") {
+	if r.out.String() != "The main agent already runs and was shown.\n" {
 		t.Errorf("output: %q", r.out.String())
+	}
+	if !reflect.DeepEqual(r.m.shownMain, []string{"main"}) {
+		t.Errorf("shown %v, want the main agent once", r.m.shownMain)
+	}
+}
+
+func TestUpWithServeStartedAndMainRunningNamesBoth(t *testing.T) {
+	r := newRig(t)
+	r.m.alive["main"] = true
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	want := "Started the sfy process.\nThe main agent already runs and was shown.\n"
+	if r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
+	}
+}
+
+func TestUpDoesNotShowANewMainAgentTwice(t *testing.T) {
+	r := newRig(t)
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.m.shownMain) != 0 {
+		t.Errorf("up showed a main agent that the launcher already showed: %v", r.m.shownMain)
 	}
 }
 

@@ -41,7 +41,7 @@ type parts struct {
 	cfg      config.Config
 	bin      string
 	mux      mux.Mux
-	launcher engine.Launcher
+	launcher launcher.Launcher
 }
 
 func newParts(env func(string) string) (parts, error) {
