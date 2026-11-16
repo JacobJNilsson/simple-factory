@@ -94,6 +94,8 @@ type Engine struct {
 	agents map[string]*agentState
 	// startFails counts the failed starts in a row of each task.
 	startFails map[string]int
+	// cleanupWait holds, for each task whose cleanup could not tell whether a session runs, the number of retries to skip.
+	cleanupWait map[string]int
 	// depNoted holds the "task>dependency" pairs for which sfy told main that the dependency is cancelled.
 	depNoted map[string]bool
 	// down is true after sfy down stopped the sessions. The server then ends the sfy process.
@@ -117,8 +119,12 @@ type agentState struct {
 	gone bool
 	// skipLogged is true after the log named this agent as not alive, until it lives again.
 	skipLogged bool
-	// aliveFailLogged is true after the log named a failed alive check of this agent, until a check succeeds.
-	aliveFailLogged bool
+	// aliveErrs counts the alive checks in a row that failed. A check that answers resets it.
+	aliveErrs int
+	// aliveErr is the error of the latest failed alive check.
+	aliveErr error
+	// aliveTold is true after sfy told main that it cannot tell whether the session runs.
+	aliveTold bool
 }
 
 func (e *Engine) agent(name string) *agentState {
@@ -154,7 +160,7 @@ func (e *Engine) logf(format string, args ...any) {
 
 // New returns an Engine that works through the given store and interfaces.
 func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
-	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, depNoted: map[string]bool{}}
+	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}}
 }
 
 type kind string

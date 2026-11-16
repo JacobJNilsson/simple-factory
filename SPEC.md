@@ -222,7 +222,7 @@ A template set lives under `[multiplexers.<name>]` in `config.toml`. Each templa
 |---|---|---|
 | `start` | yes | Starts `{command}` in a new session called `{name}`, in the folder `{dir}`. |
 | `send` | yes | Types `{text}` into session `{name}` and presses Enter. |
-| `alive` | yes | Exits 0 if session `{name}` still runs. |
+| `alive` | yes | Reports whether session `{name}` runs, with three results. Exit 0 means it runs. Exit 1 means it is gone. Any other exit code means the check failed, so sfy does not know. sfy never reads a failed check as gone. It logs the first failure of an agent, tells main after three ticks in a row ("sfy cannot tell whether worker-t1 runs: <error>"), and pauses the cleanup retries of a task while the check fails. |
 | `stop` | yes | Ends session `{name}`. |
 | `notify` | no | Draws the operator's attention to session `{name}`, with `{text}` as the message. |
 | `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of a worker or reviewer, and of the main agent when `show_main` is empty. A failure goes to `sfy.log` and does not fail the start. |

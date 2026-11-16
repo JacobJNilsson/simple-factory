@@ -37,6 +37,21 @@ func (a adapter) Deliver(name, text string) (bool, error) {
 	return true, nil
 }
 
+// removeStaleNote deletes the note file and its lock of an earlier session with the same name.
+// A new session must not read a note that was meant for its predecessor.
+func removeStaleNote(home, name string) error {
+	path, ok := NotePath(home, name)
+	if !ok {
+		return nil
+	}
+	for _, p := range []string{path, path + ".lock", path + ".taken", path + ".taken.new"} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("claude: %w", err)
+		}
+	}
+	return nil
+}
+
 // lockNote takes an exclusive lock for the note file at path and returns the function that releases it.
 // The lock keeps an append out of a drain, so a note never lands in a file that a drain already read.
 func lockNote(path string) (func(), error) {

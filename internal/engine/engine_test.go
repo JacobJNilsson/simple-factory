@@ -27,9 +27,11 @@ type fakeLauncher struct {
 	aliveErr error
 	startErr error
 	stopErr  error
-	started  []engine.SessionSpec
-	stopped  []string
-	notified []string
+	// stopCalls counts the calls to Stop.
+	stopCalls int
+	started   []engine.SessionSpec
+	stopped   []string
+	notified  []string
 	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
 	warning    string
 	trustAsked []string
@@ -71,6 +73,7 @@ func (f *fakeLauncher) Alive(name string) (bool, error) {
 	return !f.dead[name], nil
 }
 func (f *fakeLauncher) Stop(name string) error {
+	f.stopCalls++
 	if f.stopErr != nil {
 		return f.stopErr
 	}
@@ -1672,12 +1675,116 @@ func (v env) escalateWithAWaitingWorker(t *testing.T) {
 	v.l.sendErr = errors.New("no such pane")
 }
 
-func TestResumeSucceedsWhenTheWorkerSessionIsGone(t *testing.T) {
+func TestResumeRefusesAndSuggestsFeedbackWhenTheWorkerSessionIsGone(t *testing.T) {
 	v := newEnv(t)
 	v.escalateWithAWaitingWorker(t)
 	v.l.dead = map[string]bool{"worker-t1": true}
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	ans := v.run("main", "", "task resume", "", "t1")
+
+	if ans.OK || !strings.Contains(ans.Error, "sfy task feedback t1") || !strings.Contains(ans.Error, "sfy task cancel t1") {
+		t.Fatalf("got %+v", ans)
+	}
+	if msgs := v.inbox(t, "worker-t1"); len(msgs) != 0 {
+		t.Fatalf("a message was stored for a gone session: %+v", msgs)
+	}
+}
+
+func TestSendRefusesAndSuggestsFeedbackWhenTheWorkerSessionIsGone(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.dead = map[string]bool{"worker-t1": true}
+
+	ans := v.run("main", "", "send", "", "worker-t1", "hello")
+
+	if ans.OK || !strings.Contains(ans.Error, "sfy task feedback t1") {
+		t.Fatalf("got %+v", ans)
+	}
+	if msgs := v.inbox(t, "worker-t1"); len(msgs) != 0 {
+		t.Fatalf("a message was stored for a gone session: %+v", msgs)
+	}
+}
+
+func TestNoteToAGoneSessionDeliversNothingAndLeavesTheMessageUnread(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	v.l.dead = map[string]bool{"worker-t1": true}
+	v.l.delivered = nil
+
+	mustOK(t, v.run("main", "", "task feedback", "", "t1", "change it"))
+
+	if len(v.l.delivered) != 0 || len(v.l.sent) != 0 {
+		t.Fatalf("delivered %v, sent %v", v.l.delivered, v.l.sent)
+	}
+	if msgs := v.inbox(t, "worker-t1"); len(msgs) != 1 {
+		t.Fatalf("unread %+v", msgs)
+	}
+}
+
+func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	v.seed(t, task.Working, 0)
+	v.l.aliveErr = errors.New("exit status 2")
+
+	for range 6 {
+		v.tick(t)
+		if len(v.inbox(t, "main")) != 0 && strings.Contains(v.inbox(t, "main")[0].Body, "cannot tell") {
+			break
+		}
+	}
+
+	var told []string
+	for _, m := range v.inbox(t, "main") {
+		told = append(told, m.Body)
+	}
+	want := []string{"sfy cannot tell whether worker-t1 runs: exit status 2"}
+	if !slices.Equal(want, told) {
+		t.Fatalf("messages to main %q, want %q", told, want)
+	}
+	for range 3 {
+		v.tick(t)
+	}
+	if got := len(v.inbox(t, "main")); got != 1 {
+		t.Fatalf("main got %d messages after more ticks", got)
+	}
+	if got := strings.Count(log.String(), "alive check of worker-t1 failed"); got != 1 {
+		t.Fatalf("log %q", log.String())
+	}
+}
+
+func TestMainHearsNothingWhenTheAliveErrorsAreNotInARow(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	for range 4 {
+		v.l.aliveErr = errors.New("exit status 2")
+		v.tick(t)
+		v.tick(t)
+		v.l.aliveErr = nil
+		v.tick(t)
+	}
+
+	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
+		t.Fatalf("main got %+v", msgs)
+	}
+}
+
+func TestCleanupDoesNotRetryOnEveryTickWhileTheAliveCheckErrors(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Cancelled, 0)
+	v.l.stopErr = errors.New("stop failed")
+	v.l.aliveErr = errors.New("exit status 2")
+
+	for range 5 {
+		_ = v.e.Tick()
+	}
+
+	if v.l.stopCalls != 1 {
+		t.Fatalf("stop ran %d times in 5 ticks", v.l.stopCalls)
+	}
 }
 
 func TestResumeFailsWhenTheNoteFailsAndTheSessionRuns(t *testing.T) {

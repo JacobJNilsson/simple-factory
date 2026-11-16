@@ -106,6 +106,9 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := removeStaleNote(a.home, spec.Name); err != nil {
+		return nil, err
+	}
 	env := []string{"SFY_AGENT=" + spec.Name}
 	if spec.Task != "" {
 		env = append(env, "SFY_TASK="+spec.Task)
