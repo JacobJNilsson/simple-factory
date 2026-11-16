@@ -49,6 +49,23 @@ func TestInboxShowsTheTextThatNoHookDrained(t *testing.T) {
 	}
 }
 
+func TestInboxShowsTheMessagesWhenTheDrainFails(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	v.l.drainErr = errors.New("no folder")
+
+	a := v.run("worker-t1", "", "inbox", "")
+
+	mustOK(t, a)
+	if a.Text != "From main:\nPlease rebase.\n\n" {
+		t.Fatalf("sfy inbox shows %q", a.Text)
+	}
+	if got := v.inbox(t, "worker-t1"); len(got) != 0 {
+		t.Fatalf("unread %+v", got)
+	}
+}
+
 func TestATypedNoteForASessionWithStuckTextPointsToInbox(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
