@@ -148,6 +148,46 @@ func TestLoadAcceptsAKeyInAMultiplexerSet(t *testing.T) {
 	}
 }
 
+func TestLoadReadsSessionSettingsPerKind(t *testing.T) {
+	home := writeConfig(t, "[session_settings.worker]\nflag = \"x\"\nlevel = 2\n[session_settings.reviewer]\nflag = \"y\"\n")
+
+	c, err := config.Load(home)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SessionSettings["worker"]["flag"] != "x" || c.SessionSettings["worker"]["level"] != int64(2) {
+		t.Errorf("worker table: %v", c.SessionSettings["worker"])
+	}
+	if c.SessionSettings["reviewer"]["flag"] != "y" || len(c.SessionSettings["main"]) != 0 {
+		t.Errorf("tables: %v", c.SessionSettings)
+	}
+}
+
+func TestLoadRefusesAReservedSessionSettingsKeyNamingIt(t *testing.T) {
+	for _, key := range []string{"permissions", "hooks", "sandbox"} {
+		home := writeConfig(t, "[session_settings.worker]\n"+key+" = \"x\"\n")
+
+		_, err := config.Load(home)
+
+		var bad *config.SessionSettingsError
+		if !errors.As(err, &bad) || bad.Kind != "worker" || bad.Key != key {
+			t.Errorf("%s: want a SessionSettingsError naming the key, got %v", key, err)
+		}
+	}
+}
+
+func TestLoadRefusesAnUnknownSessionSettingsKind(t *testing.T) {
+	home := writeConfig(t, "[session_settings.workr]\nflag = \"x\"\n")
+
+	_, err := config.Load(home)
+
+	var bad *config.SessionSettingsError
+	if !errors.As(err, &bad) || bad.Kind != "workr" || bad.Key != "" {
+		t.Fatalf("want a SessionSettingsError naming the kind, got %v", err)
+	}
+}
+
 func TestLoadFailsNamingResendMinutesBelowOne(t *testing.T) {
 	home := writeConfig(t, "resend_minutes = 0\n")
 
