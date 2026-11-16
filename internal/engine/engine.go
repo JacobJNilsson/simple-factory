@@ -75,6 +75,8 @@ type Workspaces interface {
 	HasRemote(task.Task) (bool, error)
 	// RepoFolder returns the folder that a task on repo belongs to, which exists after the first clone.
 	RepoFolder(repo string) string
+	// Integrate rebases the task branch onto the repo's default branch, fast-forwards the default branch, and pushes it when the repo has a remote.
+	Integrate(task.Task) error
 }
 
 // Clock tells the time.
@@ -90,6 +92,8 @@ type Engine struct {
 	w   Workspaces
 	cfg config.Config
 	c   Clock
+	// repoConfig returns the config for a repo folder. It adds the .sfy.toml files to cfg.
+	repoConfig func(folder string) (config.Config, error)
 
 	log     io.Writer
 	reg     Registration
@@ -144,6 +148,21 @@ func (e *Engine) SetLog(w io.Writer) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.log = w
+}
+
+// SetRepoConfig sets how the engine finds the config of a repo folder. Without it, every repo gets the global config.
+func (e *Engine) SetRepoConfig(f func(folder string) (config.Config, error)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.repoConfig = f
+}
+
+// configFor returns the config that applies to a task's repo.
+func (e *Engine) configFor(t task.Task) (config.Config, error) {
+	if e.repoConfig == nil {
+		return e.cfg, nil
+	}
+	return e.repoConfig(e.w.RepoFolder(t.Repo))
 }
 
 // SetRegistration tells the engine where to find the registration of the main agent. Without it, no agent counts as registered.
@@ -225,6 +244,7 @@ var commands = map[string]command{
 	"task resume":     {(*Engine).resume, []kind{operator, main}},
 	"task feedback":   {(*Engine).taskFeedback, []kind{operator, main}},
 	"task complete":   {(*Engine).taskComplete, []kind{operator, main}},
+	"task integrate":  {(*Engine).taskIntegrate, []kind{operator, main}},
 	"task archive":    {(*Engine).taskArchive, []kind{operator, main}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
 	"send":            {(*Engine).send, []kind{main}},
