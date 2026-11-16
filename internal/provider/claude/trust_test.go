@@ -91,8 +91,8 @@ func TestUntrustedFolderWarnsAndNamesIt(t *testing.T) {
 	if !strings.Contains(w, dir) {
 		t.Fatalf("warning: %q", w)
 	}
-	if !strings.Contains(w, "hc attach <name>") {
-		t.Fatalf("warning does not name hc attach: %q", w)
+	if !strings.Contains(w, "open that agent's terminal") {
+		t.Fatalf("warning does not tell the operator to open the agent's terminal: %q", w)
 	}
 }
 
