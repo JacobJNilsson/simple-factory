@@ -80,6 +80,18 @@ func TestRegisteredClearsTheRecordWhenTheAddressIsGone(t *testing.T) {
 	}
 }
 
+func TestRegisteredClearsTheExtraFilesWithTheAddress(t *testing.T) {
+	extra := addressFile(t, "{}")
+	m := Registered(&aliveMux{alive: false}, "main", addressFile(t, "dev"), extra)
+
+	if _, err := m.Alive("main"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(extra); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the extra file must be gone, stat error: %v", err)
+	}
+}
+
 func TestRegisteredKeepsTheRecordWhenAliveFails(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{err: errors.New("tool down")}

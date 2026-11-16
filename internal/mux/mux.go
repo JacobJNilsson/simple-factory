@@ -245,12 +245,16 @@ type Whoamier interface {
 // When Alive finds the address gone, Registered removes the file, so the next start runs as if nothing registered.
 // A successful Stop removes the file too. Put Registered inside Prefixed and give it the prefixed name,
 // because a recorded address is not a name that sfy chose.
+// Whenever Registered removes the address file, it removes the files in also too.
 // CONTRACT: callers hold a Mux, as for Prefixed, so Registered returns the interface.
-func Registered(m Mux, name, path string) Mux { return registered{m: m, name: name, path: path} }
+func Registered(m Mux, name, path string, also ...string) Mux {
+	return registered{m: m, name: name, path: path, also: also}
+}
 
 type registered struct {
 	m          Mux
 	name, path string
+	also       []string
 }
 
 // target returns the recorded address for name, and whether it applies.
@@ -267,10 +271,13 @@ func (r registered) target(name string) (string, bool) {
 }
 
 func (r registered) forget() error {
-	if err := os.Remove(r.path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	var errs []error
+	for _, path := range append([]string{r.path}, r.also...) {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (r registered) Start(name, dir string, command []string) error {
