@@ -64,7 +64,7 @@ func setupSandbox(t *testing.T) (provider.Provider, string) {
 	t.Setenv("HOME", t.TempDir())
 	home := t.TempDir()
 	cfg := config.Config{
-		Allow:      []string{"git status", "gh", "make"},
+		Allow:      []string{"git status", "make"},
 		DenyRead:   []string{"~/.ssh", "~/.aws"},
 		AllowWrite: []string{"~/Library/Caches", "~/go/pkg/mod"},
 	}
@@ -681,27 +681,23 @@ func bashRules(allow []string) []string {
 	return out
 }
 
-// TestWorkerAndReviewerBashRulesAreExact pins the whole Bash allow set. A rule for gh merge, close, edit,
-// comment or review, a broad git rule, a rule from config allow, or a second push form would fail it.
+// TestWorkerAndReviewerBashRulesAreExact pins the whole Bash allow set. A broad git rule, a rule from config allow,
+// or a second push form would fail it.
 func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
-	ghRead := []string{"Bash(gh pr view *)", "Bash(gh pr diff *)", "Bash(gh pr checks *)"}
 	sfy := []string{"Bash(/opt/sfy/sfy *)", "Bash(sfy *)"}
-	workerWant := append(append(append([]string{}, ghRead...), sfy...),
-		"Bash(gh pr create *)", "Bash(gh pr list *)", "Bash(gh pr edit * --body-file *)", "Bash(gh pr edit * --title *)", "Bash(gh issue create *)", "Bash(gh issue view *)",
-		"Bash(gh issue list *)", "Bash(gh repo view *)",
-		"Bash(git push -u origin sfy/t1)", "Bash(git push --force-with-lease origin sfy/t1)")
+	workerWant := append(slices.Clone(sfy), "Bash(git push -u origin sfy/t1)", "Bash(git push --force-with-lease origin sfy/t1)")
 	cases := map[string]struct {
 		spec engine.SessionSpec
 		want []string
 	}{
 		"worker":   {worker(), workerWant},
-		"reviewer": {reviewerSpec(), append(append([]string{}, ghRead...), sfy...)},
+		"reviewer": {reviewerSpec(), sfy},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			home := t.TempDir()
-			p := claude.New(config.Config{Allow: []string{"git", "gh", "make"}}, home, bin)
+			p := claude.New(config.Config{Allow: []string{"git", "make"}}, home, bin)
 			command(t, p, c.spec)
 
 			got := bashRules(readSettings(t, home, c.spec.Name).Permissions.Allow)
@@ -715,32 +711,35 @@ func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
 	}
 }
 
-func TestWorkerDeniesGhPrEditFlagsThatChangeState(t *testing.T) {
-	deny := sandboxed(t)["worker-t1"].Permissions.Deny
-	for _, want := range []string{
-		"Bash(gh pr edit *--add-*)", "Bash(gh pr edit *--remove-*)", "Bash(gh pr edit *--base*)", "Bash(gh pr edit * -B*)",
-		"Bash(gh pr edit *--milestone*)", "Bash(gh pr edit * -m*)", "Bash(gh pr edit *--reviewer*)",
-		"Bash(gh pr edit *--label*)", "Bash(gh pr edit *--assignee*)", "Bash(gh pr edit *--project*)",
-	} {
-		if !slices.Contains(deny, want) {
-			t.Errorf("worker deny lacks %s", want)
-		}
-	}
-}
-
-func TestReviewerDeniesNoGhPrEditRule(t *testing.T) {
-	for _, r := range sandboxed(t)["review-t1-1"].Permissions.Deny {
-		if strings.Contains(r, "gh pr edit") {
-			t.Errorf("reviewer deny has %s", r)
-		}
-	}
-}
-
-func TestWorkerAndReviewerSandboxExcludesGhGitPushAndSfy(t *testing.T) {
+func TestWorkerAndReviewerSandboxExcludesGitPushAndSfy(t *testing.T) {
 	for name, s := range sandboxed(t) {
-		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"gh *", "git push *", "sfy *"}) {
+		if got := s.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"git push *", "sfy *"}) {
 			t.Errorf("%s excludedCommands = %v", name, got)
 		}
+	}
+}
+
+func TestSessionRulesAddAllowRulesAndExcludedCommandsForOneKind(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	cfg := config.Config{SessionRules: map[string]config.SessionRule{
+		"worker": {Allow: []string{"Bash(tool open *)"}, ExcludedCommands: []string{"tool *"}},
+	}}
+	p := claude.New(cfg, home, bin)
+	w, r := worker(), reviewerSpec()
+	command(t, p, w)
+	command(t, p, r)
+
+	ws, rs := readSettings(t, home, w.Name), readSettings(t, home, r.Name)
+
+	if !slices.Contains(ws.Permissions.Allow, "Bash(tool open *)") {
+		t.Errorf("worker allow lacks the extra rule: %v", ws.Permissions.Allow)
+	}
+	if got := ws.Sandbox.ExcludedCommands; !slices.Equal(got, []string{"git push *", "sfy *", "tool *"}) {
+		t.Errorf("worker excludedCommands = %v", got)
+	}
+	if slices.Contains(rs.Permissions.Allow, "Bash(tool open *)") || slices.Contains(rs.Sandbox.ExcludedCommands, "tool *") {
+		t.Errorf("reviewer got the worker rules: %+v", rs)
 	}
 }
 

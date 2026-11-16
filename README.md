@@ -1,12 +1,11 @@
 # simple factory
 
-sfy runs coding agents as interactive sessions in terminal panes. You talk to a main agent. It hands tasks to workers, and each worker does its task in its own git worktree. A fresh reviewer checks each result, and the worker opens a pull request when the review passes. You can watch every session in your terminal.
+sfy runs coding agents as interactive sessions in terminal panes. You talk to a main agent. It hands tasks to workers, and each worker does its task in its own git worktree. A fresh reviewer checks each result, and the main agent integrates the branch with plain git when the review passes. You can watch every session in your terminal.
 
 ## Requirements
 
 - Claude Code, logged in.
 - git.
-- gh, logged in.
 - A terminal tool. The default template set uses tmux. Other tools plug in through the config file.
 
 ## Install
@@ -54,6 +53,7 @@ See `docs/configuration.md` for the details of each item.
 - Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets.
 - Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind.
 - Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
+- Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.
 - Terminal tools: a template set under `[multiplexers.<name>]` plugs in another tool. See `docs/herdr.md` and `docs/rex.md`.
 - A second state folder: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
 - A running agent: `sfy register` turns a Claude Code session that already runs into the main agent.

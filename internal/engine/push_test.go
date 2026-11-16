@@ -187,12 +187,34 @@ func TestAPassedFirstReviewTellsTheWorkerToPushAndApprovesAfterTheReport(t *test
 	if got := v.inbox(t, "main"); len(got) != 0 {
 		t.Fatalf("main heard of an approval before the push: %v", got)
 	}
-	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed and opened the pull request."))
+	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed the branch."))
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
-	if got := v.inbox(t, "main"); len(got) != 1 || !strings.Contains(got[0].Body, "task complete t1") {
+	if got := v.inbox(t, "main"); len(got) != 1 || !strings.Contains(got[0].Body, "task complete t1") || !strings.Contains(got[0].Body, "worker pushed") {
 		t.Fatalf("main got %v", got)
+	}
+}
+
+func TestAPassedReviewOnARepoWithNoRemoteApprovesWithoutAPush(t *testing.T) {
+	v := newEnv(t)
+	v.ws.localOnly = true
+	v.firstReview(t)
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
+
+	if got := v.pushNotes(t); len(got) != 0 {
+		t.Fatalf("worker got a push note: %v", got)
+	}
+	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
+		t.Fatalf("got %+v", tk)
+	}
+	got := v.inbox(t, "main")
+	if len(got) != 1 || !strings.Contains(got[0].Body, "no remote") || !strings.Contains(got[0].Body, "task complete t1") {
+		t.Fatalf("main got %v", got)
+	}
+	if !slices.Contains(v.l.stopped, "worker-t1") {
+		t.Fatalf("the worker kept running: %v", v.l.stopped)
 	}
 }
 

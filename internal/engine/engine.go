@@ -64,6 +64,8 @@ type Workspaces interface {
 	HoldsWork(task.Task) (bool, error)
 	// Branch returns the name of the git branch that holds the work of the task with this id.
 	Branch(id string) string
+	// HasRemote reports whether the task's repo has a remote to push to. A repo that exists only locally has none.
+	HasRemote(task.Task) (bool, error)
 	// RepoFolder returns the folder that a task on repo belongs to, which exists after the first clone.
 	RepoFolder(repo string) string
 }

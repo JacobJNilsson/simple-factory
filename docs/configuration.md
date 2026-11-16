@@ -59,6 +59,20 @@ preferredNotifChannel = "notifications_disabled"
 
 A table that sets `permissions`, `hooks` or `sandbox` is a config error, because sfy writes those keys itself. An unknown kind is also a config error.
 
+## Session rules
+
+A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `main`, `worker` and `reviewer`. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.
+
+For example, a setup can let workers open a pull request and let the main agent merge it. Put the rules in the config and the instructions in two prompt additions:
+
+```toml
+[session_rules.worker]
+allow = ["Bash(<tool> pr create *)"]
+excluded_commands = ["<tool> *"]
+```
+
+The worker instructions go in `prompts/worker-repo.d/pr.md`. They tell the worker to open the pull request after `git push`. The main agent instructions go in `prompts/main.d/pr.md`. They tell it to merge the pull request instead of the git steps of the default prompt. Replace `<tool>` with the command that talks to your hosting service.
+
 ## Terminal tools
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`. `docs/herdr.md` and `docs/rex.md` hold example sets. SPEC.md lists every template.

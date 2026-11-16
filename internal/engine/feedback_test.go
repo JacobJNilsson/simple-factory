@@ -145,7 +145,7 @@ func TestFeedbackReopensAnApprovedDoneOrCancelledTask(t *testing.T) {
 		if s.Name != "worker-t1" || s.Dir != "/work/t1" {
 			t.Fatalf("%s: got %+v", state, s)
 		}
-		for _, want := range []string{"# Title", fix, "earlier work", "pull request"} {
+		for _, want := range []string{"# Title", fix, "earlier work", "integrated"} {
 			if !strings.Contains(s.Prompt, want) {
 				t.Errorf("%s: first message lacks %q:\n%s", state, want, s.Prompt)
 			}
