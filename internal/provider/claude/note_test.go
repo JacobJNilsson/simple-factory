@@ -36,10 +36,10 @@ func drain(path string) (string, error) {
 	return strings.Join(texts, "\n\n"), err
 }
 
-// hooksRan makes the session start hook run for name, as Claude Code does at the start of a session.
-func hooksRan(t *testing.T, home, name string) {
+// hooksRan makes the session start hook run for worker-t1, as Claude Code does at the start of a session.
+func hooksRan(t *testing.T, home string) {
 	t.Helper()
-	path, _ := claude.NotePath(home, name)
+	path, _ := claude.NotePath(home, "worker-t1")
 	if _, err := claude.WatchNote(path); err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestNoNoteIsLostWhenWrittenDuringDrains(t *testing.T) {
 func TestDeliverAppendsToTheNoteFileOfASessionWhoseHooksRan(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
-	hooksRan(t, home, "worker-t1")
+	hooksRan(t, home)
 
 	ok, err := p.Deliver("worker-t1", "From main:\nPlease rebase.", "")
 	if err != nil || !ok {
@@ -212,7 +212,7 @@ func TestDeliverDeclinesASessionStartedWithOldSettings(t *testing.T) {
 func TestANewStartMustProveItsHooksAgain(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
-	hooksRan(t, home, "worker-t1")
+	hooksRan(t, home)
 
 	command(t, p, worker())
 
@@ -289,7 +289,7 @@ func TestDrainOfAnAgentWithoutASessionFolderReturnsNothing(t *testing.T) {
 func TestDrainLeavesTheNotesOfASessionWithHooksToTheHook(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
-	hooksRan(t, home, "worker-t1")
+	hooksRan(t, home)
 	path, _ := claude.NotePath(home, "worker-t1")
 	if err := claude.AppendNote(path, "", "hi"); err != nil {
 		t.Fatal(err)
@@ -308,7 +308,7 @@ func TestDrainLeavesTheNotesOfASessionWithHooksToTheHook(t *testing.T) {
 func TestTextForASessionWithHooksIsNotStuck(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
-	hooksRan(t, home, "worker-t1")
+	hooksRan(t, home)
 	path, _ := claude.NotePath(home, "worker-t1")
 	if err := claude.AppendNote(path, "", "hi"); err != nil {
 		t.Fatal(err)
