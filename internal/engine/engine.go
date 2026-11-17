@@ -124,6 +124,8 @@ type agentState struct {
 	// reminders counts the turns in a row that ended without a report.
 	reminders int
 	lastNote  time.Time
+	// hookedAt is when sfy queued unread messages in the note file for the session's hook. It is zero when no hook is due.
+	hookedAt time.Time
 	// notedID is the id of the newest unread message that the last note covered.
 	notedID string
 	// gone is true after sfy told main that the session no longer runs.

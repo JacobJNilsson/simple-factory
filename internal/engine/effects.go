@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -55,18 +56,20 @@ const (
 // noteMessages tells an agent about its unread messages. The agent is busy until its next turn ends.
 // The provider takes the sender and text of each message. The message stays unread until the session takes the text,
 // so a message that never arrives still shows in sfy inbox. When the provider cannot deliver, sfy types the new-message note.
+// A hook may not wake an idle session. So a provider delivery only queues the text, and a later tick types the note when the text stays unread.
 func (e *Engine) noteMessages(name, why string) error {
 	if !e.reachable(name) {
 		return nil
 	}
 	s := e.agent(name)
-	s.waiting, s.hookSince, s.lastNote = false, false, e.c.Now()
+	s.waiting, s.hookSince, s.lastNote, s.hookedAt = false, false, e.c.Now(), time.Time{}
 	unread, err := e.st.Unread(name)
 	if err == nil {
 		s.notedID = newestID(unread)
 	}
 	if err == nil && len(unread) > 0 && e.deliverMessages(name, unread) {
-		e.logf("messages delivered to %s: %s", name, why)
+		s.hookedAt = e.c.Now()
+		e.logf("messages queued in the note file of %s: %s", name, why)
 		return nil
 	}
 	e.logf("note typed to %s: %s", name, why)

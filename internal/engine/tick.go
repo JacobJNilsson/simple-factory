@@ -204,6 +204,16 @@ func (e *Engine) startFailed(t task.Task, err error) error {
 	return errors.Join(err, e.escalateTask(t, why, true))
 }
 
+// hookGrace is how long the hook has to take queued messages before sfy types the note. It spans two ticks.
+const hookGrace = 4 * time.Second
+
+// typeAfterHook types the new-message note for an agent whose hook left the queued messages unread.
+func (e *Engine) typeAfterHook(name string, s *agentState) error {
+	s.hookedAt, s.lastNote = time.Time{}, e.c.Now()
+	e.logf("note typed to %s: the hook left its messages unread", name)
+	return e.ignoreGone(name, e.l.Send(name, newMessageNote))
+}
+
 // resendNotes types the note again for an agent whose messages stay unread.
 // It does so only when the agent waits, or when no hook event came since the last note, which means the note was lost.
 func (e *Engine) resendNotes() error {
@@ -238,6 +248,14 @@ func (e *Engine) resendNotes() error {
 			continue
 		}
 		if len(unread) == 0 {
+			if !s.hookedAt.IsZero() {
+				e.logf("messages taken by the hook of %s", name)
+				s.hookedAt = time.Time{}
+			}
+			continue
+		}
+		if !down && !s.hookedAt.IsZero() && e.c.Now().Sub(s.hookedAt) >= hookGrace {
+			errs = append(errs, e.typeAfterHook(name, s))
 			continue
 		}
 		if down {
