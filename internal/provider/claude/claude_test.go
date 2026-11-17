@@ -887,6 +887,21 @@ func TestSessionSettingsReachOnlyTheirKind(t *testing.T) {
 	}
 }
 
+func TestSessionSettingsWriteNestedValuesAsJSON(t *testing.T) {
+	cfg := config.Config{SessionSettings: map[string]config.SessionValues{
+		"main": {"attribution": map[string]any{"commit": "", "pr": ""}, "list": []any{"a", "b"}},
+	}}
+
+	got := extraSettings(t, "main", cfg)
+
+	if obj, ok := got["attribution"].(map[string]any); !ok || obj["commit"] != "" || obj["pr"] != "" {
+		t.Errorf("attribution: %v", got["attribution"])
+	}
+	if arr, ok := got["list"].([]any); !ok || len(arr) != 2 || arr[0] != "a" {
+		t.Errorf("list: %v", got["list"])
+	}
+}
+
 func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
 	home := t.TempDir()
 	read := func(cfg config.Config) []byte {

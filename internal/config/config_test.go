@@ -166,6 +166,38 @@ func TestLoadReadsSessionSettingsPerKind(t *testing.T) {
 	}
 }
 
+func TestLoadReadsNestedSessionSettingsValues(t *testing.T) {
+	home := writeConfig(t, "[session_settings.main]\nattribution = { commit = \"\", pr = \"\" }\nlist = [\"a\", \"b\"]\n[session_settings.main.deep]\ninner = { x = 1 }\n")
+
+	c, err := config.Load(home)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	main := c.SessionSettings["main"]
+	if got, ok := main["attribution"].(map[string]any); !ok || got["commit"] != "" || got["pr"] != "" {
+		t.Errorf("attribution: %v", main["attribution"])
+	}
+	if got, ok := main["list"].([]any); !ok || len(got) != 2 || got[1] != "b" {
+		t.Errorf("list: %v", main["list"])
+	}
+	deep, _ := main["deep"].(map[string]any)
+	if _, ok := deep["inner"].(map[string]any); !ok {
+		t.Errorf("deep: %v", main["deep"])
+	}
+}
+
+func TestLoadRefusesAReservedKeyWithANestedValue(t *testing.T) {
+	home := writeConfig(t, "[session_settings.worker]\nhooks = { a = 1 }\n")
+
+	_, err := config.Load(home)
+
+	var bad *config.SessionSettingsError
+	if !errors.As(err, &bad) || bad.Key != "hooks" {
+		t.Errorf("want a SessionSettingsError naming hooks, got %v", err)
+	}
+}
+
 func TestLoadRefusesAReservedSessionSettingsKeyNamingIt(t *testing.T) {
 	for _, key := range []string{"permissions", "hooks", "sandbox"} {
 		home := writeConfig(t, "[session_settings.worker]\n"+key+" = \"x\"\n")
@@ -313,4 +345,12 @@ func TestLoadLeavesOutTheUserTempFolderWhenTheLookupFails(t *testing.T) {
 	if !slices.Equal(got.AllowWrite, want) {
 		t.Fatalf("allow_write %v, want %v", got.AllowWrite, want)
 	}
+}
+
+func TestLoadStillFailsOnAnUnknownKeyNextToSessionSettings(t *testing.T) {
+	home := writeConfig(t, "[session_settings.main]\nattribution = { pr = \"\" }\n[models]\nwroker = { a = 1 }\n")
+
+	_, err := config.Load(home)
+
+	assertSetting(t, err, "models.wroker")
 }

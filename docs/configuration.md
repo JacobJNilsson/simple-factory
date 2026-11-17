@@ -73,6 +73,13 @@ preferredNotifChannel = "notifications_disabled"
 preferredNotifChannel = "notifications_disabled"
 ```
 
+A value can be any TOML value, including an array or a table. sfy writes it unchanged as JSON. This example sets Claude Code's `attribution` object for the main agent:
+
+```toml
+[session_settings.main]
+attribution = { commit = "", pr = "" }
+```
+
 A table that sets `permissions`, `hooks` or `sandbox` is a config error, because sfy writes those keys itself. An unknown kind is also a config error.
 
 Worker and reviewer files set `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. To turn them back on, set `promptSuggestionEnabled = true` in `[session_settings.worker]` or `[session_settings.reviewer]`. The main agent keeps Claude Code's default.
