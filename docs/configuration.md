@@ -1,6 +1,6 @@
 # Configuration and operation
 
-This page holds the details of running sfy. SPEC.md holds the full behaviour. The state folder is `~/.sfy` unless `SFY_HOME` names another one.
+This page holds the details of running sfy. SPEC.md holds the full behaviour. The state folder is `~/.sfy` unless a factory folder or `SFY_HOME` names another one.
 
 ## Restart
 
@@ -33,9 +33,23 @@ From then on the agent's own `sfy` commands run as `main`, and the operator-only
 
 A file `<home>/prompts/<kind>.md` replaces the default prompt of a kind of agent. The kinds are `main`, `worker`, `reviewer` and `worker-repo`. To add lines without a copy of the whole prompt, put files that end in `.md` in `<home>/prompts/<kind>.d/`. sfy appends them in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the main agent when an addition to its prompt changed.
 
-## A second state folder
+## A factory per folder
 
-Each state folder holds its own tasks, notes, config, sfy process and main agent. To run a second main agent, put a `config.toml` in a new folder and start sfy with that folder:
+A factory is a state folder with its own tasks, notes, sfy process and main agent. Stand in a folder and run `sfy up` to get the factory of that folder. For example, `sfy up` in `~/Developer/carboncloud` creates the factory `carboncloud` and starts its main agent with `~/Developer/carboncloud` as its working directory.
+
+sfy writes no file in that folder. It keeps the state in `~/.sfy/factories/<name>/`. The name is the base name of the folder in lower case, with each character outside `a-z0-9-` replaced by `-`. A second folder with the same base name gets a suffix, as in `web-2`. The file `folder` in the state folder records the absolute path of the folder.
+
+Each command picks its state folder in this order:
+
+1. `SFY_HOME`, when set. Agents get it from sfy.
+2. The nearest registered factory folder at or above the current folder. The home folder is never a factory folder.
+3. The default factory, `~/.sfy`.
+
+So `sfy status` in `~/Developer/carboncloud/luigi/src` shows `carboncloud`, and `sfy up` in `~/Developer/carboncloud/luigi` joins `carboncloud` without a new factory. In the home folder or in an unrelated folder, a command uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
+
+Every factory reads `~/.sfy/config.toml`. A `config.toml` in the factory's own state folder is optional. It overrides the shared file key by key.
+
+To pick any other folder as a state folder, set `SFY_HOME`:
 
 ```
 SFY_HOME=~/.sfy-work sfy up
@@ -43,7 +57,7 @@ SFY_HOME=~/.sfy-work sfy up
 
 Use the same `SFY_HOME` for every other sfy command that targets that folder, such as `sfy down`.
 
-The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`.
+The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`, and the factory `~/.sfy/factories/work` gives `work-`.
 
 The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in the branch of a task that started before branches took the form `<type>/<slug>`, so that task is `sfy/sfy-work-t1`. New branches carry no prefix. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
 

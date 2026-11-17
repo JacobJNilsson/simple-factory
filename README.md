@@ -91,7 +91,8 @@ See `docs/configuration.md` for the details of each item.
 - Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
 - Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.
 - Terminal tools: a template set under `[multiplexers.<name>]` plugs in another tool. See `docs/herdr.md` and `docs/rex.md`.
-- A second state folder: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
+- A factory per folder: `sfy up` in a folder runs a separate factory for it, with no setup. Its state lives in `~/.sfy/factories/<name>/`, and sfy writes nothing in the folder. See `docs/configuration.md`.
+- A second state folder by hand: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
 - A running agent: `sfy register` turns a Claude Code session that already runs into the main agent.
 
 ## More

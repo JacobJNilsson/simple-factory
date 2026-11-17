@@ -70,7 +70,9 @@ func recordMainPrompt(home string) (changed bool, err error) {
 
 // options holds what run needs, so tests can replace each part.
 type options struct {
-	home   string
+	home string
+	// dir is the folder of the factory. The main agent works there. It is empty for the default factory, whose main agent works in home.
+	dir    string
 	config config.Config
 	// bin is the absolute path of the sfy binary.
 	bin string
@@ -95,6 +97,14 @@ type options struct {
 	exec func(dir string, argv []string) error
 	// session returns the id of the agent session that runs the command, or an empty string.
 	session func() string
+}
+
+// mainDir returns the working directory of the main agent.
+func (o options) mainDir() string {
+	if o.dir != "" {
+		return o.dir
+	}
+	return o.home
 }
 
 // mainAddressPath is the file that records the address of a main agent that runs in the operator's terminal.
@@ -151,14 +161,14 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 		return nil, false, err
 	}
 	if !alive {
-		if w := o.launcher.TrustWarning(o.home); w != "" {
+		if w := o.launcher.TrustWarning(o.mainDir()); w != "" {
 			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
 		}
 		if _, err := recordMainPrompt(o.home); err != nil {
 			return nil, false, err
 		}
 		spec := engine.SessionSpec{
-			Name: "main", Kind: "main", Dir: o.home, Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
+			Name: "main", Kind: "main", Dir: o.mainDir(), Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
 			ResumePrompt: resumePrompt(o.home),
 		}
 		if inPlace {

@@ -326,7 +326,7 @@ func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) 
 	if len(targets) == 0 {
 		return exitOK
 	}
-	cfg, err := config.Load(config.Home(env))
+	cfg, err := config.LoadFactory(config.Home(env), env("HOME"))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sfy: merge guard cannot read the config, so it blocks %s: %v\n", targets[0].Command, err)
 		return exitWake
@@ -435,7 +435,8 @@ func userHookRequest(event string, env func(string) string, stdin io.Reader) (re
 
 // send calls the sfy process and prints its answer.
 func send(req protocol.Request, env func(string) string, stdout, stderr io.Writer) int {
-	ans, err := server.Call(filepath.Join(config.Home(env), "sfy.sock"), req)
+	home := config.Home(env)
+	ans, err := server.Call(filepath.Join(home, "sfy.sock"), req)
 	var nr *server.NotRunningError
 	if errors.As(err, &nr) && req.Command == "down" {
 		_, _ = fmt.Fprintln(stdout, "sfy is not running.")
@@ -461,6 +462,10 @@ func send(req protocol.Request, env func(string) string, stdout, stderr io.Write
 		if warning != "" {
 			_, _ = fmt.Fprintln(stderr, "sfy: "+strings.ToLower(warning[:1])+warning[1:])
 		}
+	}
+	// The operator may run several factories, so these two commands say which one answered.
+	if req.Command == "status" || req.Command == "task list" {
+		_, _ = fmt.Fprintf(stdout, "%s\n\n", config.Header(home, env))
 	}
 	if text != "" {
 		_, _ = fmt.Fprintln(stdout, text)
