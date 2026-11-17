@@ -79,9 +79,18 @@ Worker and reviewer files set `"promptSuggestionEnabled": false` by default, whi
 
 ## Per-repo config
 
-A `.sfy.toml` file sets per-repo keys. sfy reads it in the repo folder and in each parent folder up to `$HOME`. The nearest file wins, key by key, and all of them apply on top of `~/.sfy/config.toml`. For a task whose repo is a URL, the repo folder is the clone in `repos/` of the state folder. SPEC.md describes the lookup in full.
+Per-repo keys come from two kinds of file.
 
-The only key so far is `no_merge`. With `no_merge = true`, `sfy task integrate` refuses, and the approval note tells the main agent to leave the branch for you. You merge it by hand, then the main agent runs `sfy task complete`. One file covers every work repo below its folder:
+- `<repo folder>/.sfy/config.toml` holds the settings of one repo. You can keep `.sfy/` out of git with `core.excludesFile`, or commit it. sfy reads it only from the repo folder, never from a task's worktree or branch, so a worker cannot change its own settings.
+- A `.sfy.toml` file in the repo folder or in a parent folder up to `$HOME` covers every repo below it.
+
+For a task whose repo is a URL, the repo folder is the clone in `repos/` of the state folder. A committed `.sfy/` arrives with each fetch of the default branch. You can also put an untracked one there by hand.
+
+Key by key, the first file that sets a key wins. The order is `.sfy/config.toml`, then each `.sfy.toml` from the nearest up, then the factory `config.toml`, then `~/.sfy/config.toml`. A file that does not parse counts as an error, and the repo then counts as no-merge. SPEC.md describes the lookup in full.
+
+The keys are `no_merge` and `draft_pr`. With `draft_pr = true`, the note that asks the worker to push also says that any PR must be a draft, with `gh pr create --draft`. sfy opens no PR itself. The default is `false`.
+
+With `no_merge = true`, `sfy task integrate` refuses, and the approval note tells the main agent to leave the branch for you. You merge it by hand, then the main agent runs `sfy task complete`. One file covers every work repo below its folder:
 
 ```toml
 # ~/Developer/work/.sfy.toml

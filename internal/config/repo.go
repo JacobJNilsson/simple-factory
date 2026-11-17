@@ -14,9 +14,37 @@ import (
 // RepoFile is the name of the per-repo config file.
 const RepoFile = ".sfy.toml"
 
-// repoSettings lists the settings that a .sfy.toml file may hold. A nil field means the file leaves the setting out.
+// RepoDir and RepoConfigFile name the settings folder and file at the root of a repo folder.
+const (
+	RepoDir        = ".sfy"
+	RepoConfigFile = "config.toml"
+)
+
+// repoSettings lists the settings that a per-repo file may hold. A nil field means the file leaves the setting out.
+// A new setting needs a field here, a line in fill and a line in apply.
 type repoSettings struct {
 	NoMerge *bool `toml:"no_merge"`
+	DraftPR *bool `toml:"draft_pr"`
+}
+
+// fill takes each setting that s leaves out from lower. Call it with the files in order of precedence.
+func (s *repoSettings) fill(lower repoSettings) {
+	if s.NoMerge == nil {
+		s.NoMerge = lower.NoMerge
+	}
+	if s.DraftPR == nil {
+		s.DraftPR = lower.DraftPR
+	}
+}
+
+// apply sets each setting that s holds on c.
+func (s repoSettings) apply(c *Config) {
+	if s.NoMerge != nil {
+		c.NoMerge = *s.NoMerge
+	}
+	if s.DraftPR != nil {
+		c.DraftPR = *s.DraftPR
+	}
 }
 
 // globalOnly lists the top-level settings that only ~/.sfy/config.toml accepts.
@@ -40,34 +68,40 @@ func (e *RepoFileError) Error() string {
 	return fmt.Sprintf("config: %s: unknown setting %s", e.File, e.Setting)
 }
 
-// ForRepo applies the .sfy.toml files of a repo folder on top of base.
-// It reads the file in folder and in each parent folder up to userHome. The nearest file wins, key by key.
-// A folder outside userHome counts alone, with no parent folder.
+// ForRepo applies the per-repo files of a repo folder on top of base.
+// The file .sfy/config.toml in folder wins. Then come the .sfy.toml files in folder and in each parent folder up to userHome, nearest first.
+// A folder outside userHome counts alone, with no parent folder. Each setting comes from the first file that sets it.
 func ForRepo(base Config, userHome, folder string) (Config, error) {
-	folders := repoFolders(userHome, folder)
+	files := []string{filepath.Join(folder, RepoDir, RepoConfigFile)}
+	for _, dir := range repoFolders(userHome, folder) {
+		files = append(files, filepath.Join(dir, RepoFile))
+	}
 	merged := repoSettings{}
-	// The folders run from the nearest to the farthest, so a setting that is already set stays.
-	for _, dir := range folders {
-		file := filepath.Join(dir, RepoFile)
-		var s repoSettings
-		md, err := toml.DecodeFile(file, &s)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
+	for _, file := range files {
+		s, err := readRepoFile(file)
 		if err != nil {
-			return Config{}, fmt.Errorf("config: %s: %w", file, err)
+			return Config{}, err
 		}
-		if keys := md.Undecoded(); len(keys) > 0 {
-			return Config{}, &RepoFileError{File: file, Setting: keys[0].String(), GlobalOnly: slices.Contains(globalOnly, keys[0][0])}
-		}
-		if merged.NoMerge == nil {
-			merged.NoMerge = s.NoMerge
-		}
+		merged.fill(s)
 	}
-	if merged.NoMerge != nil {
-		base.NoMerge = *merged.NoMerge
-	}
+	merged.apply(&base)
 	return base, nil
+}
+
+// readRepoFile decodes one per-repo file. A missing file gives empty settings.
+func readRepoFile(file string) (repoSettings, error) {
+	var s repoSettings
+	md, err := toml.DecodeFile(file, &s)
+	if errors.Is(err, fs.ErrNotExist) {
+		return repoSettings{}, nil
+	}
+	if err != nil {
+		return repoSettings{}, fmt.Errorf("config: %s: %w", file, err)
+	}
+	if keys := md.Undecoded(); len(keys) > 0 {
+		return repoSettings{}, &RepoFileError{File: file, Setting: keys[0].String(), GlobalOnly: slices.Contains(globalOnly, keys[0][0])}
+	}
+	return s, nil
 }
 
 // repoFolders lists folder and its parents up to userHome, nearest first.
