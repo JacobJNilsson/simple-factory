@@ -44,7 +44,7 @@ The worker prompt has two parts. The common part holds the rules for every task:
 
 ## Tasks
 
-- A task file, `task.md`, holds a description and a goal. It may also name a repo, a check command, a Conventional Commits type for its branch, paths that the worker must not edit, and tasks that must finish first.
+- A task file, `task.md`, holds a description and a goal. It may also name a repo, a check command, a Conventional Commits type for its branch, paths that the worker must not edit, tasks that must finish first, and a hold on its push.
 - The optional `## After` section lists task ids. Write one per line, or separate them with commas or spaces. A line may start with `- `. sfy starts the task's worker only when every listed task is `done`, and an archived `done` task counts. `sfy task new` and `sfy task edit` reject an id that names no task, the task's own id, and an id newer than the task. Only older ids are allowed, so a cycle cannot form. The section orders starts only. It sets no merge order and reaches no other state folder.
 - A task can deliver anything: a code change, a document, an answer. A reviewer decides when a task is approved.
 - A task on a repo gets its own git worktree on a new branch. A task with no repo gets an empty folder.
@@ -65,6 +65,7 @@ A task moves through these states:
 | `working` | A worker is doing the task. |
 | `review` | A reviewer checks the worker's result. |
 | `feedback` | The worker fixes the result after a failed review. The round shows how many reviews have run, for example `feedback 1` after the first failed review. |
+| `held` | A reviewer passed the result of a task with `## Push` set to `hold`, and the push waits for the operator. The task needs no worker. |
 | `approved` | A reviewer passed the result. The task waits for the main agent to complete it, or to reopen it with `sfy task feedback`. |
 | `done` | The main agent completed the task. |
 | `escalated` | The task waits for the operator. |
@@ -90,6 +91,11 @@ A task moves through these states:
   - In every round, the worker commits its work on the task branch and does not push. It reports `done`, and a reviewer checks the committed branch. A failed review goes back to the worker as usual.
   - When the review passes, sfy keeps the worker running and tells it to push now. The task stays in `review` until the worker runs `sfy report pushed`. Then the task moves to `approved`, sfy tells the main agent, and sfy ends the sessions.
   - Feedback that arrives while the worker waits to push ends the wait. The task moves to `feedback`.
+- The optional `## Push` section holds one word, `hold`, and any other value is a task file error. It holds the push of that task until the operator releases it. Other tasks of the same repo push as usual, and a task without the section changes nothing.
+  - **A hard hold.** While a task holds, its worker sessions get no push allow rule, and their settings deny every `git push`. A worker that ignores its prompt cannot push. Every worker start and restart builds its settings from the task, so a reopened worker holds too.
+  - **The `held` state.** When the review passes on a task that holds and whose repo has a remote, sfy does not ask the worker to push. It moves the task to `held`, ends the worker and reviewer sessions, keeps the workspace, and tells the main agent: the branch name, the repo folder, and that the push waits for the operator. A new state fits better than `approved` with a note, because `approved` invites `sfy task integrate`, which would skip the hold. A task on a repo with no remote has nothing to push, so a hold changes nothing and the task moves to `approved`.
+  - **Release.** `sfy task push <id>` moves a `held` task back to `review` with the push flag set. It starts a worker with the normal push allow rules and tells it to push. The task then goes on as after any passed review: `sfy report pushed` moves it to `approved`, and integrate or no-merge works as usual. The main agent runs `sfy task push` only when the operator says to push, and the main prompt says so.
+  - **Feedback.** `sfy task feedback` on a `held` task reopens it and keeps the hold. After a release, feedback ends the running worker, since its session has the push rules, and the next worker starts without them.
 - When the main agent runs `sfy task complete`, the task moves to `done`. A successful `sfy task integrate` moves the task to `done` too.
 - When the verdict is `fail`, sfy sends the verdict to the worker, and the task moves to `feedback`. The round stays at the number of reviews that have run.
 - After `review_rounds` failed reviews, the task moves to `escalated`. sfy first sends the verdict to the worker. The default for `review_rounds` is 3. The operator can set any number of 1 or more.
@@ -154,7 +160,8 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task show <id>` | anyone | Prints a task's file, state and verdicts. |
 | `sfy task complete <id>` | main agent, operator | Moves an `approved` task to `done` and cleans up. Fails for a task in any other state. |
 | `sfy task integrate <id>` | main agent, operator | Integrates the branch of an `approved` repo task into the default branch, as the state rules describe, then moves the task to `done` and cleans up. It refuses in a no-merge repo and names the branch. It fails for a task with no repo and for a task in any other state. |
-| `sfy task feedback <id> <text>` | main agent, operator | Sends feedback on a task in any state to its worker and records it on the task. A task in `approved`, `done` or `cancelled` reopens. The lifecycle above describes each state. `sfy task show` lists the feedback with the verdicts. |
+| `sfy task push <id>` | main agent, operator | Releases the push hold of a `held` task and starts a worker that pushes the branch. Run it only on the operator's word. Fails for a task in any other state. |
+| `sfy task feedback <id> <text>` | main agent, operator | Sends feedback on a task in any state to its worker and records it on the task. A task in `held`, `approved`, `done` or `cancelled` reopens. The lifecycle above describes each state. `sfy task show` lists the feedback with the verdicts. |
 | `sfy task archive <id>` | main agent, operator | Archives a `done` or `cancelled` task. The task keeps its state, files, verdicts and id, and its workspace and branch stay. Fails for any other state and for an archived task. `sfy task show` still prints it and says that it is archived. |
 | `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. Works in any state except `done` and `cancelled`. |
 | `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |
@@ -185,7 +192,7 @@ A command that an agent kind may not run fails with an error that names the comm
 - A worker or a reviewer never waits on a permission prompt. sfy's permission hook denies the call, gives the agent a reason, and records the denial in `sfy.log`.
 - Workers and reviewers get a clean environment. It holds the `SFY_*` variables, the basic shell variables, the provider's own variables and the names in `pass_env`.
 - Workers and reviewers run their sandboxed commands without an allow list. The `allow` setting is the main agent's allow list.
-- Workers may push only the task branch, with the two exact push forms. Reviewers may not push. Pushes run outside the sandbox. The main agent runs git through its allow list. Its merge guard hook refuses `git push`, `git merge`, `git rebase` and `gh pr merge` in a no-merge repo. sfy runs the integration itself.
+- Workers may push only the task branch, with the two exact push forms, and not while the task holds its push. Reviewers may not push. Pushes run outside the sandbox. The main agent runs git through its allow list. Its merge guard hook refuses `git push`, `git merge`, `git rebase` and `gh pr merge` in a no-merge repo. sfy runs the integration itself.
 - Extra rules for one kind of session come from `[session_rules.<kind>]` in `config.toml`. Its `allow` list adds permission rules to that kind's allow rules, and its `excluded_commands` list adds command patterns that run outside the sandbox. sfy adds no rule for any other tool by itself.
 - Workers and reviewers run only the `sfy` commands that exact rules name, and these run outside the sandbox, because the sandbox blocks the sfy socket. The same patterns appear in the allow rules and in the sandbox's excluded commands. A worker gets `sfy report *` and `sfy inbox`. A reviewer gets `sfy verdict *`, `sfy report blocked *` and `sfy inbox`. Neither gets `sfy *`, because `sfy run` would start any command outside the sandbox. The main agent keeps `sfy *`. The session's own hooks run from the settings and need no rule.
 - `sfy run`, `sfy serve`, `sfy register` and `sfy restart` refuse when `SFY_AGENT` names a worker or a reviewer. So does `sfy hook` with any event other than the ones that a session's own hooks use: `turn-ended`, `permission`, `idle`, `note` and `note-watch`. The environment can be faked, so the exact rules are the real barrier. The refusal is a second layer.

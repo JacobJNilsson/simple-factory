@@ -20,6 +20,7 @@ const (
 	Working   State = "working"
 	Review    State = "review"
 	Feedback  State = "feedback"
+	Held      State = "held"
 	Approved  State = "approved"
 	Done      State = "done"
 	Escalated State = "escalated"
@@ -39,6 +40,8 @@ type Task struct {
 	Protected []string
 	// After lists the ids of tasks that must be done before sfy starts this task's worker.
 	After []string
+	// Hold is true when the Push section says hold. The push of the branch then waits for the operator.
+	Hold bool
 	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
 	Extra string
 
@@ -58,6 +61,8 @@ type Task struct {
 	Reopened bool
 	// Pushing is true in review after a passed review of a task with a repo, until the worker reports that it pushed.
 	Pushing bool
+	// Released is true after the operator released the hold. Feedback clears it, so the hold returns.
+	Released bool
 	// Branch is the git branch of a task with a repo. sfy picks it once, so it never changes. It is empty until then.
 	Branch string
 	// Dir is the task's workspace folder, empty until sfy creates it.
@@ -129,7 +134,7 @@ func Parse(md string) (Task, error) {
 		}
 		body := strings.Trim(strings.Join(buf, "\n"), "\n")
 		switch name {
-		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After":
+		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push":
 			if _, seen := sections[name]; seen && dup == "" {
 				dup = name
 			}
@@ -201,6 +206,17 @@ func Parse(md string) (Task, error) {
 		}
 		t.Type = typ
 	}
+	push, err := oneLine("Push", sections["Push"])
+	if err != nil {
+		return Task{}, err
+	}
+	switch strings.ToLower(push) {
+	case "":
+	case "hold":
+		t.Hold = true
+	default:
+		return Task{}, &FormatError{Problem: "invalid section", Section: "Push"}
+	}
 	for _, line := range strings.Split(sections["Protected"], "\n") {
 		p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
 		if p = strings.TrimSpace(strings.Trim(p, "`")); p != "" {
@@ -215,6 +231,9 @@ func Parse(md string) (Task, error) {
 	t.Extra = strings.Join(extra, "\n\n")
 	return t, nil
 }
+
+// HoldsPush reports that sfy must not let a worker push yet, because the operator has not released the hold.
+func (t Task) HoldsPush() bool { return t.Hold && !t.Released }
 
 // Number returns the number in a task id such as t12, or 0 for any other text.
 func Number(id string) int {
@@ -264,7 +283,7 @@ func oneLine(section, body string) (string, error) {
 func (t Task) WithFileFieldsOf(edited Task) Task {
 	t.Title, t.Description, t.Goal = edited.Title, edited.Description, edited.Goal
 	t.Repo, t.Check, t.Protected = edited.Repo, edited.Check, edited.Protected
-	t.After, t.Type, t.Extra = edited.After, edited.Type, edited.Extra
+	t.After, t.Type, t.Extra, t.Hold = edited.After, edited.Type, edited.Extra, edited.Hold
 	return t
 }
 
@@ -280,6 +299,9 @@ func (t Task) Markdown() string {
 	}
 	if t.Type != "" {
 		fmt.Fprintf(&b, "\n## Type\n\n%s\n", t.Type)
+	}
+	if t.Hold {
+		b.WriteString("\n## Push\n\nhold\n")
 	}
 	if len(t.Protected) > 0 {
 		b.WriteString("\n## Protected\n\n")

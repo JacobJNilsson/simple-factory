@@ -473,6 +473,24 @@ func TestWorkerPromptAndPushRulesNameTheTaskBranch(t *testing.T) {
 	}
 }
 
+func TestAHeldWorkerHasNoPushAllowRuleAndEveryPushIsDenied(t *testing.T) {
+	p, home := setup(t, bin)
+	spec := worker()
+	spec.HasRepo, spec.Branch, spec.NoPush = true, "fix/hold", true
+
+	command(t, p, spec)
+
+	perms := readSettings(t, home, spec.Name).Permissions
+	for _, r := range perms.Allow {
+		if strings.Contains(r, "git push") {
+			t.Errorf("held worker allows %s", r)
+		}
+	}
+	if !slices.Contains(perms.Deny, "Bash(git push*)") {
+		t.Errorf("deny rules %q lack the push rule", perms.Deny)
+	}
+}
+
 func TestArgvEndsWithThePrompt(t *testing.T) {
 	p, _ := setup(t, bin)
 

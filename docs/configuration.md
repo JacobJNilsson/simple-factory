@@ -99,6 +99,24 @@ no_merge = true
 
 A key that sfy does not know, and a global-only key such as `max_workers` or `multiplexer`, is an error that names the file. In a no-merge repo, a hook in the main agent's settings also blocks a hand `git push`, `git merge`, `git rebase` and `gh pr merge`. Other repos get no extra rule. To let the main agent run `gh pr merge` where it may merge, add `allow = ["Bash(gh pr merge *)"]` to `[session_rules.main]`. The hook does not follow a subshell, a script, `eval`, `bash -c`, an alias or `gh --repo`. SPEC.md lists what it misses.
 
+## Hold the push of a task
+
+By default a worker on a repo with a remote pushes its branch after a review passes. To keep one task off the remote until you approve, add a `## Push` section to its task file:
+
+```markdown
+## Push
+
+hold
+```
+
+The value `hold` is the only one. Any other value is a task file error. Other tasks of the same repo push as usual.
+
+- A held task's worker has no push allow rule, and its settings deny every `git push`. The hold does not rely on the prompt.
+- When the review passes, the task moves to the state `held`. sfy ends the sessions, keeps the workspace, and tells the main agent the branch name, the repo folder, and that the push waits for you.
+- Tell the main agent to push. It runs `sfy task push <id>`, and sfy starts a worker that pushes the branch. The task then moves to `approved`, and integrate or no-merge works as usual.
+- `sfy task feedback <id> <text>` on a held task keeps the hold. Feedback after the release also restores it.
+- A repo with no remote has nothing to push, so the hold changes nothing there.
+
 ## Session rules
 
 A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `main`, `worker` and `reviewer`. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.

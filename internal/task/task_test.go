@@ -47,6 +47,24 @@ func TestParseReadsOptionalSections(t *testing.T) {
 	}
 }
 
+func TestParseReadsThePushSection(t *testing.T) {
+	base := "# A\n\n## Description\n\nd\n\n## Goal\n\ng\n"
+	got, err := task.Parse(base + "\n## Push\n\nHold\n")
+	if err != nil || !got.Hold {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	back, err := task.Parse(got.Markdown())
+	if err != nil || !back.Hold {
+		t.Fatalf("round trip gave %+v, %v", back, err)
+	}
+	if none, err := task.Parse(base); err != nil || none.Hold {
+		t.Fatalf("got %+v, %v", none, err)
+	}
+	if _, err := task.Parse(base + "\n## Push\n\nlater\n"); err == nil {
+		t.Fatal("an unknown push value passed")
+	}
+}
+
 func TestParseReadsAfterAsCommaSpaceOrLineSeparatedIds(t *testing.T) {
 	for _, after := range []string{"t1, t2", "t1 t2", "t1\nt2", "- t1\n- t2", "t1,t2\n"} {
 		got, err := task.Parse("# A\n\n## Description\n\nd\n\n## Goal\n\ng\n\n## After\n\n" + after + "\n")

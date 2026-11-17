@@ -320,7 +320,9 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 		}
 	case "worker":
 		// A rule with no wildcard matches that command only, so no second branch, force flag or refspec passes.
-		rules = append(rules, "Bash(git push -u origin "+spec.Branch+")", "Bash(git push --force-with-lease origin "+spec.Branch+")")
+		if !spec.NoPush {
+			rules = append(rules, "Bash(git push -u origin "+spec.Branch+")", "Bash(git push --force-with-lease origin "+spec.Branch+")")
+		}
 	}
 	rules = append(rules, a.cfg.SessionRules[spec.Kind].Allow...)
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
@@ -359,6 +361,9 @@ func (a adapter) mainReads() []string {
 // A deny rule beats the auto-approval. It cannot match the allowed exact pushes, which have no option before push.
 const pushWithGitOptions = "Bash(git -* push*)"
 
+// pushAny denies every git push. A worker of a held task gets it and has no push allow rule.
+const pushAny = "Bash(git push*)"
+
 // deny returns the deny rules of a session. The main agent gets none, and its merge guard hook limits no-merge repos.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
@@ -367,6 +372,9 @@ func deny(spec engine.SessionSpec) []string {
 		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":
 		rules = append(rules, "AskUserQuestion", pushWithGitOptions)
+		if spec.NoPush {
+			rules = append(rules, pushAny)
+		}
 		for _, p := range spec.Protected {
 			p = rulePath(p)
 			// Claude Code applies an Edit rule to Write and NotebookEdit too. The second rule covers a folder's files.
