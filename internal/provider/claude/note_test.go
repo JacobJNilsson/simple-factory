@@ -40,7 +40,7 @@ func drain(path string) (string, error) {
 func hooksRan(t *testing.T, home string) {
 	t.Helper()
 	path, _ := claude.NotePath(home, "worker-t1")
-	if _, err := claude.WatchNote(path); err != nil {
+	if _, err := claude.WatchNote(path, ""); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -358,7 +358,7 @@ func TestDeliverDeclinesAnUnsafeSessionName(t *testing.T) {
 func TestWatchNoteNamesTheFileInTheSessionStartOutput(t *testing.T) {
 	path := notePath(t)
 
-	out, err := claude.WatchNote(path)
+	out, err := claude.WatchNote(path, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -380,6 +380,16 @@ func TestWatchNoteNamesTheFileInTheSessionStartOutput(t *testing.T) {
 	}
 }
 
+func TestWatchNoteNamesTheCwdChangedEvent(t *testing.T) {
+	path := notePath(t)
+
+	out, err := claude.WatchNote(path, "CwdChanged")
+
+	if err != nil || !strings.Contains(out, `"hookEventName":"CwdChanged"`) || !strings.Contains(out, `"watchPaths":["`+path+`"]`) {
+		t.Fatalf("%q: %v", out, err)
+	}
+}
+
 func TestSessionSettingsWatchTheNoteFileAndWakeOnAChange(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
@@ -388,6 +398,9 @@ func TestSessionSettingsWatchTheNoteFileAndWakeOnAChange(t *testing.T) {
 
 	if got := hookOf(t, s, "SessionStart").Command; got != bin+" hook note-watch" {
 		t.Errorf("SessionStart runs %q", got)
+	}
+	if got := hookOf(t, s, "CwdChanged").Command; got != bin+" hook note-watch" {
+		t.Errorf("CwdChanged runs %q", got)
 	}
 	change := hookOf(t, s, "FileChanged")
 	if change.Command != bin+" hook note" || !change.AsyncRewake {
@@ -404,7 +417,7 @@ func TestMainSettingsHaveTheNoteHooksToo(t *testing.T) {
 
 	s := readSettings(t, home, "main")
 
-	if !hookOf(t, s, "FileChanged").AsyncRewake || hookOf(t, s, "SessionStart").Command == "" {
+	if !hookOf(t, s, "FileChanged").AsyncRewake || hookOf(t, s, "SessionStart").Command == "" || hookOf(t, s, "CwdChanged").Command == "" {
 		t.Fatalf("hooks %+v", s.Hooks)
 	}
 }

@@ -13,8 +13,12 @@ import (
 )
 
 func noteHookRun(env func(string) string, event string) (code int, out, errb string) {
+	return noteHookRunWith(env, event, "{}")
+}
+
+func noteHookRunWith(env func(string) string, event, stdin string) (code int, out, errb string) {
 	var o, e bytes.Buffer
-	code = Run([]string{"hook", event}, env, strings.NewReader("{}"), &o, &e)
+	code = Run([]string{"hook", event}, env, strings.NewReader(stdin), &o, &e)
 	return code, o.String(), e.String()
 }
 
@@ -144,5 +148,22 @@ func TestNoteWatchHookNamesTheSessionsNoteFile(t *testing.T) {
 
 	if code != 0 || !strings.Contains(out, `"watchPaths":["`+path+`"]`) {
 		t.Fatalf("code %d, stdout %q", code, out)
+	}
+}
+
+func TestNoteWatchHookNamesTheEventOfItsInput(t *testing.T) {
+	for _, tc := range []struct{ stdin, want string }{
+		{`{"hook_event_name":"CwdChanged"}`, "CwdChanged"},
+		{`{"hook_event_name":"SessionStart"}`, "SessionStart"},
+		{`{}`, "SessionStart"},
+		{``, "SessionStart"},
+	} {
+		env, _ := noteEnv(t, "worker-t1")
+
+		_, out, _ := noteHookRunWith(env, "note-watch", tc.stdin)
+
+		if !strings.Contains(out, `"hookEventName":"`+tc.want+`"`) {
+			t.Errorf("input %q: stdout %q", tc.stdin, out)
+		}
 	}
 }
