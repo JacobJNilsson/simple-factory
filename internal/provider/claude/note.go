@@ -214,8 +214,12 @@ func parseEntries(text string) []Entry {
 }
 
 // WatchNote makes sure that the note file at path exists and records that the session runs the note hooks.
-// It returns the SessionStart hook output that asks Claude Code to watch the file.
-func WatchNote(path string) (string, error) {
+// It returns the hook output that asks Claude Code to watch the file, for the named event.
+// An event other than CwdChanged counts as SessionStart. Both steps are safe to repeat when the folder changes.
+func WatchNote(path, event string) (string, error) {
+	if event != "CwdChanged" {
+		event = "SessionStart"
+	}
 	if err := os.WriteFile(readyPath(path), nil, 0o600); err != nil {
 		return "", fmt.Errorf("claude: %w", err)
 	}
@@ -227,7 +231,7 @@ func WatchNote(path string) (string, error) {
 		return "", fmt.Errorf("claude: %w", err)
 	}
 	b, err := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{
-		"hookEventName": "SessionStart", "watchPaths": []string{path},
+		"hookEventName": event, "watchPaths": []string{path},
 	}})
 	return string(b), err
 }

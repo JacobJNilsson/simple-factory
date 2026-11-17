@@ -179,7 +179,9 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"Notification":      {{Matcher: "idle_prompt", Hooks: []hook{a.hook("idle")}}},
 			// SessionStart asks Claude Code to watch the note file. FileChanged then wakes the agent with the file's text.
 			"SessionStart": {{Hooks: []hook{a.hook("note-watch")}}},
-			"FileChanged":  {{Hooks: []hook{a.rewakeHook("note")}}},
+			// A folder change replaces the watch set with the one that CwdChanged hooks return, so this hook returns it again.
+			"CwdChanged":  {{Hooks: []hook{a.hook("note-watch")}}},
+			"FileChanged": {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
 	if spec.Kind == "main" {

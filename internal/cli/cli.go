@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -285,7 +286,7 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		return exitFailed
 	}
 	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
-		return noteHook(args[1], env, stdout, stderr)
+		return noteHook(args[1], env, stdin, stdout, stderr)
 	}
 	if len(args) == 2 && args[0] == "hook" && args[1] == "merge-guard" {
 		return mergeGuardHook(env, stdin, stderr)
@@ -345,16 +346,25 @@ func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) 
 	return exitOK
 }
 
+// hookEventName reads the hook input JSON and returns its hook_event_name, or "" when the input has none.
+func hookEventName(stdin io.Reader) string {
+	var in struct {
+		Name string `json:"hook_event_name"`
+	}
+	_ = json.NewDecoder(stdin).Decode(&in)
+	return in.Name
+}
+
 // noteHook runs the two hooks that deliver notes through the session's note file. It needs no sfy process.
-// note-watch prints the SessionStart output that names the file. note prints the file's text to stderr and exits with exitWake.
+// note-watch prints the SessionStart or CwdChanged output that names the file. note prints the file's text to stderr and exits with exitWake.
 // A caller with no session name, such as a registered main agent, gets no output and exit code 0.
-func noteHook(event string, env func(string) string, stdout, stderr io.Writer) int {
+func noteHook(event string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
 	path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT"))
 	if !ok {
 		return exitOK
 	}
 	if event == "note-watch" {
-		out, err := claude.WatchNote(path)
+		out, err := claude.WatchNote(path, hookEventName(stdin))
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 			return exitFailed
