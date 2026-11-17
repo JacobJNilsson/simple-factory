@@ -503,3 +503,43 @@ func TestTmuxForkBlocked(t *testing.T) {
 		}
 	}
 }
+
+func TestHomeFillsPlaceholderAndEnvForEveryTemplate(t *testing.T) {
+	dir := t.TempDir()
+	home := "/state/it's here"
+	probe := func(file string) string {
+		return "printf '%s|%s' {home} \"$SFY_HOME\" > " + shellQuote(filepath.Join(dir, file))
+	}
+	m := RunnerFor(Templates{Start: probe("start"), Send: probe("send"), Alive: probe("alive"), Stop: probe("stop"),
+		Notify: probe("notify"), Show: probe("show"), ShowMain: probe("show_main")}, home)
+	calls := map[string]func() error{
+		"start": func() error { return m.Start("n", dir, []string{"true"}) }, "send": func() error { return m.Send("n", "x") },
+		"alive": func() error { _, err := m.Alive("n"); return err }, "stop": func() error { return m.Stop("n") },
+		"notify": func() error { return m.Notify("n", "x") }, "show": func() error { return m.Show("n") },
+		"show_main": func() error { return m.ShowMain("n") },
+	}
+	for file, call := range calls {
+		if err := call(); err != nil {
+			t.Fatalf("%s: %v", file, err)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := home + "|" + home; string(got) != want {
+			t.Errorf("%s: got %q, want %q", file, got, want)
+		}
+	}
+}
+
+func TestRunnerWithoutHomeKeepsTheCallerEnv(t *testing.T) {
+	t.Setenv("SFY_HOME", "/from/caller")
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Show: "printf %s \"$SFY_HOME\" > " + shellQuote(out)})
+	if err := m.Show("n"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(out); string(got) != "/from/caller" {
+		t.Fatalf("got %q", got)
+	}
+}

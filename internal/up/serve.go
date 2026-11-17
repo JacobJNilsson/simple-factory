@@ -68,7 +68,7 @@ func newParts(env func(string) string) (parts, error) {
 	if err != nil {
 		return parts{}, err
 	}
-	m, err := launcher.Mux(cfg)
+	m, err := launcher.Mux(cfg, home)
 	if err != nil {
 		return parts{}, err
 	}

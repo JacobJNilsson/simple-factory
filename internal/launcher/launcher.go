@@ -136,19 +136,19 @@ type unknownError struct{ Name string }
 
 func (e *unknownError) Error() string { return fmt.Sprintf("unknown multiplexer %q", e.Name) }
 
-// Mux builds the multiplexer that cfg.Multiplexer names. A config set wins over a built-in set.
-func Mux(cfg config.Config) (mux.Mux, error) {
+// Mux builds the multiplexer that cfg.Multiplexer names, for the state folder home. A config set wins over a built-in set.
+func Mux(cfg config.Config, home string) (mux.Mux, error) {
 	name := cfg.Multiplexer
 	if m, ok := cfg.Multiplexers[name]; ok {
 		t, err := mux.FromMap(m)
 		if err != nil {
 			return nil, fmt.Errorf("multiplexer %q: %w", name, err)
 		}
-		return mux.Runner(t), nil
+		return mux.RunnerFor(t, home), nil
 	}
 	t, ok := mux.Builtin(name)
 	if !ok {
 		return nil, &unknownError{Name: name}
 	}
-	return mux.Runner(t), nil
+	return mux.RunnerFor(t, home), nil
 }

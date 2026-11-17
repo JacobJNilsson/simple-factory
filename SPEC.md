@@ -256,7 +256,7 @@ A file in one repo, such as `~/Developer/work/sandbox/.sfy.toml`, can set `no_me
 
 ## Multiplexer templates
 
-A template set lives under `[multiplexers.<name>]` in `config.toml`. Each template is one command line. sfy fills in `{name}`, `{dir}`, `{command}` and `{text}`, and quotes each value for the shell.
+A template set lives under `[multiplexers.<name>]` in `config.toml`. Each template is one command line. sfy fills in `{name}`, `{dir}`, `{command}`, `{text}` and `{home}`, and quotes each value for the shell. `{home}` is the absolute path of the running factory's state folder, and every template accepts it. sfy also sets `SFY_HOME` to that folder in the environment of every template command, also when `sfy up` finds the factory through the folder rules.
 
 | Template | Required | What the command does |
 |---|---|---|
