@@ -193,8 +193,8 @@ func load(userTempDir func() (string, error), paths ...string) (Config, error) {
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return Config{}, fmt.Errorf("config: %w", err)
 		}
-		if keys := md.Undecoded(); len(keys) > 0 {
-			return Config{}, &SettingError{Setting: keys[0].String(), Unknown: true}
+		if key, ok := firstUnknown(md); ok {
+			return Config{}, &SettingError{Setting: key, Unknown: true}
 		}
 	}
 	if c.ReviewRounds < 1 {
@@ -218,6 +218,18 @@ func load(userTempDir func() (string, error), paths ...string) (Config, error) {
 		}
 	}
 	return c, nil
+}
+
+// firstUnknown returns the first key that no field took.
+// It skips the parts inside a session_settings value, because those belong to the provider.
+func firstUnknown(md toml.MetaData) (string, bool) {
+	for _, key := range md.Undecoded() {
+		if len(key) > 3 && key[0] == "session_settings" {
+			continue
+		}
+		return key.String(), true
+	}
+	return "", false
 }
 
 // Home returns the state folder.
