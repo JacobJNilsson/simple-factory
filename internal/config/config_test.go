@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 )
@@ -38,13 +39,14 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := config.Config{
-		ReviewRounds:  3,
-		MaxWorkers:    2,
-		ResendMinutes: 5,
-		Provider:      "claude",
-		Multiplexer:   "tmux",
-		Models:        config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
-		Allow:         []string{"git", "make", "go", "gofmt"},
+		ReviewRounds:      3,
+		MaxWorkers:        2,
+		ResendMinutes:     5,
+		NoteFallbackAfter: 5 * time.Minute,
+		Provider:          "claude",
+		Multiplexer:       "tmux",
+		Models:            config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
+		Allow:             []string{"git", "make", "go", "gofmt"},
 		DenyRead: []string{
 			"~/.ssh", "~/.aws", "~/.gnupg",
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
@@ -219,6 +221,19 @@ func TestLoadFailsNamingResendMinutesBelowOne(t *testing.T) {
 	_, err := config.Load(home)
 
 	assertSetting(t, err, "resend_minutes")
+}
+
+func TestLoadReadsNoteFallbackAfterAsADuration(t *testing.T) {
+	c, err := config.Load(writeConfig(t, "note_fallback_after = \"90s\"\n"))
+	if err != nil || c.NoteFallbackAfter != 90*time.Second {
+		t.Fatalf("got %v, %v", c.NoteFallbackAfter, err)
+	}
+}
+
+func TestLoadFailsNamingANoteFallbackAfterThatIsNotPositive(t *testing.T) {
+	_, err := config.Load(writeConfig(t, "note_fallback_after = \"0s\"\n"))
+
+	assertSetting(t, err, "note_fallback_after")
 }
 
 func TestLoadReadsSandboxPathLists(t *testing.T) {

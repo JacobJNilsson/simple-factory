@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -26,13 +27,15 @@ type Models struct {
 
 // Config holds the settings from the spec's configuration table.
 type Config struct {
-	ReviewRounds  int      `toml:"review_rounds"`
-	MaxWorkers    int      `toml:"max_workers"`
-	ResendMinutes int      `toml:"resend_minutes"`
-	Provider      string   `toml:"provider"`
-	Multiplexer   string   `toml:"multiplexer"`
-	Models        Models   `toml:"models"`
-	Allow         []string `toml:"allow"`
+	ReviewRounds  int `toml:"review_rounds"`
+	MaxWorkers    int `toml:"max_workers"`
+	ResendMinutes int `toml:"resend_minutes"`
+	// NoteFallbackAfter is how long a queued note may stay unread before sfy types it into an idle pane.
+	NoteFallbackAfter time.Duration `toml:"note_fallback_after"`
+	Provider          string        `toml:"provider"`
+	Multiplexer       string        `toml:"multiplexer"`
+	Models            Models        `toml:"models"`
+	Allow             []string      `toml:"allow"`
 	// NoMerge stops the main agent from integrating approved branches. The operator merges them by hand.
 	// A .sfy.toml file sets it for one repo or for the repos below one folder.
 	NoMerge bool `toml:"no_merge"`
@@ -103,24 +106,34 @@ type SettingError struct {
 	Setting string
 	// Unknown is true when sfy does not know the setting, and false when its value is too low.
 	Unknown bool
+	// Duration is true when the value must be a positive duration.
+	Duration bool
 }
+
+// DefaultNoteFallbackAfter is the default of note_fallback_after.
+// It covers a long tool call, because the hook delivers a note only between tool calls or at the end of the turn.
+const DefaultNoteFallbackAfter = 5 * time.Minute
 
 func (e *SettingError) Error() string {
 	if e.Unknown {
 		return fmt.Sprintf("config: unknown setting %s", e.Setting)
+	}
+	if e.Duration {
+		return fmt.Sprintf("config: %s must be a positive duration, such as 5m", e.Setting)
 	}
 	return fmt.Sprintf("config: %s must be 1 or more", e.Setting)
 }
 
 func defaults(userTempDir func() (string, error)) Config {
 	return Config{
-		ReviewRounds:  3,
-		MaxWorkers:    2,
-		ResendMinutes: 5,
-		Provider:      "claude",
-		Multiplexer:   "tmux",
-		Models:        Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
-		Allow:         []string{"git", "make", "go", "gofmt"},
+		ReviewRounds:      3,
+		MaxWorkers:        2,
+		ResendMinutes:     5,
+		NoteFallbackAfter: DefaultNoteFallbackAfter,
+		Provider:          "claude",
+		Multiplexer:       "tmux",
+		Models:            Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
+		Allow:             []string{"git", "make", "go", "gofmt"},
 		DenyRead: []string{
 			"~/.ssh", "~/.aws", "~/.gnupg",
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
@@ -192,6 +205,9 @@ func load(userTempDir func() (string, error), paths ...string) (Config, error) {
 	}
 	if c.ResendMinutes < 1 {
 		return Config{}, &SettingError{Setting: "resend_minutes"}
+	}
+	if c.NoteFallbackAfter <= 0 {
+		return Config{}, &SettingError{Setting: "note_fallback_after", Duration: true}
 	}
 	if err := validateSessionSettings(c.SessionSettings); err != nil {
 		return Config{}, err

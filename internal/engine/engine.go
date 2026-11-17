@@ -142,6 +142,13 @@ type agentState struct {
 	aliveTold bool
 }
 
+// restartGrace gives the hook a fresh grace period when the session starts to wait with queued messages.
+func (s *agentState) restartGrace(now time.Time) {
+	if !s.hookedAt.IsZero() {
+		s.hookedAt = now
+	}
+}
+
 func (e *Engine) agent(name string) *agentState {
 	if e.agents[name] == nil {
 		e.agents[name] = &agentState{}
@@ -296,6 +303,7 @@ var commands = map[string]command{
 	"hook turn-ended": {(*Engine).hookTurnEnded, agents},
 	"hook permission": {(*Engine).hookPermission, agents},
 	"hook idle":       {(*Engine).hookIdle, agents},
+	"hook busy":       {(*Engine).hookBusy, agents},
 }
 
 // Handle runs one command and returns its answer.

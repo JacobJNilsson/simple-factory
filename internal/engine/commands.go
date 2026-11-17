@@ -199,10 +199,7 @@ func (e *Engine) noteWorker(t task.Task) error {
 	if err := e.storeMessage(name, "main", "The task file for "+t.ID+" changed. Run: sfy task show "+t.ID); err != nil {
 		return err
 	}
-	if !e.agent(name).waiting {
-		return nil
-	}
-	return e.ignoreGone(name, e.noteMessages(name, "task file changed"))
+	return e.ignoreGone(name, e.noteOrQueue(name, "task file changed"))
 }
 
 func (e *Engine) taskQueue(req protocol.Request) (string, error) {
@@ -403,9 +400,7 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 			errs = append(errs, err)
 			continue
 		}
-		if e.agent(name).waiting {
-			errs = append(errs, e.ignoreGone(name, e.noteMessages(name, "new message")))
-		}
+		errs = append(errs, e.ignoreGone(name, e.noteOrQueue(name, "new message")))
 	}
 	return "", errors.Join(errs...)
 }
@@ -800,6 +795,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", errors.Join(append(errs, err)...)
 	}
+	s.restartGrace(e.c.Now())
 	if len(unread) > 0 && e.noteDue(name, unread) {
 		errs = append(errs, e.noteMessages(name, "turn ended"))
 	}
@@ -815,11 +811,19 @@ func (e *Engine) hookIdle(req protocol.Request) (string, error) {
 	if !e.runs(name) {
 		return "", nil
 	}
+	s.restartGrace(e.c.Now())
 	unread, err := e.st.Unread(name)
 	if err != nil || len(unread) == 0 || !e.noteDue(name, unread) {
 		return "", err
 	}
 	return "", e.noteMessages(name, "idle")
+}
+
+// hookBusy runs when a prompt reaches the session, so a turn starts. The pane takes no typed note until the turn ends.
+func (e *Engine) hookBusy(req protocol.Request) (string, error) {
+	s := e.agent(req.Caller.Agent)
+	s.waiting, s.hookSince = false, false
+	return "", nil
 }
 
 // remind types the reminder for a missing report. After maxReminders it tells main once and types nothing.

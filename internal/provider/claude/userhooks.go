@@ -28,6 +28,7 @@ var userEvents = []struct{ name, arg, matcher string }{
 	{"Stop", "turn-ended", ""},
 	{"PermissionRequest", "permission", ""},
 	{"Notification", "idle", "idle_prompt"},
+	{"UserPromptSubmit", "busy", ""},
 }
 
 // userHook builds the hook command that marks the call as coming from the user settings.

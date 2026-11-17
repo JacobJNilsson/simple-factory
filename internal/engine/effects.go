@@ -41,9 +41,34 @@ func (e *Engine) message(to, from, body string) error {
 	if err := e.storeMessage(to, from, body); err != nil {
 		return err
 	}
-	if e.agent(to).waiting {
-		return e.noteMessages(to, "new message")
+	return e.noteOrQueue(to, "new message")
+}
+
+// noteOrQueue tells a session that waits about its unread messages. A busy session, or one whose hook holds text, only gets new messages queued.
+// sfy types nothing into a busy pane, because the operator may be typing there.
+func (e *Engine) noteOrQueue(name, why string) error {
+	s := e.agent(name)
+	if s.waiting && s.hookedAt.IsZero() {
+		return e.noteMessages(name, why)
 	}
+	if !e.reachable(name) {
+		return nil
+	}
+	unread, err := e.st.Unread(name)
+	if err != nil {
+		return err
+	}
+	var fresh []store.Message
+	for _, m := range unread {
+		if m.ID > s.notedID {
+			fresh = append(fresh, m)
+		}
+	}
+	if len(fresh) == 0 || !e.deliverMessages(name, fresh) {
+		return nil
+	}
+	s.notedID, s.hookedAt = newestID(fresh), e.c.Now()
+	e.logf("messages queued in the note file of %s: %s, session busy", name, why)
 	return nil
 }
 
@@ -53,7 +78,7 @@ const (
 	noReportNote   = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
 )
 
-// noteMessages tells an agent about its unread messages. The agent is busy until its next turn ends.
+// noteMessages tells an agent about its unread messages. A typed note makes the agent busy until its next turn ends.
 // The provider takes the sender and text of each message. The message stays unread until the session takes the text,
 // so a message that never arrives still shows in sfy inbox. When the provider cannot deliver, sfy types the new-message note.
 // A hook may not wake an idle session. So a provider delivery only queues the text, and a later tick types the note when the text stays unread.
@@ -62,16 +87,18 @@ func (e *Engine) noteMessages(name, why string) error {
 		return nil
 	}
 	s := e.agent(name)
-	s.waiting, s.hookSince, s.lastNote, s.hookedAt = false, false, e.c.Now(), time.Time{}
+	s.lastNote, s.hookedAt = e.c.Now(), time.Time{}
 	unread, err := e.st.Unread(name)
 	if err == nil {
 		s.notedID = newestID(unread)
 	}
 	if err == nil && len(unread) > 0 && e.deliverMessages(name, unread) {
+		// The session may stay idle, so it keeps waiting until the hook takes the text.
 		s.hookedAt = e.c.Now()
 		e.logf("messages queued in the note file of %s: %s", name, why)
 		return nil
 	}
+	s.waiting, s.hookSince = false, false
 	e.logf("note typed to %s: %s", name, why)
 	return e.l.Send(name, newMessageNote)
 }

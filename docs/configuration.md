@@ -131,6 +131,16 @@ excluded_commands = ["<tool> *"]
 
 The worker instructions go in `prompts/worker-repo.d/pr.md`. They tell the worker to open the pull request after `git push`. The main agent instructions go in `prompts/main.d/pr.md`. They tell it to merge the pull request instead of running `sfy task integrate`. Replace `<tool>` with the command that talks to your hosting service. The main agent's settings deny `gh pr merge`, so the tool must be another command, or you merge the pull request yourself.
 
+## Note delivery
+
+sfy delivers notes to a Claude Code session through a hook on the session's note file. Claude Code runs that hook between tool calls or at the end of a turn, so a long tool call delays a note. sfy types the note into the pane only when the session waits for input and the hook left the text unread. It never types into a busy pane.
+
+`note_fallback_after` in `~/.sfy/config.toml` sets how long sfy waits for the hook before it types. The value is a Go duration, such as `90s` or `10m`. The default is `5m`. It covers a long tool call and a slow hook, so a note does not land in text that you are typing. A turn end starts the wait again. Lower the value only when your sessions have no working note hook and a late note costs you more than a typed one.
+
+```toml
+note_fallback_after = "10m"
+```
+
 ## Terminal tools
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`. `docs/herdr.md` and `docs/rex.md` hold example sets. SPEC.md lists every template.

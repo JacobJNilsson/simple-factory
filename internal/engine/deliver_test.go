@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
@@ -214,6 +216,147 @@ func TestTheReminderIsTypedWhenTheProviderCannotDeliver(t *testing.T) {
 
 	if !slices.Equal(v.l.sent, []string{"worker-t1: " + reminder}) {
 		t.Fatalf("typed %q", v.l.sent)
+	}
+}
+
+// busyWorker puts a worker in the middle of a turn that the operator or a message started.
+func busyWorker(v env, t *testing.T) {
+	t.Helper()
+	waitingWorker(v, t)
+	mustOK(t, v.run("worker-t1", "t1", "hook busy", ""))
+}
+
+func TestABusySessionWithAHookGetsItsMessageQueuedAndNeverTyped(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	busyWorker(v, t)
+
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	v.clock.now = v.clock.now.Add(time.Minute)
+	v.tick(t)
+
+	if want := []string{"worker-t1: From main:\nPlease rebase."}; !slices.Equal(v.l.delivered, want) {
+		t.Fatalf("delivered %q, want %q", v.l.delivered, want)
+	}
+	if len(v.l.sent) != 0 {
+		t.Fatalf("typed %q", v.l.sent)
+	}
+}
+
+func TestABusySessionWithoutAHookGetsNothingTypedUntilItsTurnEnds(t *testing.T) {
+	v := newEnv(t)
+	busyWorker(v, t)
+
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	v.clock.now = v.clock.now.Add(time.Minute)
+	v.tick(t)
+	if len(v.l.sent) != 0 {
+		t.Fatalf("typed %q during the turn", v.l.sent)
+	}
+
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+	if want := []string{"worker-t1: " + note}; !slices.Equal(v.l.sent, want) {
+		t.Fatalf("typed %q, want %q", v.l.sent, want)
+	}
+}
+
+func TestANoteStaysQueuedAfterTheGraceWhileTheTurnRuns(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	waitingWorker(v, t)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	mustOK(t, v.run("worker-t1", "t1", "hook busy", ""))
+
+	v.clock.now = v.clock.now.Add(time.Minute)
+	v.tick(t)
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("typed %q", v.l.sent)
+	}
+}
+
+func TestTheTurnEndGivesTheHookAFreshGraceBeforeTheNoteIsTyped(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	busyWorker(v, t)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	v.clock.now = v.clock.now.Add(time.Minute)
+	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
+	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
+
+	v.tick(t)
+	if len(v.l.sent) != 0 {
+		t.Fatalf("typed %q before the grace ended", v.l.sent)
+	}
+	v.clock.now = v.clock.now.Add(5 * time.Second)
+	v.tick(t)
+
+	if want := []string{"worker-t1: " + note}; !slices.Equal(v.l.sent, want) {
+		t.Fatalf("typed %q, want %q", v.l.sent, want)
+	}
+}
+
+func TestTheNoteFallbackWaitsForTheConfiguredTimeAndTheDefaultIsLong(t *testing.T) {
+	cases := []struct {
+		name    string
+		after   time.Duration
+		elapsed time.Duration
+		typed   bool
+	}{
+		{"configured, not yet", 10 * time.Minute, 9 * time.Minute, false},
+		{"configured, reached", 10 * time.Minute, 10 * time.Minute, true},
+		{"default, not yet", 0, 4*time.Minute + 59*time.Second, false},
+		{"default, reached", 0, 5 * time.Minute, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v := newEnv(t)
+			cfg := config.Config{ResendMinutes: 60, MaxWorkers: 2, NoteFallbackAfter: c.after}
+			v.e = engine.New(v.st, v.l, v.ws, cfg, v.clock)
+			v.l.canDeliver = true
+			waitingWorker(v, t)
+			mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+
+			v.clock.now = v.clock.now.Add(c.elapsed)
+			v.tick(t)
+
+			if got := len(v.l.sent) > 0; got != c.typed {
+				t.Fatalf("typed %q, want typed %v", v.l.sent, c.typed)
+			}
+		})
+	}
+}
+
+func TestABurstOfMessagesToAWaitingSessionIsDeliveredOnceEach(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	waitingWorker(v, t)
+
+	for _, body := range []string{"one", "two", "three"} {
+		mustOK(t, v.run("main", "", "send", "", "worker-t1", body))
+	}
+
+	want := []string{"worker-t1: From main:\none", "worker-t1: From main:\ntwo", "worker-t1: From main:\nthree"}
+	if !slices.Equal(v.l.delivered, want) || len(v.l.sent) != 0 {
+		t.Fatalf("delivered %q, typed %q", v.l.delivered, v.l.sent)
+	}
+}
+
+func TestABurstOfMessagesToABusySessionIsDeliveredOnceEach(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	busyWorker(v, t)
+
+	for _, body := range []string{"one", "two", "three"} {
+		mustOK(t, v.run("main", "", "send", "", "worker-t1", body))
+	}
+	v.clock.now = v.clock.now.Add(time.Minute)
+	v.tick(t)
+
+	want := []string{"worker-t1: From main:\none", "worker-t1: From main:\ntwo", "worker-t1: From main:\nthree"}
+	if !slices.Equal(v.l.delivered, want) || len(v.l.sent) != 0 {
+		t.Fatalf("delivered %q, typed %q", v.l.delivered, v.l.sent)
 	}
 }
 

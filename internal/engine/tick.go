@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
@@ -207,8 +208,14 @@ func (e *Engine) startFailed(t task.Task, err error) error {
 	return errors.Join(err, e.escalateTask(t, why, true))
 }
 
-// hookGrace is how long the hook has to take queued messages before sfy types the note. It spans two ticks.
-const hookGrace = 4 * time.Second
+// hookGrace returns how long the hook has to take queued messages before sfy types the note.
+// A config without the setting, as tests build it, gets the default.
+func (e *Engine) hookGrace() time.Duration {
+	if e.cfg.NoteFallbackAfter > 0 {
+		return e.cfg.NoteFallbackAfter
+	}
+	return config.DefaultNoteFallbackAfter
+}
 
 // typeAfterHook types the new-message note for an agent whose hook left the queued messages unread.
 func (e *Engine) typeAfterHook(name string, s *agentState) error {
@@ -253,12 +260,16 @@ func (e *Engine) resendNotes() error {
 		if len(unread) == 0 {
 			if !s.hookedAt.IsZero() {
 				e.logf("messages taken by the hook of %s", name)
-				s.hookedAt = time.Time{}
+				// The hook woke the agent, so a turn runs now.
+				s.hookedAt, s.waiting, s.hookSince = time.Time{}, false, false
 			}
 			continue
 		}
-		if !down && !s.hookedAt.IsZero() && e.c.Now().Sub(s.hookedAt) >= hookGrace {
-			errs = append(errs, e.typeAfterHook(name, s))
+		if !down && !s.hookedAt.IsZero() {
+			// A busy session reads its notes between tool calls or at the turn end, however long the turn runs.
+			if s.waiting && e.c.Now().Sub(s.hookedAt) >= e.hookGrace() {
+				errs = append(errs, e.typeAfterHook(name, s))
+			}
 			continue
 		}
 		if down {
