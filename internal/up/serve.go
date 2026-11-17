@@ -60,7 +60,7 @@ func execInPlace(dir string, argv []string) error {
 
 func newParts(env func(string) string) (parts, error) {
 	home := config.Home(env)
-	cfg, err := config.Load(home)
+	cfg, err := config.LoadFactory(home, env("HOME"))
 	if err != nil {
 		return parts{}, err
 	}
@@ -155,7 +155,7 @@ type socketPathError struct {
 }
 
 func (e *socketPathError) Error() string {
-	return fmt.Sprintf("the socket path %s has %d bytes, and this system allows %d at most. Set SFY_HOME to a shorter path", e.path, len(e.path), e.max)
+	return fmt.Sprintf("the socket path %s has %d bytes, and this system allows %d at most. Set SFY_HOME to a shorter path, or start the factory in a folder with a shorter name", e.path, len(e.path), e.max)
 }
 
 // checkSocketPath fails when the socket path is too long to bind.
@@ -169,11 +169,45 @@ func checkSocketPath(path string) error {
 
 // Command runs a plain sfy for the sfy home that env names.
 func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
+	env, err := factoryEnv(env, os.Getwd)
+	if err != nil {
+		return err
+	}
 	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {
 		return err
 	}
 	return run(o)
+}
+
+// factoryEnv returns env with SFY_HOME set to the factory that sfy up starts in the current folder.
+// SFY_HOME wins. The user's home folder and a folder with no factory above it work as the rules say:
+// the first gets the default factory, and the second gets a new factory in the factories folder.
+func factoryEnv(env func(string) string, getwd func() (string, error)) (func(string) string, error) {
+	if env("SFY_HOME") != "" {
+		return env, nil
+	}
+	userHome := env("HOME")
+	cwd, err := getwd()
+	if err != nil {
+		return nil, err
+	}
+	state := config.DefaultHome(userHome)
+	if config.CanonicalPath(cwd) != config.CanonicalPath(userHome) {
+		found, ok := config.FindFactory(userHome, cwd)
+		if !ok {
+			if found, err = config.CreateFactory(userHome, cwd); err != nil {
+				return nil, err
+			}
+		}
+		state = found
+	}
+	return func(key string) string {
+		if key == "SFY_HOME" {
+			return state
+		}
+		return env(key)
+	}, nil
 }
 
 // Restart runs sfy restart for the sfy home that env names. The operator and the main agent may run it.
@@ -208,7 +242,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 		return options{}, err
 	}
 	return options{
-		home: p.home, config: p.cfg, bin: p.bin, environ: environ,
+		home: p.home, dir: config.FactoryFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
 		mux: p.mux, launcher: p.launcher, warn: stderr, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -157,17 +158,29 @@ func cacheDir(goos string) string {
 
 // Load reads <home>/config.toml. A missing file gives the defaults, and a setting left out keeps its default.
 func Load(home string) (Config, error) {
-	return load(home, getconfTempDir)
+	return load(getconfTempDir, filepath.Join(home, "config.toml"))
 }
 
-func load(home string, userTempDir func() (string, error)) (Config, error) {
-	c := defaults(userTempDir)
-	md, err := toml.DecodeFile(filepath.Join(home, "config.toml"), &c)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return Config{}, fmt.Errorf("config: %w", err)
+// LoadFactory reads the operator's config.toml in the default state folder, then the factory's own config.toml on top of it.
+// Either file may be missing. A setting that the factory's file leaves out keeps the value of the operator's file.
+func LoadFactory(home, userHome string) (Config, error) {
+	paths := []string{filepath.Join(DefaultHome(userHome), "config.toml")}
+	if own := filepath.Join(home, "config.toml"); own != paths[0] {
+		paths = append(paths, own)
 	}
-	if keys := md.Undecoded(); len(keys) > 0 {
-		return Config{}, &SettingError{Setting: keys[0].String(), Unknown: true}
+	return load(getconfTempDir, paths...)
+}
+
+func load(userTempDir func() (string, error), paths ...string) (Config, error) {
+	c := defaults(userTempDir)
+	for _, path := range paths {
+		md, err := toml.DecodeFile(path, &c)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return Config{}, fmt.Errorf("config: %w", err)
+		}
+		if keys := md.Undecoded(); len(keys) > 0 {
+			return Config{}, &SettingError{Setting: keys[0].String(), Unknown: true}
+		}
 	}
 	if c.ReviewRounds < 1 {
 		return Config{}, &SettingError{Setting: "review_rounds"}
@@ -189,12 +202,19 @@ func load(home string, userTempDir func() (string, error)) (Config, error) {
 	return c, nil
 }
 
-// Home returns the state folder: SFY_HOME, or .sfy in the user's home folder.
+// Home returns the state folder.
+// SFY_HOME wins. Otherwise the nearest registered factory folder at or above the current folder wins.
+// Without either, the default factory, .sfy in the user's home folder, is the state folder.
 func Home(env func(string) string) string {
 	if h := env("SFY_HOME"); h != "" {
 		return h
 	}
-	return filepath.Join(env("HOME"), ".sfy")
+	if cwd, err := os.Getwd(); err == nil {
+		if state, ok := FindFactory(env("HOME"), cwd); ok {
+			return state
+		}
+	}
+	return DefaultHome(env("HOME"))
 }
 
 // Prefix returns the text that goes in front of every terminal session name and worker branch of a state folder.

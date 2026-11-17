@@ -101,7 +101,15 @@ A task moves through these states:
 
 - One long-running sfy process is the only writer of sfy state. The CLI sends each command to that process over a Unix socket. Agents never write state files.
 - The state folder is `~/.sfy` by default. `SFY_HOME` overrides it.
-- Several state folders can run side by side, each with its own `config.toml`, tasks, notes, sfy process and main agent. `SFY_HOME=<folder> sfy up` starts the one in `<folder>`.
+- Several state folders can run side by side, each with its own tasks, notes, sfy process and main agent. A state folder is a factory. `SFY_HOME=<folder> sfy up` starts the one in `<folder>`.
+- A factory belongs to a folder that the operator works in. sfy writes no file in that folder. The state of a factory that sfy creates lives in `~/.sfy/factories/<name>/`. `<name>` is the base name of the folder in lower case, with each character outside `a-z0-9-` replaced by `-`. A second folder with the same base name gets a suffix, as in `web-2`. The file `folder` in the state folder records the absolute path of the folder.
+- Rules for the state folder of a command:
+  1. `SFY_HOME`, when set. Agents get it from sfy, so they keep working unchanged.
+  2. Otherwise the nearest registered factory folder at or above the current folder, as git finds a repo. The user's home folder is never a factory folder.
+  3. Otherwise the default factory, `~/.sfy`.
+- `sfy up` in the user's home folder starts the default factory, and the main agent keeps its working directory. In a factory folder or below one, it starts that factory or, when it runs, behaves as for a running sfy. Anywhere else it creates `~/.sfy/factories/<name>/` for the current folder and starts it. The main agent of such a factory works in the factory folder.
+- `sfy status` and `sfy task list` print a first line, `Factory: <name> (<folder>)`, so the operator sees which factory answered. The default factory has the name `default` and its folder is `~/.sfy`.
+- Every factory reads the operator's `~/.sfy/config.toml`. A `config.toml` in the factory's own state folder overrides it key by key and is optional.
 - Each state folder has a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`.
 - sfy puts the prefix in front of every session name that it gives to the terminal tool, such as `sfy-work-main`, `sfy-work-sfy` and `sfy-work-worker-t1`. It puts the prefix in the branch of a task that started before branches took the form `<type>/<slug>`, as in `sfy/sfy-work-t1`. New branches carry no prefix, because the collision check keeps them apart. Agent names in messages, notes, `sfy send`, `status.md` and `SFY_AGENT` carry no prefix.
 - The store is plain files behind one Go interface, so another store can replace it later.
@@ -190,7 +198,7 @@ A command that an agent kind may not run fails with an error that names the comm
 
 ## Configuration
 
-`config.toml` in the state folder holds the settings:
+`~/.sfy/config.toml` holds the settings. A `config.toml` in a factory's own state folder overrides them:
 
 | Setting | Default | Meaning |
 |---|---|---|

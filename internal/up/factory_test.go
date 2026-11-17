@@ -1,0 +1,87 @@
+package up
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+)
+
+func factoryTestEnv(home, sfyHome string) func(string) string {
+	return func(k string) string {
+		switch k {
+		case "HOME":
+			return home
+		case "SFY_HOME":
+			return sfyHome
+		}
+		return ""
+	}
+}
+
+func TestFactoryEnvCreatesAFactoryAndJoinsItFromASubfolder(t *testing.T) {
+	home, _ := filepath.EvalSymlinks(t.TempDir())
+	dir := filepath.Join(home, "Developer", "carboncloud")
+	sub := filepath.Join(dir, "luigi")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := factoryEnv(factoryTestEnv(home, ""), func() (string, error) { return dir, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".sfy", "factories", "carboncloud")
+	if got := env("SFY_HOME"); got != want {
+		t.Fatalf("SFY_HOME %q, want %q", got, want)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 || entries[0].Name() != "luigi" {
+		t.Errorf("the folder holds %v, want only luigi", entries)
+	}
+
+	env, err = factoryEnv(factoryTestEnv(home, ""), func() (string, error) { return sub, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := env("SFY_HOME"); got != want {
+		t.Errorf("from a subfolder SFY_HOME %q, want %q", got, want)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(home, ".sfy", "factories")); len(entries) != 1 {
+		t.Errorf("%d factories exist, want 1", len(entries))
+	}
+}
+
+func TestFactoryEnvKeepsSFYHOMEAndUsesTheDefaultInTheHomeFolder(t *testing.T) {
+	home, _ := filepath.EvalSymlinks(t.TempDir())
+	getwd := func() (string, error) { return home, nil }
+
+	env, err := factoryEnv(factoryTestEnv(home, "/custom"), getwd)
+	if err != nil || env("SFY_HOME") != "/custom" {
+		t.Errorf("override: SFY_HOME %q, err %v", env("SFY_HOME"), err)
+	}
+	env, err = factoryEnv(factoryTestEnv(home, ""), getwd)
+	if err != nil || env("SFY_HOME") != filepath.Join(home, ".sfy") {
+		t.Errorf("home folder: SFY_HOME %q, err %v", env("SFY_HOME"), err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".sfy", "factories")); err == nil {
+		t.Error("the home folder created a factory")
+	}
+}
+
+func TestMainAgentWorksInTheFactoryFolder(t *testing.T) {
+	if got := (options{home: "/s", dir: "/w"}).mainDir(); got != "/w" {
+		t.Errorf("factory: %q, want /w", got)
+	}
+	if got := (options{home: "/s"}).mainDir(); got != "/s" {
+		t.Errorf("default: %q, want /s", got)
+	}
+}
+
+func TestSocketPathOfALongNamedFactoryStaysWithinTheLimit(t *testing.T) {
+	long := config.FactoryName("/h/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	path := socket(filepath.Join("/Users/someoneelse", ".sfy", "factories", long))
+	if err := checkSocketPath(path); err != nil {
+		t.Errorf("socket path %q: %v", path, err)
+	}
+}
