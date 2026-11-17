@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -32,7 +33,8 @@ func Ready(home, name string) bool {
 	return err == nil
 }
 
-// Deliver appends text to the note file of the session. The session's FileChanged hook then wakes the agent.
+// Deliver appends text to the note file of the session. The session's FileChanged hook should then take it.
+// The text counts as delivered only when the hook takes it, so the caller must check that.
 // A non-empty id names the stored message that the text carries, and the drain delivers the text only while that message is unread.
 // It returns false when the session's hooks never ran, because no hook watches such a session's note file.
 func (a adapter) Deliver(name, text, id string) (bool, error) {
@@ -122,19 +124,23 @@ type Entry struct{ ID, Text string }
 
 // AppendNote adds a note to the note file at path and creates the file when it is missing.
 // A header line before the text keeps the entries apart. A file from an older sfy has no header and counts as one plain note.
+// A message that the file already holds is not added again, so a resend does not grow the file.
 func AppendNote(path, id, text string) error {
 	unlock, err := lockNote(path)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
 	header := noteHeader
 	if id != "" {
 		header = messageHeader + id + " -->"
+		if b, err := os.ReadFile(path); err == nil && slices.Contains(strings.Split(string(b), "\n"), header) {
+			return nil
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
 	}
 	_, werr := f.WriteString(header + "\n" + strings.TrimRight(text, "\n") + "\n\n")
 	return errors.Join(werr, f.Close())

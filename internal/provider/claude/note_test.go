@@ -237,6 +237,21 @@ func TestAMessageEntryKeepsItsIDAndStaysApartFromAPlainNote(t *testing.T) {
 	}
 }
 
+func TestAppendingAMessageThatTheFileHoldsAddsNothing(t *testing.T) {
+	path := notePath(t)
+	for range 3 {
+		if err := claude.AppendNote(path, "m1", "From main:\none"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := claude.DrainNote(path)
+
+	if want := []claude.Entry{{ID: "m1", Text: "From main:\none"}}; err != nil || !slices.Equal(got, want) {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
 func TestANoteFileFromAnOlderSfyCountsAsOnePlainNote(t *testing.T) {
 	path := notePath(t)
 	if err := os.WriteFile(path, []byte("Task t1 is approved.\n\nTask t2 is blocked.\n\n"), 0o600); err != nil {

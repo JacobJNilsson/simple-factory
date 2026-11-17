@@ -1,9 +1,12 @@
 package engine_test
 
 import (
+	"bytes"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
@@ -35,6 +38,73 @@ func TestADeliveredMessageStaysUnreadUntilTheSessionTakesIt(t *testing.T) {
 	}
 	if a := v.run("worker-t1", "", "inbox", ""); a.Text != "From main:\nPlease rebase.\n\n" {
 		t.Fatalf("sfy inbox shows %q", a.Text)
+	}
+}
+
+func TestQueuedMessagesAreLoggedAsQueuedAndNotAsDelivered(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	v.l.canDeliver = true
+	waitingWorker(v, t)
+
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+
+	if got := log.String(); !strings.Contains(got, "messages queued in the note file of worker-t1") || strings.Contains(got, "delivered to") {
+		t.Fatalf("log %q", got)
+	}
+}
+
+func TestAnIdleSessionWhoseHookLeavesTheMessageUnreadGetsTheNoteTyped(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	v.l.canDeliver = true
+	waitingWorker(v, t)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	v.clock.now = v.clock.now.Add(5 * time.Second)
+
+	v.tick(t)
+
+	if want := []string{"worker-t1: " + note}; !slices.Equal(v.l.sent, want) {
+		t.Fatalf("typed %q, want %q", v.l.sent, want)
+	}
+	if !strings.Contains(log.String(), "note typed to worker-t1: the hook left its messages unread") {
+		t.Fatalf("log %q", log.String())
+	}
+}
+
+func TestNoNoteIsTypedWhileTheHookStillHasTime(t *testing.T) {
+	v := newEnv(t)
+	v.l.canDeliver = true
+	waitingWorker(v, t)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	v.clock.now = v.clock.now.Add(time.Second)
+
+	v.tick(t)
+
+	if len(v.l.sent) != 0 {
+		t.Fatalf("typed %q", v.l.sent)
+	}
+}
+
+func TestAMessageThatTheHookTookIsLoggedAndNeverTyped(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	v.l.canDeliver = true
+	waitingWorker(v, t)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	msgs := v.inbox(t, "worker-t1")
+	if err := v.st.MarkRead("worker-t1", []string{msgs[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	v.clock.now = v.clock.now.Add(time.Minute)
+
+	v.tick(t)
+
+	if len(v.l.sent) != 0 || !strings.Contains(log.String(), "messages taken by the hook of worker-t1") {
+		t.Fatalf("typed %q, log %q", v.l.sent, log.String())
 	}
 }
 
