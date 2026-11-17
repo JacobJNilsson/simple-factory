@@ -86,7 +86,7 @@ sfy keeps its state in `~/.sfy`:
 See `docs/configuration.md` for the details of each item.
 
 - Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets.
-- Per-repo config: a `.sfy.toml` file in a repo or in a parent folder up to `$HOME` sets per-repo keys. `no_merge = true` stops the main agent from integrating approved branches, so you merge them by hand. For example, put `no_merge = true` in `~/Developer/work/.sfy.toml` to cover every work repo below it. The nearest file wins.
+- Per-repo config: `.sfy/config.toml` in a repo, or a `.sfy.toml` file in a repo or in a parent folder up to `$HOME`, sets per-repo keys. `draft_pr = true` makes the push note ask for draft PRs. `no_merge = true` stops the main agent from integrating approved branches, so you merge them by hand. For example, put `no_merge = true` in `~/Developer/work/.sfy.toml` to cover every work repo below it. The `.sfy/` folder wins, then the nearest `.sfy.toml`.
 - Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind.
 - Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
 - Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.

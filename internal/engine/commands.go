@@ -586,6 +586,10 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 			return "", err
 		}
 		note := fmt.Sprintf("Review round %d of task %s passed. Push the branch now, then run sfy report pushed <summary>.", t.Round, t.ID)
+		// A repo whose config cannot be read gets no draft rule, because the worker opens no PR unless the task asks.
+		if cfg, err := e.configFor(t); err == nil && cfg.DraftPR {
+			note += " Any PR you open must be a draft. Use gh pr create --draft."
+		}
 		return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(req.Caller.Agent))
 	}
 	return "", e.approve(t, req.Caller.Agent, false)

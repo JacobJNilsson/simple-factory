@@ -215,7 +215,8 @@ A command that an agent kind may not run fails with an error that names the comm
 | `deny_read` | `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.netrc`, `~/.docker`, `~/.kube`, `~/.claude.json` | Paths that the sandbox hides from workers and reviewers. An empty list means no path. |
 | `allow_write` | The user cache folder and `~/go/pkg/mod`. On macOS also the per-user temp folder from `getconf DARWIN_USER_TEMP_DIR`, without its trailing slash | Paths outside the workspace that the sandbox lets workers and reviewers write. An empty list means no path. |
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
-| `no_merge` | `false` | When true, the main agent leaves approved branches for the operator. A `.sfy.toml` file can set it per repo. |
+| `no_merge` | `false` | When true, the main agent leaves approved branches for the operator. A per-repo file can set it per repo. |
+| `draft_pr` | `false` | When true, the push note tells the worker that any PR it opens must be a draft. A per-repo file can set it per repo. |
 | `session_rules.main`, `.worker`, `.reviewer` | none | Tables with an `allow` list and an `excluded_commands` list. sfy adds them to that kind's permission allow rules and sandbox excluded commands. |
 | `session_settings.main`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy adds them at the top level of that kind's settings file. Worker and reviewer files hold `promptSuggestionEnabled = false` unless a table sets it. |
 
@@ -235,16 +236,18 @@ sfy keeps its own keys. A table that sets `permissions`, `hooks` or `sandbox` is
 
 ### Per-repo configuration
 
-A `.sfy.toml` file holds the settings of one repo or of every repo below one folder. It holds only per-repo settings. The first one is `no_merge`.
+A per-repo file holds the settings of one repo. A `.sfy.toml` file can also cover every repo below one folder. Both hold only per-repo settings. A new per-repo setting is one typed field in `repoSettings`.
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `no_merge` | the value in `config.toml`, `false` | When true, `sfy task integrate` refuses, and the main agent leaves the approved branch for the operator to merge by hand. |
+| `draft_pr` | the value in `config.toml`, `false` | When true, the note that asks the worker to push also says that any PR it opens must be a draft, with `gh pr create --draft`. sfy opens no PR. |
 
-- **Which folder counts.** For a task whose `## Repo` is a local path, the folder is that path. For a task whose `## Repo` is a URL, the folder is the clone that sfy keeps in `repos/` of the state folder, which exists after the first task of that URL starts. So a `.sfy.toml` in `repos/` or in the state folder covers URL repos. The file is not searched for in the task's worktree.
+- **Which folder counts.** For a task whose `## Repo` is a local path, the folder is that path. For a task whose `## Repo` is a URL, the folder is the clone that sfy keeps in `repos/` of the state folder, which exists after the first task of that URL starts. So a `.sfy.toml` in `repos/` or in the state folder covers URL repos. sfy never reads the task's worktree or branch, so a worker's commit cannot change settings before the operator merges it.
+- **The `.sfy/` folder.** sfy reads `.sfy/config.toml` in that folder only, with no parent walk. The operator may keep `.sfy/` out of git with `core.excludesFile`, or commit it. In a URL clone, a committed `.sfy/` arrives with each fetch of the default branch, and the operator can also put an untracked one there by hand.
 - **Lookup.** sfy reads `.sfy.toml` in that folder and in each parent folder up to `$HOME`. It stops at `$HOME`. A folder outside `$HOME` counts alone, with no parent. sfy reads the files again on each use, so an edit applies at once.
-- **Precedence.** The nearest file wins, key by key. A key that the nearest file leaves out comes from the next file up, and then from `config.toml`.
-- **Refusals.** A key that sfy does not know is an error. So is a global-only key, such as `multiplexer`, `max_workers` or `multiplexers`. The error names the file and the key. While a file has an error, `sfy task integrate` refuses for the repos below it.
+- **Precedence.** Key by key, the first file that sets the key wins. The order is `.sfy/config.toml` in the repo folder, then each `.sfy.toml` from the nearest to the farthest, then the factory `config.toml`, then `~/.sfy/config.toml`.
+- **Refusals.** A key that sfy does not know is an error. So is a global-only key, such as `multiplexer`, `max_workers` or `multiplexers`. The error names the file and the key. A file that does not parse is also an error. While a file has an error, `sfy task integrate` refuses for the repos below it, and the push note adds no draft rule.
 
 For example, this file at `~/Developer/work/.sfy.toml` makes the operator the only one who merges in every work repo below it:
 

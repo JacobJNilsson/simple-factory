@@ -78,6 +78,38 @@ func TestIntegrateNeedsAnApprovedTaskWithARepo(t *testing.T) {
 	mustFail(t, working.run("main", "", "task integrate", "", "t1"), "approved")
 }
 
+func TestThePushNoteAsksForADraftPRWhenDraftPRIsSet(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  func(string) (config.Config, error)
+		want bool
+	}{
+		{"default", nil, false},
+		{"off", func(string) (config.Config, error) { return config.Config{}, nil }, false},
+		{"on", func(string) (config.Config, error) { return config.Config{DraftPR: true}, nil }, true},
+		{"unreadable", func(string) (config.Config, error) { return config.Config{}, errors.New("bad file") }, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v := newEnv(t)
+			if c.cfg != nil {
+				v.e.SetRepoConfig(c.cfg)
+			}
+			v.firstReview(t)
+			mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+
+			notes := v.pushNotes(t)
+
+			if len(notes) != 1 {
+				t.Fatalf("notes = %v", notes)
+			}
+			if got := strings.Contains(notes[0], "--draft"); got != c.want {
+				t.Errorf("--draft in note = %v, want %v:\n%s", got, c.want, notes[0])
+			}
+		})
+	}
+}
+
 func TestTheApprovalNoteSaysToIntegrateOrToLeaveTheBranch(t *testing.T) {
 	cases := []struct {
 		name  string

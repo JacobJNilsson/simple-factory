@@ -148,6 +148,96 @@ func TestARepoFileRefusesAGlobalOnlyKey(t *testing.T) {
 	}
 }
 
+func writeSfyFolder(t *testing.T, repo, body string) {
+	t.Helper()
+	dir := filepath.Join(repo, config.RepoDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.RepoConfigFile), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTheSfyFolderOfALocalRepoSetsTheSettings(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	writeSfyFolder(t, repo, "no_merge = true\ndraft_pr = true\n")
+
+	got, err := config.ForRepo(config.Config{}, home, repo)
+
+	if want := (config.Config{NoMerge: true, DraftPR: true}); err != nil || got.NoMerge != want.NoMerge || got.DraftPR != want.DraftPR {
+		t.Fatalf("got %+v, err = %v", got, err)
+	}
+}
+
+func TestTheSfyFolderOfAURLCloneSetsTheSettings(t *testing.T) {
+	home := t.TempDir()
+	clone := filepath.Join(home, ".sfy", "factories", "x", "repos", "some-repo-1234")
+	writeSfyFolder(t, clone, "draft_pr = true\n")
+
+	got, err := config.ForRepo(config.Config{}, home, clone)
+
+	if err != nil || !got.DraftPR {
+		t.Fatalf("DraftPR = %v, err = %v", got.DraftPR, err)
+	}
+}
+
+func TestThePrecedenceRunsFromTheSfyFolderToTheGlobalConfigKeyByKey(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "work", "repo")
+	writeRepoFile(t, filepath.Join(home, "work"), "no_merge = true\ndraft_pr = true\n")
+	writeRepoFile(t, repo, "no_merge = false\n")
+	writeSfyFolder(t, repo, "no_merge = true\n")
+
+	got, err := config.ForRepo(config.Config{MaxWorkers: 4}, home, repo)
+
+	// no_merge comes from .sfy/config.toml, draft_pr from the parent .sfy.toml, max_workers from the base config.
+	if err != nil || !got.NoMerge || !got.DraftPR || got.MaxWorkers != 4 {
+		t.Fatalf("got %+v, err = %v", got, err)
+	}
+}
+
+func TestTheSfyFolderOverridesASfyTomlThatSaysOtherwise(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	writeRepoFile(t, repo, "no_merge = true\n")
+	writeSfyFolder(t, repo, "no_merge = false\n")
+
+	got, err := config.ForRepo(config.Config{NoMerge: true}, home, repo)
+
+	if err != nil || got.NoMerge {
+		t.Fatalf("NoMerge = %v, err = %v", got.NoMerge, err)
+	}
+}
+
+func TestASfyFolderInAWorktreeOrAParentFolderIsIgnored(t *testing.T) {
+	home := t.TempDir()
+	repo := filepath.Join(home, "repo")
+	writeSfyFolder(t, filepath.Join(home, "work", "t1"), "no_merge = true\n")
+	writeSfyFolder(t, home, "no_merge = true\n")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := config.ForRepo(config.Config{}, home, repo)
+
+	if err != nil || got.NoMerge {
+		t.Fatalf("NoMerge = %v, err = %v", got.NoMerge, err)
+	}
+}
+
+func TestTheSfyFolderRejectsUnknownKeysGlobalKeysAndBrokenTOML(t *testing.T) {
+	for _, body := range []string{"nope = 1\n", "max_workers = 3\n", "no_merge = \n"} {
+		home := t.TempDir()
+		writeSfyFolder(t, home, body)
+
+		if _, err := config.ForRepo(config.Config{}, home, home); err == nil {
+			t.Errorf("ForRepo accepted %q", body)
+		}
+	}
+}
+
 func TestARepoFileWithBrokenTOMLIsAnError(t *testing.T) {
 	home := t.TempDir()
 	writeRepoFile(t, home, "no_merge = \n")
