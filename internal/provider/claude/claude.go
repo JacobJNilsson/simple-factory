@@ -177,6 +177,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"Stop":              {{Hooks: []hook{a.hook("turn-ended")}}},
 			"PermissionRequest": {{Hooks: []hook{a.hook("permission")}}},
 			"Notification":      {{Matcher: "idle_prompt", Hooks: []hook{a.hook("idle")}}},
+			"UserPromptSubmit":  {{Hooks: []hook{a.hook("busy")}}},
 			// SessionStart asks Claude Code to watch the note file. FileChanged then wakes the agent with the file's text.
 			"SessionStart": {{Hooks: []hook{a.hook("note-watch")}}},
 			// A folder change replaces the watch set with the one that CwdChanged hooks return, so this hook returns it again.

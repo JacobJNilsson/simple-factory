@@ -267,7 +267,7 @@ func readFile(path string, stdin io.Reader) (string, error) {
 }
 
 // sessionHookEvents lists the hook events that the settings of a started session run.
-var sessionHookEvents = []string{"turn-ended", "permission", "idle", "note", "note-watch"}
+var sessionHookEvents = []string{"turn-ended", "permission", "idle", "busy", "note", "note-watch"}
 
 // ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the main agent run.
 var ErrRestricted = errors.New("a worker or a reviewer may not run this command")
@@ -422,7 +422,7 @@ func takeDelivered(st store.Store, agent string, entries []claude.Entry) (string
 }
 
 // userHookEvents lists the events that the hooks in the user settings report.
-var userHookEvents = []string{"turn-ended", "permission", "idle"}
+var userHookEvents = []string{"turn-ended", "permission", "idle", "busy"}
 
 // userHookRequest builds the request for a hook that comes from the user settings.
 // The user settings reach every session of the user, so the hook acts only for the registered main agent.

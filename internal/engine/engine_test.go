@@ -180,7 +180,7 @@ func newEnv(t *testing.T) env {
 	home := t.TempDir()
 	st := store.Files(home)
 	l, ws := &fakeLauncher{}, &fakeWorkspaces{}
-	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, Models: config.Models{Worker: "work-model", Reviewer: "rev-model"}}
+	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, NoteFallbackAfter: 4 * time.Second, Models: config.Models{Worker: "work-model", Reviewer: "rev-model"}}
 	clock := &fakeClock{now: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	return env{home, st, l, ws, clock, engine.New(st, l, ws, cfg, clock)}
 }

@@ -63,11 +63,11 @@ func TestInstallUserHooksCreatesTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(changes) != 3 {
+	if len(changes) != 4 {
 		t.Errorf("changes %q", changes)
 	}
 	s := readSettings(t, path)
-	for event, arg := range map[string]string{"Stop": "turn-ended", "PermissionRequest": "permission", "Notification": "idle"} {
+	for event, arg := range map[string]string{"Stop": "turn-ended", "PermissionRequest": "permission", "Notification": "idle", "UserPromptSubmit": "busy"} {
 		want := "/opt/sfy hook --user " + arg
 		if got := commands(s, event); len(got) != 1 || got[0] != want {
 			t.Errorf("%s hooks %q, want %q", event, got, want)
@@ -142,7 +142,7 @@ func TestInstallUserHooksUpdatesAMovedBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(changes) != 3 || !strings.HasPrefix(changes[0], "Updated") {
+	if len(changes) != 4 || !strings.HasPrefix(changes[0], "Updated") {
 		t.Errorf("changes %q", changes)
 	}
 	if got := commands(readSettings(t, path), "Stop"); len(got) != 1 || got[0] != "/new/sfy hook --user turn-ended" {
