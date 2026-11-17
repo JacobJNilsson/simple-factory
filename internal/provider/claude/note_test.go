@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -396,6 +397,86 @@ func TestSessionSettingsWatchTheNoteFileAndWakeOnAChange(t *testing.T) {
 	if got := s.Hooks["FileChanged"][0].Matcher; got != "" {
 		t.Errorf("FileChanged matcher %q", got)
 	}
+}
+
+func TestSessionSettingsStartAWaiterAtSessionStartAndAfterEachTurn(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, worker())
+
+	s := readSettings(t, home, "worker-t1")
+
+	for _, event := range []string{"SessionStart", "Stop"} {
+		hooks := s.Hooks[event][0].Hooks
+		wait := hooks[len(hooks)-1]
+		if wait.Command != bin+" hook note-wait" || !wait.AsyncRewake || wait.Timeout < 12*60*60 {
+			t.Errorf("%s waiter hook %+v", event, wait)
+		}
+	}
+}
+
+func TestNotePendingSeesTheFileAndTheLeftoversOfADrain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "note.md")
+	if claude.NotePending(path) {
+		t.Fatal("pending without a file")
+	}
+	for _, name := range []string{"", ".taken", ".taken.new"} {
+		if err := os.WriteFile(path+name, []byte("text"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if !claude.NotePending(path) {
+			t.Errorf("not pending with %q", "note.md"+name)
+		}
+		if err := os.Remove(path + name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if claude.NotePending(path) {
+		t.Fatal("an empty file counts as pending")
+	}
+}
+
+func TestLockWaiterAllowsOneHolder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "note.md")
+
+	first, err := claude.LockWaiter(path)
+	if err != nil || first == nil {
+		t.Fatalf("first: %v, %v", first, err)
+	}
+	// A second open file description conflicts with the first, also inside one process.
+	second, err := claude.LockWaiter(path)
+
+	if err != nil || second != nil {
+		t.Fatalf("second: %v, %v", second, err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	third, err := claude.LockWaiter(path)
+	if err != nil || third == nil {
+		t.Fatalf("after release: %v, %v", third, err)
+	}
+	_ = third.Close()
+}
+
+func TestLockWaiterHoldsTheLockThroughGarbageCollection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "note.md")
+	first, err := claude.LockWaiter(path)
+	if err != nil || first == nil {
+		t.Fatalf("first: %v, %v", first, err)
+	}
+
+	runtime.GC()
+	runtime.GC()
+	second, err := claude.LockWaiter(path)
+
+	if err != nil || second != nil {
+		t.Fatalf("the lock was lost: %v, %v", second, err)
+	}
+	runtime.KeepAlive(first)
+	_ = first.Close()
 }
 
 func TestMainSettingsHaveTheNoteHooksToo(t *testing.T) {

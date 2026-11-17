@@ -174,11 +174,13 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 	s := settings{
 		Permissions: permissions{Allow: a.allow(spec), Deny: deny(spec)},
 		Hooks: map[string][]hookGroup{
-			"Stop":              {{Hooks: []hook{a.hook("turn-ended")}}},
+			// The waiter ends when it wakes the agent, so each turn end arms a new one.
+			"Stop":              {{Hooks: []hook{a.hook("turn-ended"), a.waitHook()}}},
 			"PermissionRequest": {{Hooks: []hook{a.hook("permission")}}},
 			"Notification":      {{Matcher: "idle_prompt", Hooks: []hook{a.hook("idle")}}},
-			// SessionStart asks Claude Code to watch the note file. FileChanged then wakes the agent with the file's text.
-			"SessionStart": {{Hooks: []hook{a.hook("note-watch")}}},
+			// SessionStart asks Claude Code to watch the note file and starts the waiter that wakes an idle agent.
+			// FileChanged takes a note that arrives during a turn.
+			"SessionStart": {{Hooks: []hook{a.hook("note-watch"), a.waitHook()}}},
 			"FileChanged":  {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
@@ -297,6 +299,16 @@ func (a adapter) hook(event string) hook {
 func (a adapter) rewakeHook(event string) hook {
 	h := a.hook(event)
 	h.AsyncRewake = true
+	return h
+}
+
+// noteWaitTimeout is the timeout in seconds of the waiter hook. It exceeds the longest wait of the waiter itself.
+const noteWaitTimeout = 13 * 60 * 60
+
+// waitHook builds the background hook that waits for a note and wakes the agent with its text when it exits with code 2.
+func (a adapter) waitHook() hook {
+	h := a.rewakeHook("note-wait")
+	h.Timeout = noteWaitTimeout
 	return h
 }
 

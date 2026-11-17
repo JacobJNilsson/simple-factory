@@ -179,6 +179,33 @@ func DrainNote(path string) ([]Entry, error) {
 	return parseEntries(out.String()), nil
 }
 
+// NotePending reports whether the note file at path, or a file that an earlier drain left, holds text.
+func NotePending(path string) bool {
+	for _, p := range []string{path, path + ".taken", path + ".taken.new"} {
+		if fi, err := os.Stat(p); err == nil && fi.Size() > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// LockWaiter takes the lock that lets one note waiter run for the session of the note file at path.
+// It returns a nil file when another waiter holds the lock. The caller must keep the file open and reachable while it waits, because closing it releases the lock.
+func LockWaiter(path string) (*os.File, error) {
+	f, err := os.OpenFile(path+".wait", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return f, nil
+}
+
 // parseEntries splits the text of a note file at its header lines. Text before the first header is one plain note.
 func parseEntries(text string) []Entry {
 	var entries []Entry

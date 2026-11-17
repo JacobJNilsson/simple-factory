@@ -111,7 +111,7 @@ func mainSpec() engine.SessionSpec {
 func hookOf(t *testing.T, s settings, event string) hookEntry {
 	t.Helper()
 	groups := s.Hooks[event]
-	if len(groups) != 1 || len(groups[0].Hooks) != 1 || groups[0].Hooks[0].Type != "command" {
+	if len(groups) != 1 || len(groups[0].Hooks) < 1 || groups[0].Hooks[0].Type != "command" {
 		t.Fatalf("hook %s: %+v", event, groups)
 	}
 	return groups[0].Hooks[0]

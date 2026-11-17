@@ -56,6 +56,7 @@ const usage = `usage:
   sfy hook <event>
   sfy hook note        print the delivered notes to stderr and exit 2 (a hook of the session's settings)
   sfy hook note-watch  print the SessionStart output that names the note file (a hook of the session's settings)
+  sfy hook note-wait   wait in the background for a note and wake the idle session with its text (a hook of the session's settings)
   sfy hook merge-guard block a hand push, merge or rebase in a no-merge repo (a hook of the main session's settings)
   sfy hook --user <event>
 `
@@ -264,7 +265,7 @@ func readFile(path string, stdin io.Reader) (string, error) {
 }
 
 // sessionHookEvents lists the hook events that the settings of a started session run.
-var sessionHookEvents = []string{"turn-ended", "permission", "idle", "note", "note-watch"}
+var sessionHookEvents = []string{"turn-ended", "permission", "idle", "note", "note-watch", "note-wait"}
 
 // ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the main agent run.
 var ErrRestricted = errors.New("a worker or a reviewer may not run this command")
@@ -286,6 +287,9 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 	}
 	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
 		return noteHook(args[1], env, stdout, stderr)
+	}
+	if len(args) == 2 && args[0] == "hook" && args[1] == "note-wait" {
+		return noteWait(env, stderr, noteWaitPoll, noteWaitMax)
 	}
 	if len(args) == 2 && args[0] == "hook" && args[1] == "merge-guard" {
 		return mergeGuardHook(env, stdin, stderr)
@@ -362,24 +366,30 @@ func noteHook(event string, env func(string) string, stdout, stderr io.Writer) i
 		_, _ = fmt.Fprintln(stdout, out)
 		return exitOK
 	}
-	home, agent := config.Home(env), env("SFY_AGENT")
-	entries, err := claude.DrainNote(path)
-	if err == nil {
-		var text string
-		text, err = takeDelivered(store.Files(home), agent, entries)
-		if text != "" {
-			_, _ = fmt.Fprintln(stderr, text)
-			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-			}
-			return exitWake
-		}
-	}
+	code, err := takeNotes(path, env, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-		return exitFailed
+		if code == exitOK {
+			return exitFailed
+		}
 	}
-	return exitOK
+	return code
+}
+
+// takeNotes drains the note file at path and prints the text of the notes that still wait to stderr.
+// It returns exitWake when it printed text, so the caller wakes the agent. A message that was marked read stays delivered even when the later step fails.
+func takeNotes(path string, env func(string) string, stderr io.Writer) (int, error) {
+	home, agent := config.Home(env), env("SFY_AGENT")
+	entries, err := claude.DrainNote(path)
+	if err != nil {
+		return exitOK, err
+	}
+	text, err := takeDelivered(store.Files(home), agent, entries)
+	if text == "" {
+		return exitOK, err
+	}
+	_, _ = fmt.Fprintln(stderr, text)
+	return exitWake, err
 }
 
 // takeDelivered returns the text of the entries that still wait and marks their messages read.
