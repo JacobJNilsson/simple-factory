@@ -28,6 +28,8 @@ type SessionSpec struct {
 	HasRepo bool
 	// Branch is the git branch of the task. It is empty for a task with no repo.
 	Branch string
+	// NoPush is true while the operator holds the push of the task. The session gets no push permission.
+	NoPush bool
 	// ResumePrompt is the first message when the provider resumes the main agent's last conversation.
 	ResumePrompt string
 	// Fresh makes the provider start a new conversation, even when it recorded one.
@@ -278,6 +280,7 @@ var commands = map[string]command{
 	"task feedback":   {(*Engine).taskFeedback, []kind{operator, main}},
 	"task complete":   {(*Engine).taskComplete, []kind{operator, main}},
 	"task integrate":  {(*Engine).taskIntegrate, []kind{operator, main}},
+	"task push":       {(*Engine).taskPush, []kind{operator, main}},
 	"task archive":    {(*Engine).taskArchive, []kind{operator, main}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
 	"send":            {(*Engine).send, []kind{main}},

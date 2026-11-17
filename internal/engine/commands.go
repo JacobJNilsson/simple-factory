@@ -222,7 +222,7 @@ func (e *Engine) taskCancel(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Approved, task.Escalated); err != nil {
+	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Held, task.Approved, task.Escalated); err != nil {
 		return "", err
 	}
 	t.State, t.Before = task.Cancelled, ""
@@ -317,6 +317,15 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		}
 		return "", e.message(to, from, note)
 	case task.Review:
+		if t.Released {
+			// The running worker may push. A new worker starts without that permission, so the hold returns.
+			if err := e.endSessions(t); err != nil {
+				return "", err
+			}
+			t.State, t.Pushing, t.Released, t.Reopened = task.Queued, false, false, true
+			t.Pending = append(t.Pending, body)
+			return "", e.save(t)
+		}
 		// The review judges a result that the feedback may change, so it ends without a verdict.
 		reviewer := reviewerOf(t)
 		t.State, t.Pushing = task.Feedback, false
@@ -326,8 +335,8 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		err := e.stop(reviewer)
 		delete(e.agents, reviewer)
 		return "", errors.Join(err, e.message(to, from, note))
-	case task.Approved, task.Done, task.Cancelled:
-		t.State, t.Archived, t.Reopened, t.Pushing = task.Queued, false, true, false
+	case task.Held, task.Approved, task.Done, task.Cancelled:
+		t.State, t.Archived, t.Reopened, t.Pushing, t.Released = task.Queued, false, true, false, false
 	}
 	t.Pending = append(t.Pending, body)
 	return "", e.save(t)
@@ -579,6 +588,9 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 			return "", err
 		}
 	}
+	if remote && t.HoldsPush() {
+		return "", e.hold(t, req.Caller.Agent)
+	}
 	if remote {
 		// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
 		t.Pushing = true
@@ -635,6 +647,51 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 	// The work is finished, so both sessions end. The workspace stays until main completes the task.
 	return e.endSessions(t)
 }
+
+// hold moves a task with a passed review to held and tells main that the push waits for the operator.
+// The worker never pushes, so both sessions end and the workspace stays.
+func (e *Engine) hold(t task.Task, from string) error {
+	t.State = task.Held
+	if err := e.save(t); err != nil {
+		return err
+	}
+	note := fmt.Sprintf("Task %s passed its review, and its push is on hold. Branch %s of the repo folder %s is not pushed. The push waits for the operator. Tell the operator, and run sfy task push %s only when the operator says to push.", t.ID, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+	if err := e.message("main", from, note); err != nil {
+		return err
+	}
+	return e.endSessions(t)
+}
+
+// taskPush releases the push hold of a held task. It starts a worker that may push, and the task goes on as after a passed review.
+func (e *Engine) taskPush(req protocol.Request) (string, error) {
+	t, err := e.load(req)
+	if err != nil {
+		return "", err
+	}
+	if err := need(t, task.Held); err != nil {
+		return "", err
+	}
+	before := t
+	t.State, t.Released, t.Pushing = task.Review, true, true
+	if err := e.save(t); err != nil {
+		return "", err
+	}
+	name := "worker-" + t.ID
+	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\nPush the branch now, then run sfy report pushed <summary>.\n", t.ID, t.Markdown())
+	err = e.l.Start(SessionSpec{
+		Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir,
+		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected, HasRepo: true,
+		Branch: e.branchOf(t),
+	})
+	if err != nil {
+		return "", errors.Join(err, e.save(before))
+	}
+	e.agents[name] = &agentState{}
+	return "", nil
+}
+
+// operatorHold tells the worker of a held task that it may not push.
+const operatorHold = "The operator holds the push of this task. Never push. sfy asks for no push after the review passes."
 
 // holdPush tells the worker of a task with a repo when to push.
 const holdPush = "Commit the work on the task branch and do not push. When the repo has a remote, sfy tells you to push after the review passes."

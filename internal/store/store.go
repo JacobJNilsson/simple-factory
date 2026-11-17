@@ -73,6 +73,8 @@ type stateFile struct {
 	Reopened bool       `json:"reopened,omitempty"`
 	// Pushing is the task's flag of the same name.
 	Pushing bool `json:"pushing,omitempty"`
+	// Released is the task's flag of the same name.
+	Released bool `json:"released,omitempty"`
 	// Branch is the task's field of the same name.
 	Branch  string    `json:"branch,omitempty"`
 	Updated time.Time `json:"updated"`
@@ -245,7 +247,7 @@ func writeTask(dir string, t task.Task) error {
 	}
 	b, err := json.MarshalIndent(stateFile{
 		State: t.State, Before: t.Before, Round: t.Round, Archived: t.Archived, Source: t.Source, Progress: t.Progress,
-		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Branch: t.Branch, Updated: t.Updated,
+		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Released: t.Released, Branch: t.Branch, Updated: t.Updated,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -276,7 +278,7 @@ func (f files) Task(id string) (task.Task, error) {
 	}
 	t.ID = id
 	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, st.Source
-	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Branch, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Branch, st.Updated
+	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Released, t.Branch, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Released, st.Branch, st.Updated
 	return t, nil
 }
 

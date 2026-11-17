@@ -42,6 +42,7 @@ You may run only these sfy commands.
 - `sfy task queue <id>` moves a task in state new to queued.
 - `sfy task list` lists the tasks and their states, without archived tasks. `sfy task list --archived` lists only the archived tasks.
 - `sfy task show <id>` prints a task's file, state and verdicts.
+- `sfy task push <id>` releases the push of a held task. A task with `## Push` set to `hold` moves to held after a passed review, and its branch stays unpushed. Tell the operator the branch name and the repo folder, then wait. Run the command only when the operator says to push.
 - `sfy task integrate <id>` integrates the branch of an approved task with a repo and moves the task to done. It refuses in a no-merge repo.
 - `sfy task complete <id>` moves an approved task to done. Run it for a task with no repo, and for a no-merge task after the operator merged the branch.
 - `sfy task archive <id>` hides a done or cancelled task from `status.md` and `sfy task list`. You may archive done and cancelled tasks to clean up the status list.

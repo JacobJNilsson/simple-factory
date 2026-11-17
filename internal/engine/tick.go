@@ -124,7 +124,7 @@ func (e *Engine) startWorker(t task.Task) error {
 	err := e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
 		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
-		Branch: t.Branch,
+		Branch: t.Branch, NoPush: t.HoldsPush(),
 	})
 	if err != nil {
 		rmErr := e.discard(t)
@@ -181,6 +181,9 @@ func workerPrompt(t task.Task) string {
 	}
 	if t.Repo != "" {
 		prompt += "\n" + holdPush + "\n"
+	}
+	if t.HoldsPush() {
+		prompt += "\n" + operatorHold + "\n"
 	}
 	if t.Reopened {
 		prompt += "\nThis workspace and its branch hold the earlier work. The branch may already be pushed or integrated into the default branch. Address the feedback on top of that work.\n"
