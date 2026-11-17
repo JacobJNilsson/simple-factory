@@ -226,21 +226,21 @@ func TestMuxPrefersConfigSet(t *testing.T) {
 	cfg := config.Config{Multiplexer: "tmux", Multiplexers: map[string]map[string]string{
 		"tmux": {"start": "s", "send": "s", "alive": "a", "stop": "x"},
 	}}
-	if _, err := Mux(cfg); err != nil {
+	if _, err := Mux(cfg, ""); err != nil {
 		t.Fatal(err)
 	}
 	// An invalid config set shows that the config wins over the built-in one.
 	cfg.Multiplexers["tmux"] = map[string]string{"start": "s"}
-	if _, err := Mux(cfg); err == nil {
+	if _, err := Mux(cfg, ""); err == nil {
 		t.Fatal("want an error from the incomplete config set")
 	}
 }
 
 func TestMuxBuiltinAndUnknown(t *testing.T) {
-	if _, err := Mux(config.Config{Multiplexer: "tmux"}); err != nil {
+	if _, err := Mux(config.Config{Multiplexer: "tmux"}, ""); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Mux(config.Config{Multiplexer: "screenx"})
+	_, err := Mux(config.Config{Multiplexer: "screenx"}, "")
 	var ue *unknownError
 	if !errors.As(err, &ue) || ue.Name != "screenx" {
 		t.Fatalf("error %v does not name the set", err)

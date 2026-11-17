@@ -93,10 +93,18 @@ func (e *commandError) Unwrap() error { return e.err }
 
 // Runner fills the templates and runs them with sh -c.
 // CONTRACT: callers hold a Mux, so the engine can use a fake in tests.
-func Runner(t Templates) Mux { return runner{t: t, timeout: commandTimeout} }
+func Runner(t Templates) Mux { return RunnerFor(t, "") }
+
+// RunnerFor works as Runner and gives each template the state folder home as {home} and as SFY_HOME.
+// An empty home sets neither.
+// CONTRACT: callers hold a Mux, as for Runner, so RunnerFor returns the interface.
+func RunnerFor(t Templates, home string) Mux {
+	return runner{t: t, home: home, timeout: commandTimeout}
+}
 
 type runner struct {
 	t       Templates
+	home    string
 	timeout time.Duration
 }
 
@@ -105,17 +113,17 @@ func (r runner) Start(name, dir string, command []string) error {
 	for i, arg := range command {
 		quoted[i] = shellQuote(arg)
 	}
-	_, err := run(r.timeout, r.t.Start, "start", name, dir, strings.Join(quoted, " "), "")
+	_, err := r.run(r.t.Start, "start", name, dir, strings.Join(quoted, " "), "")
 	return err
 }
 
 func (r runner) Send(name, text string) error {
-	_, err := run(r.timeout, r.t.Send, "send", name, "", "", text)
+	_, err := r.run(r.t.Send, "send", name, "", "", text)
 	return err
 }
 
 func (r runner) Stop(name string) error {
-	_, err := run(r.timeout, r.t.Stop, "stop", name, "", "", "")
+	_, err := r.run(r.t.Stop, "stop", name, "", "", "")
 	return err
 }
 
@@ -123,7 +131,7 @@ func (r runner) Notify(name, text string) error {
 	if r.t.Notify == "" {
 		return nil
 	}
-	_, err := run(r.timeout, r.t.Notify, "notify", name, "", "", text)
+	_, err := r.run(r.t.Notify, "notify", name, "", "", text)
 	return err
 }
 
@@ -132,7 +140,7 @@ func (r runner) Show(name string) error {
 	if r.t.Show == "" {
 		return nil
 	}
-	_, err := run(r.timeout, r.t.Show, "show", name, "", "", "")
+	_, err := r.run(r.t.Show, "show", name, "", "", "")
 	return err
 }
 
@@ -142,7 +150,7 @@ func (r runner) ShowMain(name string) error {
 	if r.t.ShowMain == "" {
 		return r.Show(name)
 	}
-	_, err := run(r.timeout, r.t.ShowMain, "show_main", name, "", "", "")
+	_, err := r.run(r.t.ShowMain, "show_main", name, "", "", "")
 	return err
 }
 
@@ -152,7 +160,7 @@ func (r runner) Whoami() (string, error) {
 	if r.t.Whoami == "" {
 		return "", nil
 	}
-	out, _, err := runOut(r.timeout, r.t.Whoami, "whoami", "", "", "", "")
+	out, _, err := r.runOut(r.t.Whoami, "whoami", "", "", "", "")
 	if err != nil {
 		return "", err
 	}
@@ -165,7 +173,7 @@ func (r runner) Whoami() (string, error) {
 
 // Alive reads exit 0 as running and exit 1 as gone. Any other failure is an error.
 func (r runner) Alive(name string) (bool, error) {
-	code, err := run(r.timeout, r.t.Alive, "alive", name, "", "", "")
+	code, err := r.run(r.t.Alive, "alive", name, "", "", "")
 	if err == nil {
 		return true, nil
 	}
@@ -176,25 +184,29 @@ func (r runner) Alive(name string) (bool, error) {
 }
 
 // run returns the exit code, or -1 when the shell did not start or exit normally.
-func run(timeout time.Duration, template, which, name, dir, command, text string) (int, error) {
-	_, code, err := runOut(timeout, template, which, name, dir, command, text)
+func (r runner) run(template, which, name, dir, command, text string) (int, error) {
+	_, code, err := r.runOut(template, which, name, dir, command, text)
 	return code, err
 }
 
 // runOut works as run and also returns what the command printed on stdout.
-func runOut(timeout time.Duration, template, which, name, dir, command, text string) (string, int, error) {
+func (r runner) runOut(template, which, name, dir, command, text string) (string, int, error) {
 	// One pass over the template keeps a value that holds "{text}" from being filled again.
 	line := strings.NewReplacer(
 		"{name}", shellQuote(name),
 		"{dir}", shellQuote(dir),
 		"{command}", command,
 		"{text}", shellQuote(text),
+		"{home}", shellQuote(r.home),
 	).Replace(template)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "sh", "-c", line)
 	// A child that keeps the stderr pipe open must not block Wait after the kill.
 	cmd.WaitDelay = time.Second
+	if r.home != "" {
+		cmd.Env = append(os.Environ(), "SFY_HOME="+r.home)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

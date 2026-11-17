@@ -85,3 +85,35 @@ func TestSocketPathOfALongNamedFactoryStaysWithinTheLimit(t *testing.T) {
 		t.Errorf("socket path %q: %v", path, err)
 	}
 }
+
+func TestShowMainGetsTheFolderRulesFactory(t *testing.T) {
+	home, _ := filepath.EvalSymlinks(t.TempDir())
+	dir := filepath.Join(home, "Developer", "carboncloud")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "out")
+	// The caller's env has no SFY_HOME, so only the folder rules can name the factory.
+	t.Setenv("SFY_HOME", "")
+	cfg := "multiplexer = \"probe\"\n\n[multiplexers.probe]\nstart = \"true\"\nsend = \"true\"\nalive = \"true\"\nstop = \"true\"\n" +
+		"show_main = \"printf '%s|%s' {home} \\\"$SFY_HOME\\\" > '" + out + "'\"\n"
+	env, err := factoryEnv(factoryTestEnv(home, ""), func() (string, error) { return dir, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := env("SFY_HOME")
+	if err := os.WriteFile(filepath.Join(state, "config.toml"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := newParts(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.mux.ShowMain("main"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(out)
+	if want := state + "|" + state; string(got) != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}

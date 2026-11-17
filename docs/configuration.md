@@ -110,6 +110,8 @@ sfy runs each agent in a multiplexer. It ships a set for tmux. Any other termina
 
 The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`. When sfy starts the main agent in place, it runs `show_main` after it records the address and before it hands the terminal to the main agent, so a template set can arrange the terminal around it, for example to open side panes. A failed `show_main` prints a warning and the main agent still starts.
 
+Every template can use `{home}`, the absolute path of the running factory's state folder. A `show_main` template can use it to open `notes.md` and `status.md` of the right factory. sfy also sets `SFY_HOME` to that folder in the environment of every template command, so a script that reads `SFY_HOME` finds the right factory, also when `sfy up` picks the factory from the folder rules.
+
 The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the main agent in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the main agent through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
 
 In that case sfy records the address in `sessions/main/address` in the state folder. It then uses the address as `{name}` for the main agent in the `send`, `notify`, `alive`, `stop`, `show` and `show_main` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the main agent in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session.
