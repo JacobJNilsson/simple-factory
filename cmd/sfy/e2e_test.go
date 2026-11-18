@@ -100,9 +100,11 @@ func newRig(t *testing.T) (home string, sfy runSfy) {
 		}
 	}
 
-	sock := fmt.Sprintf("sfy-e2e-%d", rand.Uint32())
+	// A socket path in the command, and not TMUX_TMPDIR, keeps every tmux call on the private server.
+	// The sfy process runs inside tmux and does not pass TMUX_TMPDIR on, so its calls would use the default folder.
+	sock := filepath.Join(sockDir, "s")
 	// The -f /dev/null option keeps the operator's tmux.conf from loading.
-	tm := "tmux -f /dev/null -L " + sock
+	tm := "tmux -f /dev/null -S " + sock
 	config := `multiplexer = "tmuxtest"
 [multiplexers.tmuxtest]
 start = "` + tm + ` new-session -d -s {name} -c {dir} -- {command}"
@@ -115,7 +117,7 @@ stop = "` + tm + ` kill-session -t ={name}"
 	}
 	// Only the private tmux server dies here. The operator's own server is never touched.
 	t.Cleanup(func() {
-		_ = exec.CommandContext(context.Background(), "tmux", "-L", sock, "kill-server").Run()
+		_ = exec.CommandContext(context.Background(), "tmux", "-S", sock, "kill-server").Run()
 	})
 
 	env := append(withoutSfyVars(os.Environ()),
