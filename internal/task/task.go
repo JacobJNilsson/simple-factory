@@ -78,6 +78,8 @@ type Task struct {
 	// Dir is the task's workspace folder, empty until sfy creates it.
 	Dir     string
 	Updated time.Time
+	// Checking is true while sfy runs the task's check. The engine sets it on the copies it shows, and no file holds it.
+	Checking bool
 }
 
 // MissingError reports a required part of a task file that is absent or empty.
@@ -308,6 +310,9 @@ func (t Task) WaitingOn(all []Task) []string {
 func (t Task) Label(all []Task) string {
 	if waiting := t.WaitingOn(all); t.State == Queued && len(waiting) > 0 {
 		return fmt.Sprintf("%s (after %s)", t.State, strings.Join(waiting, ", "))
+	}
+	if t.Checking {
+		return fmt.Sprintf("%s (check runs)", t.State)
 	}
 	return string(t.State)
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/taskcheck"
 	"github.com/JacobJNilsson/simple-factory/internal/workspace"
 )
 
@@ -139,9 +140,19 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
+	eng.SetChecker(checker(ctx, p))
 	eng.SetRegistration(registration.Folder{Home: p.home})
 	eng.SetAuth(func(token string) (string, bool) { return claude.AgentForToken(p.home, token) })
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
+}
+
+// checker returns the runner of task checks. It has the sandbox paths of a worker, and it also hides the sfy socket.
+func checker(ctx context.Context, p parts) taskcheck.Runner {
+	deny := append([]string{filepath.Join(p.home, "sessions"), socket(p.home)}, p.cfg.DenyRead...)
+	return taskcheck.Runner{
+		Ctx: ctx, Timeout: p.cfg.CheckTimeout,
+		Sandbox: taskcheck.Sandbox{DenyRead: deny, AllowWrite: p.cfg.AllowWrite},
+	}
 }
 
 // socketPathLimit is the longest Unix socket path in bytes, with the terminating zero byte.

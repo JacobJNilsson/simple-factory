@@ -94,7 +94,7 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 }
 
 func (e *Engine) taskList(req protocol.Request) (string, error) {
-	tasks, err := e.st.Tasks()
+	tasks, err := e.shownTasks()
 	if err != nil {
 		return "", err
 	}
@@ -118,10 +118,11 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tasks, err := e.st.Tasks()
+	tasks, err := e.shownTasks()
 	if err != nil {
 		return "", err
 	}
+	_, t.Checking = e.checking[t.ID]
 	var b strings.Builder
 	fmt.Fprintf(&b, "State: %s\n", t.Label(tasks))
 	if t.Archived {
@@ -531,23 +532,34 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if t.Check == "" || e.ck == nil {
+		return "", e.startReview(t, text(req, req.Args), false)
+	}
+	return e.startCheck(t, text(req, req.Args))
+}
+
+// startReview moves a task to review and starts its reviewer. checked is true when sfy ran the task's check and it passed.
+func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 	verdicts, err := e.st.Verdicts(t.ID)
 	if err != nil {
-		return "", err
+		return err
 	}
 	before := t
 	t.State = task.Review
 	t.Round++
 	if err := e.save(t); err != nil {
-		return "", err
+		return err
 	}
 	prompt := fmt.Sprintf("Review this task.\n\n%s\n", t.Markdown())
+	if checked {
+		prompt += fmt.Sprintf("sfy ran the check command `%s` in the worktree before this review, and it passed.\n\n", t.Check)
+	}
 	for _, v := range verdicts {
 		if v.Feedback {
 			prompt += fmt.Sprintf("Feedback that was sent after round %d. Check that the worker addressed it:\n\n%s\n\n", v.Round, v.Body)
 		}
 	}
-	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", text(req, req.Args))
+	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", report)
 	taskFile, err := e.taskFile(t.ID)
 	if err == nil {
 		err = e.l.Start(SessionSpec{
@@ -558,12 +570,12 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	if err != nil {
 		// The worker can retry only if the task is back in its old state.
 		if rerr := e.save(before); rerr != nil {
-			return "", errors.Join(err, rerr)
+			return errors.Join(err, rerr)
 		}
-		return "", err
+		return err
 	}
 	e.agents[reviewerOf(t)] = &agentState{}
-	return "", nil
+	return nil
 }
 
 // reportBlocked lets a worker or a reviewer tell the main agent that it cannot go on.
@@ -833,7 +845,7 @@ func (e *Engine) escalateTask(t task.Task, why string, tellMain bool) error {
 }
 
 func (e *Engine) status(protocol.Request) (string, error) {
-	tasks, err := e.st.Tasks()
+	tasks, err := e.shownTasks()
 	if err != nil {
 		return "", err
 	}

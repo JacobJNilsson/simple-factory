@@ -139,6 +139,7 @@ func (e *Engine) startWorker(t task.Task) error {
 		return e.startFailed(t, errors.Join(fmt.Errorf("task %s: start worker: %w", t.ID, err), rmErr, e.save(t)))
 	}
 	delete(e.startFails, t.ID)
+	delete(e.checking, t.ID)
 	e.agents[name] = &agentState{}
 	return nil
 }

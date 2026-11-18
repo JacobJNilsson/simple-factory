@@ -20,7 +20,7 @@ func (e *Engine) save(t task.Task) error {
 }
 
 func (e *Engine) refreshStatus() error {
-	tasks, err := e.st.Tasks()
+	tasks, err := e.shownTasks()
 	if err != nil {
 		return err
 	}
@@ -233,6 +233,7 @@ func (e *Engine) endSessions(t task.Task) error {
 		return err
 	}
 	delete(e.agents, "worker-"+t.ID)
+	delete(e.checking, t.ID)
 	for r := 1; r <= t.Round; r++ {
 		name := fmt.Sprintf("review-%s-%d", t.ID, r)
 		if err := e.stop(name); err != nil {
