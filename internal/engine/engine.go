@@ -37,6 +37,8 @@ type SessionSpec struct {
 	ResumePrompt string
 	// Fresh makes the provider start a new conversation, even when it recorded one.
 	Fresh bool
+	// TaskFile is the absolute path of the task's task.md. It is set for workers and reviewers and empty for the main agent.
+	TaskFile string
 }
 
 // Launcher controls agent sessions in terminal panes.

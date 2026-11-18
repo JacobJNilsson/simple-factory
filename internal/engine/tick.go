@@ -122,11 +122,14 @@ func (e *Engine) startWorker(t task.Task) error {
 		return errors.Join(err, e.discard(t))
 	}
 	name := "worker-" + t.ID
-	err := e.l.Start(SessionSpec{
-		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
-		Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
-		Branch: t.Branch, Lease: t.Lease, NoPush: t.HoldsPush(),
-	})
+	taskFile, err := e.taskFile(t.ID)
+	if err == nil {
+		err = e.l.Start(SessionSpec{
+			Name: name, Kind: "worker", Task: t.ID, Dir: dir, TaskFile: taskFile,
+			Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
+			Branch: t.Branch, Lease: t.Lease, NoPush: t.HoldsPush(),
+		})
+	}
 	if err != nil {
 		rmErr := e.discard(t)
 		t.State, t.Pending = task.Queued, pending

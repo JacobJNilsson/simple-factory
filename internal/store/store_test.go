@@ -363,6 +363,64 @@ func TestCreateLeavesNoTemporaryFolderBehind(t *testing.T) {
 	}
 }
 
+func TestTaskFileNamesTheSavedTaskMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	s := store.Files(dir)
+	tk := sample("t1", task.Queued)
+	if err := s.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+
+	path, err := s.TaskFile("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+
+	if want := filepath.Join(dir, "tasks", "t1", "task.md"); path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+	if err != nil || string(got) != tk.Markdown() {
+		t.Errorf("file = %q, %v", got, err)
+	}
+}
+
+func TestTaskFileRejectsABadID(t *testing.T) {
+	_, err := store.Files(t.TempDir()).TaskFile("../x")
+
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSaveLeavesNoTemporaryFileBehind(t *testing.T) {
+	dir := t.TempDir()
+	s := store.Files(dir)
+	tk := sample("t1", task.Queued)
+	if err := s.Create(tk); err != nil {
+		t.Fatal(err)
+	}
+	tk.Goal = "Better."
+
+	if err := s.Save(tk); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "tasks", "t1"))
+	data, err := os.ReadFile(filepath.Join(dir, "tasks", "t1", "task.md"))
+
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Errorf("temporary file %s remains", e.Name())
+		}
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed, err := task.Parse(string(data)); err != nil || parsed.Goal != "Better." {
+		t.Errorf("parsed %+v, %v", parsed, err)
+	}
+}
+
 func TestStateFilesAreReadableOnlyByTheOwner(t *testing.T) {
 	dir := t.TempDir()
 	s := store.Files(dir)

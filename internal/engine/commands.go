@@ -531,10 +531,13 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 		}
 	}
 	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", text(req, req.Args))
-	err = e.l.Start(SessionSpec{
-		Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir,
-		Model: t.ReviewerModelOr(e.cfg.Models.Reviewer), Prompt: prompt, Protected: t.Protected,
-	})
+	taskFile, err := e.taskFile(t.ID)
+	if err == nil {
+		err = e.l.Start(SessionSpec{
+			Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir, TaskFile: taskFile,
+			Model: t.ReviewerModelOr(e.cfg.Models.Reviewer), Prompt: prompt, Protected: t.Protected,
+		})
+	}
 	if err != nil {
 		// The worker can retry only if the task is back in its old state.
 		if rerr := e.save(before); rerr != nil {
@@ -721,11 +724,14 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 	}
 	name := "worker-" + t.ID
 	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\n%s\n", t.ID, t.Markdown(), pushNow(t))
-	err = e.l.Start(SessionSpec{
-		Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir,
-		Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: true,
-		Branch: e.branchOf(t), Lease: t.Lease,
-	})
+	taskFile, err := e.taskFile(t.ID)
+	if err == nil {
+		err = e.l.Start(SessionSpec{
+			Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir, TaskFile: taskFile,
+			Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: true,
+			Branch: e.branchOf(t), Lease: t.Lease,
+		})
+	}
 	if err != nil {
 		return "", errors.Join(err, e.save(before))
 	}

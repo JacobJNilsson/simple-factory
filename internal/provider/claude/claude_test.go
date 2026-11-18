@@ -101,6 +101,7 @@ func worker() engine.SessionSpec {
 	return engine.SessionSpec{
 		Name: "worker-t1", Kind: "worker", Task: "t1", Dir: "/work/t1", Model: "sonnet",
 		Prompt: "Do this task.", Protected: []string{"SPEC.md", "/abs/dir"}, Branch: "sfy/t1",
+		TaskFile: "/state/tasks/t1/task.md",
 	}
 }
 
@@ -631,17 +632,71 @@ func TestReviewerKeepsAcceptEditsFlag(t *testing.T) {
 	}
 }
 
-func TestWorkerSettingsHaveNoSfyHomeReadRule(t *testing.T) {
-	p, home := setup(t, bin)
-	command(t, p, worker())
+func TestWorkerAndReviewerMayReadOnlyTheirOwnTaskFile(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		p, home := setup(t, bin)
+		command(t, p, spec)
 
-	s := readSettings(t, home, "worker-t1")
+		s := readSettings(t, home, spec.Name)
 
-	for _, a := range s.Permissions.Allow {
-		if strings.HasPrefix(a, "Read(") || a == "Bash(ls *)" {
-			t.Errorf("worker allows %s", a)
+		var reads []string
+		for _, a := range s.Permissions.Allow {
+			if strings.HasPrefix(a, "Read(") {
+				reads = append(reads, a)
+			}
+			if a == "Bash(ls *)" {
+				t.Errorf("%s allows %s", spec.Name, a)
+			}
+		}
+		if want := []string{"Read(//state/tasks/t1/task.md)"}; !slices.Equal(reads, want) {
+			t.Errorf("%s read rules = %v, want %v", spec.Name, reads, want)
+		}
+		for _, r := range reads {
+			if strings.Contains(r, "*") || strings.Contains(r, "tasks/t2/") || strings.Contains(r, "sessions") {
+				t.Errorf("%s read rule %s is too wide", spec.Name, r)
+			}
 		}
 	}
+}
+
+func TestWorkerAndReviewerKeepSecretsHiddenFromRead(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		p, home := setupSandbox(t)
+		command(t, p, spec)
+
+		s := readSettings(t, home, spec.Name)
+
+		deny := s.Sandbox.Filesystem.DenyRead
+		if len(deny) == 0 || deny[0] != filepath.Join(home, "sessions") {
+			t.Errorf("%s DenyRead = %v, want it to start with the sessions folder", spec.Name, deny)
+		}
+		for _, secret := range []string{"/.ssh", "/.aws"} {
+			if !slices.ContainsFunc(deny, func(d string) bool { return strings.HasSuffix(d, secret) }) {
+				t.Errorf("%s DenyRead %v lacks %s", spec.Name, deny, secret)
+			}
+			for _, a := range s.Permissions.Allow {
+				if strings.HasPrefix(a, "Read(") && strings.Contains(a, secret) {
+					t.Errorf("%s allows %s", spec.Name, a)
+				}
+			}
+		}
+	}
+}
+
+func TestCommandRefusesAWorkerOrReviewerWithoutATaskFile(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		spec.TaskFile = ""
+		p, home := setup(t, bin)
+
+		if _, err := p.Command(spec); err == nil {
+			t.Errorf("%s: Command accepted a spec with no task file", spec.Name)
+		}
+		if _, err := os.Stat(settingsPath(home, spec.Name)); err == nil {
+			t.Errorf("%s: Command wrote settings", spec.Name)
+		}
+	}
+	p, _ := setup(t, bin)
+	command(t, p, mainSpec())
 }
 
 // sandboxed returns the settings of a worker and a reviewer, keyed by session name.

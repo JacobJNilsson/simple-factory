@@ -44,6 +44,9 @@ type Store interface {
 	Tasks() ([]task.Task, error)
 	// Save writes task.md and the state file, so it also replaces the file of a new task.
 	Save(task.Task) error
+	// TaskFile returns the path of the task's task.md. It does not check that the file exists.
+	// CONTRACT: the provider lets the task's session read this file, so another store must still give a file.
+	TaskFile(id string) (string, error)
 	AddVerdict(id string, round int, pass bool, body string) error
 	// AddFeedback records feedback that a task got in the given round. Verdicts returns it with the verdicts.
 	AddFeedback(id string, round int, body string) error
@@ -133,6 +136,15 @@ func (f files) taskDir(id string) (string, error) {
 		return "", ErrNotFound
 	}
 	return filepath.Join(f.dir, "tasks", id), nil
+}
+
+// TaskFile returns the path of task.md for a task id.
+func (f files) TaskFile(id string) (string, error) {
+	d, err := f.taskDir(id)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(d, "task.md"), nil
 }
 
 // existingTaskDir returns the folder of a task that exists. A folder without state.json is no task.
