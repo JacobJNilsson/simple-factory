@@ -164,6 +164,28 @@ func TestSecondServeFailsWhileFirstRuns(t *testing.T) {
 	}
 }
 
+func TestServerRecordsItsPidWhileItRuns(t *testing.T) {
+	eng, _, _ := newEngine(t)
+	socket := newSocket(t)
+	dir := filepath.Dir(socket)
+	if _, ok := server.HolderPid(dir); ok {
+		t.Fatal("a folder with no server has a holder")
+	}
+	r := start(t, socket, eng, time.Hour, io.Discard)
+
+	if pid, ok := server.HolderPid(dir); !ok || pid != os.Getpid() {
+		t.Errorf("holder = %d, %v, want %d", pid, ok, os.Getpid())
+	}
+
+	r.stop()
+	if _, err := os.Stat(filepath.Join(dir, "sfy.pid")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the pid file stays after the server ends: %v", err)
+	}
+	if _, ok := server.HolderPid(dir); ok {
+		t.Error("a stopped server has a holder")
+	}
+}
+
 func TestStaleSocketIsReplaced(t *testing.T) {
 	eng, _, _ := newEngine(t)
 	socket := newSocket(t)

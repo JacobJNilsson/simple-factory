@@ -97,6 +97,8 @@ type options struct {
 	exec func(dir string, argv []string) error
 	// session returns the id of the agent session that runs the command, or an empty string.
 	session func() string
+	// spawn starts a detached process and returns at once. Only headless mode uses it.
+	spawn func(dir string, env, argv []string, logPath string) (detached, error)
 }
 
 // mainDir returns the working directory of the main agent.
@@ -261,8 +263,12 @@ func ensureNotes(path string) error {
 	return f.Close()
 }
 
-// startServe starts the sfy process in its session, unless the session exists, and waits for the socket.
+// startServe starts the sfy process, unless it runs, and waits for the socket.
+// It runs in a multiplexer session, or detached when the config sets headless.
 func (o options) startServe() error {
+	if o.config.Headless {
+		return o.startHeadless()
+	}
 	alive, err := o.mux.Alive(serveSession)
 	if err != nil {
 		return err
@@ -281,21 +287,7 @@ func (o options) startServe() error {
 			return errors.Join(err, envrun.Clean(dir))
 		}
 	}
-	deadline := time.Now().Add(o.wait)
-	for !o.answers() {
-		alive, err := o.mux.Alive(serveSession)
-		if err != nil {
-			return err
-		}
-		if !alive {
-			return ErrServeExited
-		}
-		if time.Now().After(deadline) {
-			return ErrNotAnswering
-		}
-		time.Sleep(o.poll)
-	}
-	return nil
+	return o.waitAnswering(func() (bool, error) { return o.mux.Alive(serveSession) })
 }
 
 // serveEnv picks the entries of environ that the sfy process may see, and sets SFY_HOME.

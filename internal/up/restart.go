@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
+	"github.com/JacobJNilsson/simple-factory/internal/server"
 )
 
 // ErrNotAllowed reports that a worker or reviewer ran sfy restart.
@@ -30,11 +31,15 @@ func restart(o options) error {
 	if err != nil {
 		return err
 	}
-	if serveAlive || o.answers() {
+	_, detachedRuns := server.HolderPid(o.home)
+	if serveAlive || detachedRuns || o.answers() {
+		// A process in a window ends with the window. Any other process that holds the lock runs detached.
 		if serveAlive {
 			if err := o.mux.Stop(serveSession); err != nil {
 				return err
 			}
+		} else if err := stopHeadless(o.home); err != nil {
+			return err
 		}
 		if err := o.waitStopped(); err != nil {
 			return err
@@ -92,7 +97,8 @@ func (o options) waitStopped() error {
 		if err != nil {
 			return err
 		}
-		if !alive && !o.answers() {
+		_, held := server.HolderPid(o.home)
+		if !alive && !held && !o.answers() {
 			return nil
 		}
 		if time.Now().After(deadline) {

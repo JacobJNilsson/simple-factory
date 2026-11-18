@@ -18,6 +18,23 @@ Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs wi
 
 If the main agent's session ended, sfy resumes the main agent's last Claude conversation. It records the conversation id in `sessions/main/conversation-id` in the state folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the main agent's session still runs, `sfy` runs the `show_main` template again, so the main agent appears in your terminal. Workers and reviewers always start new conversations.
 
+## Run headless
+
+By default `sfy up` runs the sfy process in a window of your terminal tool, and the window shows the log. Set `headless = true` in `config.toml` to run it with no window:
+
+```toml
+# ~/.sfy/config.toml
+headless = true
+```
+
+The key is global, and it defaults to `false`. With it, `sfy up` starts `sfy serve` as a detached process. The process leads its own session, reads stdin from `/dev/null`, runs in the state folder and gets the same environment as a windowed process. Its stdout and stderr go to `sfy.log` in the state folder, so `tail -f ~/.sfy/sfy.log` shows what the window showed. The main agent, the workers and the reviewers keep their windows. This works on Linux and macOS and needs no systemd or launchd.
+
+- `sfy down` stops the agents and the sfy process, as without the setting.
+- To stop the sfy process alone, run `kill $(cat ~/.sfy/sfy.pid)`. The process handles `SIGTERM` by removing its socket and lock file. The agents keep running, and the next `sfy` starts the sfy process again.
+- `sfy restart` and `sfy restart --update` stop the old process, wait until it releases the socket and the lock, start the new process detached and wait until it answers. They print the new process as without the setting. A call that arrives in the short gap fails with "the sfy process does not run". The gap ends when the new process answers.
+- When the running process sits in a window and the config now says headless, `sfy restart` ends the window with the old process and starts the new one detached. Remove the setting to move it back into a window the same way.
+- A second `sfy` finds the process through its socket and the lock `sfy.lock` in the state folder. It starts nothing, and a second `sfy serve` refuses with "a sfy process already runs". `sfy.pid` holds the pid of the process that holds the lock.
+
 ## Register a running agent
 
 A Claude Code session that already runs can become the main agent. This needs a template set with a `whoami` template, such as the tmux set. Do these steps once and then each time:

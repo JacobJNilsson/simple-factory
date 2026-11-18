@@ -105,7 +105,12 @@ func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error
 	}
 	defer func() { _ = logFile.Close() }()
 	// The file comes first, because MultiWriter stops at the first failing writer and a closed pane makes stderr fail.
-	err = serve(ctx, env, io.MultiWriter(logFile, stderr))
+	log := io.Writer(io.MultiWriter(logFile, stderr))
+	// A detached process has stderr in sfy.log, so a second copy would repeat each line.
+	if env(headlessEnv) != "" {
+		log = logFile
+	}
+	err = serve(ctx, env, log)
 	if err != nil {
 		_, _ = fmt.Fprintf(logFile, "%s fatal: %v\n", time.Now().Format(time.RFC3339), err)
 	}
@@ -243,7 +248,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 	}
 	return options{
 		home: p.home, dir: config.FactoryFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
-		mux: p.mux, launcher: p.launcher, warn: stderr, brew: runBrew, whoami: p.whoami, exec: execInPlace,
+		mux: p.mux, launcher: p.launcher, warn: stderr, spawn: spawnDetached, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,

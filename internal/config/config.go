@@ -41,6 +41,8 @@ type Config struct {
 	NoMerge bool `toml:"no_merge"`
 	// DraftPR makes the push note tell the worker to open any PR as a draft. sfy opens no PR itself.
 	DraftPR bool `toml:"draft_pr"`
+	// Headless runs the sfy process detached, with its log in sfy.log and no terminal window.
+	Headless bool `toml:"headless"`
 	// DenyRead and AllowWrite are the sandbox paths for workers and reviewers. An empty list stays empty.
 	DenyRead   []string `toml:"deny_read"`
 	AllowWrite []string `toml:"allow_write"`

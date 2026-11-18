@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -65,6 +66,11 @@ func serve(ctx context.Context, socket string, eng *engine.Engine, tick time.Dur
 		return err
 	}
 	defer func() { _ = lock.Close() }()
+	pidPath := filepath.Join(dir, pidName)
+	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(pidPath) }()
 	if err := clearStale(socket); err != nil {
 		return err
 	}
@@ -192,6 +198,28 @@ func secureDir(dir string) error {
 		return os.Chmod(dir, 0o700)
 	}
 	return nil
+}
+
+// pidName is the file next to the lock that holds the pid of the running sfy process.
+const pidName = "sfy.pid"
+
+// HolderPid returns the pid of the sfy process that runs for the state folder dir.
+// The lock decides. A pid file that no lock backs is stale, so a reused pid is never returned.
+func HolderPid(dir string) (int, bool) {
+	lock, err := takeLock(filepath.Join(dir, "sfy.lock"))
+	if err == nil {
+		_ = lock.Close()
+		return 0, false
+	}
+	if !errors.Is(err, ErrAlreadyRunning) {
+		return 0, false
+	}
+	b, err := os.ReadFile(filepath.Join(dir, pidName))
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	return pid, err == nil && pid > 0
 }
 
 // takeLock locks the file for as long as the returned file stays open.
