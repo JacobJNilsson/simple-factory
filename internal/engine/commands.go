@@ -188,6 +188,11 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	if t.Dir == "" {
 		return "", nil
 	}
+	if t.State == task.Review {
+		if err := e.noteReviewer(t); err != nil {
+			return "", err
+		}
+	}
 	return "", e.noteWorker(t)
 }
 
@@ -221,8 +226,20 @@ func (e *Engine) checkAfter(t task.Task) error {
 
 // noteWorker tells a worker to read its changed task file. A pane that no longer takes the note is no failure, because the message waits in the inbox.
 func (e *Engine) noteWorker(t task.Task) error {
-	name := "worker-" + t.ID
-	if err := e.storeMessage(name, "main", "The task file for "+t.ID+" changed. Run: sfy task show "+t.ID); err != nil {
+	return e.noteTaskFile(t, "worker-"+t.ID)
+}
+
+// noteReviewer tells the running reviewer of a task in review to read the changed task file.
+func (e *Engine) noteReviewer(t task.Task) error {
+	return e.noteTaskFile(t, reviewerOf(t))
+}
+
+func (e *Engine) noteTaskFile(t task.Task, name string) error {
+	path, err := e.taskFile(t.ID)
+	if err != nil {
+		return err
+	}
+	if err := e.storeMessage(name, "main", "The task file for "+t.ID+" changed. Read "+path+" with the Read tool."); err != nil {
 		return err
 	}
 	return e.ignoreGone(name, e.noteOrQueue(name, "task file changed"))
@@ -916,7 +933,7 @@ func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 // permissionDenial is the PermissionRequest hook reply that denies a call and tells the agent why.
 const permissionDenial = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":` +
 	`"sfy denied this tool call. Change files with the Edit and Write tools inside your folder. ` +
-	`Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."}}}`
+	`Read files only in your folder and in your own task file. Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."}}}`
 
 // permissionRequest names the tool and its main input from a permission hook payload.
 // A body that is not a payload with a tool name stays as it is.
