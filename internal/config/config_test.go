@@ -43,6 +43,7 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		MaxWorkers:        2,
 		ResendMinutes:     5,
 		NoteFallbackAfter: 5 * time.Minute,
+		CheckTimeout:      20 * time.Minute,
 		Provider:          "claude",
 		Multiplexer:       "tmux",
 		Models:            config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
@@ -266,6 +267,19 @@ func TestLoadFailsNamingANoteFallbackAfterThatIsNotPositive(t *testing.T) {
 	_, err := config.Load(writeConfig(t, "note_fallback_after = \"0s\"\n"))
 
 	assertSetting(t, err, "note_fallback_after")
+}
+
+func TestLoadReadsCheckTimeoutAsADuration(t *testing.T) {
+	c, err := config.Load(writeConfig(t, "check_timeout = \"40m\"\n"))
+	if err != nil || c.CheckTimeout != 40*time.Minute {
+		t.Fatalf("got %v, %v", c.CheckTimeout, err)
+	}
+}
+
+func TestLoadFailsNamingACheckTimeoutThatIsNotPositive(t *testing.T) {
+	_, err := config.Load(writeConfig(t, "check_timeout = \"0s\"\n"))
+
+	assertSetting(t, err, "check_timeout")
 }
 
 func TestLoadReadsHeadlessAndDefaultsToFalse(t *testing.T) {
