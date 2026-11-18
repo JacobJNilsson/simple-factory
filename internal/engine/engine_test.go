@@ -389,8 +389,21 @@ func TestTaskEditOfAWorkingTaskMessagesTheWorker(t *testing.T) {
 	editGoal(v, t)
 
 	msgs := v.inbox(t, "worker-t1")
-	if len(msgs) != 1 || msgs[0].Body != "The task file for t1 changed. Run: sfy task show t1" {
+	if len(msgs) != 1 || msgs[0].Body != "The task file for t1 changed. Read "+v.taskFile()+" with the Read tool." {
 		t.Fatalf("worker inbox: %+v", msgs)
+	}
+}
+
+func TestTaskEditOfATaskInReviewMessagesTheReviewer(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Review, 1)
+
+	editGoal(v, t)
+
+	want := "The task file for t1 changed. Read " + v.taskFile() + " with the Read tool."
+	msgs := v.inbox(t, "review-t1-1")
+	if len(msgs) != 1 || msgs[0].Body != want {
+		t.Fatalf("reviewer inbox: %+v", msgs)
 	}
 }
 
