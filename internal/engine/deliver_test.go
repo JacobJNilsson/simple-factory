@@ -110,6 +110,28 @@ func TestAMessageThatTheHookTookIsLoggedAndNeverTyped(t *testing.T) {
 	}
 }
 
+func TestAQueuedMessageThatTheTurnEndDrainTookIsNeverTyped(t *testing.T) {
+	v := newEnv(t)
+	var log bytes.Buffer
+	v.e.SetLog(&log)
+	v.l.canDeliver = true
+	busyWorker(v, t)
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
+	// The Stop hook drains the note, marks the message read and reports busy, because the turn goes on.
+	msgs := v.inbox(t, "worker-t1")
+	if err := v.st.MarkRead("worker-t1", []string{msgs[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	mustOK(t, v.run("worker-t1", "t1", "hook busy", ""))
+
+	v.clock.now = v.clock.now.Add(10 * time.Minute)
+	v.tick(t)
+
+	if len(v.l.sent) != 0 || !strings.Contains(log.String(), "messages taken by the hook of worker-t1") {
+		t.Fatalf("typed %q, log %q", v.l.sent, log.String())
+	}
+}
+
 func TestInboxShowsTheTextThatNoHookDrained(t *testing.T) {
 	v := newEnv(t)
 	v.l.drained = "Task t1 is approved."

@@ -290,6 +290,9 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
 		return noteHook(args[1], env, stdin, stdout, stderr)
 	}
+	if len(args) == 2 && args[0] == "hook" && args[1] == "turn-ended" {
+		return turnEndedHook(env, stdin, stdout, stderr)
+	}
 	if len(args) == 2 && args[0] == "hook" && args[1] == "merge-guard" {
 		return mergeGuardHook(env, stdin, stderr)
 	}
@@ -374,24 +377,55 @@ func noteHook(event string, env func(string) string, stdin io.Reader, stdout, st
 		_, _ = fmt.Fprintln(stdout, out)
 		return exitOK
 	}
-	home, agent := config.Home(env), env("SFY_AGENT")
-	entries, err := claude.DrainNote(path)
-	if err == nil {
-		var text string
-		text, err = takeDelivered(store.Files(home), agent, entries)
-		if text != "" {
-			_, _ = fmt.Fprintln(stderr, text)
-			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-			}
-			return exitWake
+	text, err := drainNoteText(env, path)
+	if text != "" {
+		_, _ = fmt.Fprintln(stderr, text)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		}
+		return exitWake
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed
 	}
 	return exitOK
+}
+
+// drainNoteText empties the note file at path and returns the text that still waits.
+// It marks the delivered messages read, even when it returns an error together with text.
+func drainNoteText(env func(string) string, path string) (string, error) {
+	entries, err := claude.DrainNote(path)
+	if err != nil {
+		return "", err
+	}
+	return takeDelivered(store.Files(config.Home(env)), env("SFY_AGENT"), entries)
+}
+
+// turnEndedHook is the Stop hook of a started session. It drains the note file first, so a message that came during the turn reaches the agent at the turn end at the latest.
+// When text waits, it reports "busy" to sfy, prints the text to stderr and exits with exitWake, which keeps the turn going.
+// Otherwise it reports the turn end. A failed drain never blocks the turn end.
+func turnEndedHook(env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
+	req, err := parse([]string{"hook", "turn-ended"}, env, stdin)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
+		return exitFailed
+	}
+	if path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT")); ok {
+		text, err := drainNoteText(env, path)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
+		}
+		if text != "" {
+			// The turn goes on, so sfy must not count the session as waiting. A failed report must not hide the text.
+			busy := req
+			busy.Command = "hook busy"
+			_, _ = server.Call(filepath.Join(config.Home(env), "sfy.sock"), busy)
+			_, _ = fmt.Fprintln(stderr, text)
+			return exitWake
+		}
+	}
+	return send(req, env, stdout, stderr)
 }
 
 // takeDelivered returns the text of the entries that still wait and marks their messages read.

@@ -861,6 +861,7 @@ func (e *Engine) runs(name string) bool {
 }
 
 // hookTurnEnded runs when an agent's turn ends and its session waits for input.
+// A session that has a queued note gets it from the Stop hook, which reports busy instead, because the turn goes on.
 func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
 	s := e.agent(name)

@@ -23,7 +23,11 @@ while [ $# -gt 0 ]; do
 done
 stop_hook() {
 	cmd=$(grep 'hook turn-ended' "$settings" | sed 's/.*"command": "\(.*\)",*$/\1/')
-	eval "$cmd" </dev/null
+	# Exit code 2 keeps the turn going, as in Claude Code, so the next turn end runs the hook again.
+	for i in 1 2 3 4 5 6 7 8; do
+		eval "$cmd" </dev/null
+		[ $? -eq 2 ] || break
+	done
 }
 case "$SFY_AGENT" in
 worker-*)
@@ -40,6 +44,17 @@ exec sleep 600
 
 // runSfy runs the built binary as the named agent, with standard input, and returns its output.
 type runSfy func(agent, stdin string, args ...string) (string, error)
+
+// withoutSfyVars drops every SFY_ variable, so a session that runs the test does not leak its identity into the sfy processes.
+func withoutSfyVars(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "SFY_") {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
 
 // newRig builds the binary and prepares a private home and a private tmux server.
 // It skips the test when tmux is missing.
@@ -103,7 +118,7 @@ stop = "` + tm + ` kill-session -t ={name}"
 		_ = exec.CommandContext(context.Background(), "tmux", "-L", sock, "kill-server").Run()
 	})
 
-	env := append(os.Environ(),
+	env := append(withoutSfyVars(os.Environ()),
 		"SFY_HOME="+home, "TMUX=",
 		"PATH="+fakeDir+string(os.PathListSeparator)+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
@@ -157,7 +172,8 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 	}
 	status, _ := sfy("", "", "status")
-	t.Fatalf("task t1 did not finish in 30 seconds.\ntask show:\n%s\nstatus:\n%s", shown, status)
+	log, _ := os.ReadFile(filepath.Join(home, "sfy.log"))
+	t.Fatalf("task t1 did not finish in 30 seconds.\ntask show:\n%s\nstatus:\n%s\nsfy.log:\n%s", shown, status, log)
 }
 
 // skipIfTmuxCannotStartPane starts a throwaway tmux session and skips the test when tmux cannot fork a pane.
