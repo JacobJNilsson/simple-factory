@@ -43,8 +43,8 @@ func TestNoteHookPrintsTheNotesToStderrAndExitsWithTwo(t *testing.T) {
 	if code != 2 || out != "" || errb != "From main:\nPlease rebase.\n" {
 		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errb)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("the note file stayed: %v", err)
+	if fi, err := os.Stat(path); err != nil || fi.Size() != 0 {
+		t.Fatalf("the note file is not empty and in place: %v", err)
 	}
 }
 

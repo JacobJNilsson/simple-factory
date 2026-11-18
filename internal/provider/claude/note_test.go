@@ -74,9 +74,13 @@ func TestSeveralNotesBeforeADrainArriveTogether(t *testing.T) {
 	}
 }
 
-func TestDrainMovesTheFileAside(t *testing.T) {
+func TestDrainKeepsTheNoteFileInPlace(t *testing.T) {
 	path := notePath(t)
 	if err := claude.AppendNote(path, "", "once"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := drain(path); err != nil {
@@ -88,7 +92,14 @@ func TestDrainMovesTheFileAside(t *testing.T) {
 	if err != nil || again != "" {
 		t.Fatalf("second drain returned %q, %v", again, err)
 	}
-	if entries, _ := filepath.Glob(path + "*"); len(entries) != 1 || !strings.HasSuffix(entries[0], ".lock") {
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("the note file is gone: %v", err)
+	}
+	if after.Size() != 0 || !os.SameFile(before, after) {
+		t.Fatalf("size %d, same file %v", after.Size(), os.SameFile(before, after))
+	}
+	if entries, _ := filepath.Glob(path + "*"); len(entries) != 2 {
 		t.Fatalf("files left behind: %v", entries)
 	}
 }
