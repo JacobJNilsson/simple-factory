@@ -119,6 +119,12 @@ type Engine struct {
 	cleanupWait map[string]int
 	// depNoted holds the "task>dependency" pairs for which sfy told main that the dependency is cancelled.
 	depNoted map[string]bool
+	// ck runs the check commands of tasks. Without it, a task with a check goes to review at once.
+	ck Checker
+	// checking holds the check that runs for each task, in memory only.
+	checking map[string]checkRun
+	// checkSeq numbers the checks, so the result of a dropped check is never taken for a later one.
+	checkSeq int
 	// down is true after sfy down stopped the sessions. The server then ends the sfy process.
 	down atomic.Bool
 }
@@ -234,7 +240,7 @@ func (e *Engine) logf(format string, args ...any) {
 
 // New returns an Engine that works through the given store and interfaces.
 func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
-	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}}
+	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
 }
 
 type kind string

@@ -75,6 +75,7 @@ type taskFields struct {
 	Lease    string
 	Dir      string
 	Updated  time.Time
+	Checking bool
 }
 
 var _ = taskFields(task.Task{})
