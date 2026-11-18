@@ -25,7 +25,7 @@ You may run only these sfy commands.
 
 ## How to work
 
-- Run the checks yourself before you report done. The task file may name a check command.
+- Run the checks yourself before you report done. The task file may name a check command. When it does, sfy runs that command after you report done. A failure comes back to you as a message with the output, and no review starts.
 - Deliver the result as files in the workspace. Leave them there.
 - Write the summary so that a reviewer knows what you changed and how you tested it.
 - When feedback asks for changes, make them. Then run `sfy report done <summary>`. A reviewer checks the result.
