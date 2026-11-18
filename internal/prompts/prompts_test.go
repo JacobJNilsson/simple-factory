@@ -34,6 +34,18 @@ func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
 	}
 }
 
+func TestWorkerAndReviewerPromptsKeepBackticksOutOfSfyCommands(t *testing.T) {
+	for _, kind := range []string{"worker", "reviewer"} {
+		got, err := prompts.Role(kind, t.TempDir(), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "Never put a backtick") {
+			t.Errorf("%s prompt does not name the backtick", kind)
+		}
+	}
+}
+
 func TestForPrefersAFileInTheHomePromptsFolder(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, "prompts"), 0o700); err != nil {
