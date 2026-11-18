@@ -32,10 +32,12 @@ type Config struct {
 	ResendMinutes int `toml:"resend_minutes"`
 	// NoteFallbackAfter is how long a queued note may stay unread before sfy types it into an idle pane.
 	NoteFallbackAfter time.Duration `toml:"note_fallback_after"`
-	Provider          string        `toml:"provider"`
-	Multiplexer       string        `toml:"multiplexer"`
-	Models            Models        `toml:"models"`
-	Allow             []string      `toml:"allow"`
+	// CheckTimeout is how long a task's check command may run before sfy stops it and counts it as failed.
+	CheckTimeout time.Duration `toml:"check_timeout"`
+	Provider     string        `toml:"provider"`
+	Multiplexer  string        `toml:"multiplexer"`
+	Models       Models        `toml:"models"`
+	Allow        []string      `toml:"allow"`
 	// NoMerge stops the main agent from integrating approved branches. The operator merges them by hand.
 	// A .sfy.toml file sets it for one repo or for the repos below one folder.
 	NoMerge bool `toml:"no_merge"`
@@ -116,6 +118,9 @@ type SettingError struct {
 // It covers a long tool call, because the hook delivers a note only between tool calls or at the end of the turn.
 const DefaultNoteFallbackAfter = 5 * time.Minute
 
+// DefaultCheckTimeout is the default of check_timeout.
+const DefaultCheckTimeout = 20 * time.Minute
+
 func (e *SettingError) Error() string {
 	if e.Unknown {
 		return fmt.Sprintf("config: unknown setting %s", e.Setting)
@@ -132,6 +137,7 @@ func defaults(userTempDir func() (string, error)) Config {
 		MaxWorkers:        2,
 		ResendMinutes:     5,
 		NoteFallbackAfter: DefaultNoteFallbackAfter,
+		CheckTimeout:      DefaultCheckTimeout,
 		Provider:          "claude",
 		Multiplexer:       "tmux",
 		Models:            Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
@@ -210,6 +216,9 @@ func load(userTempDir func() (string, error), paths ...string) (Config, error) {
 	}
 	if c.NoteFallbackAfter <= 0 {
 		return Config{}, &SettingError{Setting: "note_fallback_after", Duration: true}
+	}
+	if c.CheckTimeout <= 0 {
+		return Config{}, &SettingError{Setting: "check_timeout", Duration: true}
 	}
 	if err := validateSessionSettings(c.SessionSettings); err != nil {
 		return Config{}, err
