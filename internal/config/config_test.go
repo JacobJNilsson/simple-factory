@@ -268,6 +268,17 @@ func TestLoadFailsNamingANoteFallbackAfterThatIsNotPositive(t *testing.T) {
 	assertSetting(t, err, "note_fallback_after")
 }
 
+func TestLoadReadsHeadlessAndDefaultsToFalse(t *testing.T) {
+	on, err := config.Load(writeConfig(t, "headless = true\n"))
+	if err != nil || !on.Headless {
+		t.Fatalf("headless = true: got %v, %v", on.Headless, err)
+	}
+	off, err := config.Load(writeConfig(t, ""))
+	if err != nil || off.Headless {
+		t.Fatalf("default: got %v, %v", off.Headless, err)
+	}
+}
+
 func TestLoadReadsSandboxPathLists(t *testing.T) {
 	home := writeConfig(t, "deny_read = [\"~/.secrets\"]\nallow_write = [\"~/.cache/x\"]\n")
 
