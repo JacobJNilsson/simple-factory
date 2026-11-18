@@ -62,6 +62,8 @@ A task moves through these states:
 
 A task on a repo works on its own branch, named `<type>/<slug>`, as in `feat/organisation-locations`. The type is a Conventional Commits type. An optional `## Type` section in the task file sets it. Otherwise sfy reads it from a `fix:` style prefix or the first word of the title, and falls back to `feat`. The slug is the title in lower case ASCII words joined by `-`, cut at 50 characters on a word boundary. If the name exists in the repo or on a remote, sfy appends `-2`, `-3` and so on. sfy picks the name once and keeps it, and `sfy task show` prints it. Tasks that started earlier keep their `sfy/<id>` branch.
 
+To work on an existing branch of the remote, such as the branch of your pull request, add a `## Branch` section with one line, the branch name. It needs a `## Repo` section. sfy refuses the default branch and a branch that the remote lacks, and an edit cannot change the branch once the task has a workspace. The worker checks out that branch, tracking `origin/<branch>`, and sfy records the remote sha. After the review passes, the worker may run only `git push --force-with-lease=<branch>:<sha> origin HEAD:<branch>`. The lease names the recorded sha, so git refuses the push when someone else pushed to the branch since. A bare `--force-with-lease` trusts the remote-tracking ref, which a `git fetch` silently updates, so sfy allows no bare lease. `## Push` with `hold` works as usual. After approval, `sfy task integrate` refuses and the main agent runs `sfy task complete <id>`, also in a repo without no-merge.
+
 sfy keeps its state in `~/.sfy`:
 
 - `tasks/` holds one folder for each task.

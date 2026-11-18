@@ -76,7 +76,9 @@ type stateFile struct {
 	// Released is the task's flag of the same name.
 	Released bool `json:"released,omitempty"`
 	// Branch is the task's field of the same name.
-	Branch  string    `json:"branch,omitempty"`
+	Branch string `json:"branch,omitempty"`
+	// Lease is the task's field of the same name.
+	Lease   string    `json:"lease,omitempty"`
 	Updated time.Time `json:"updated"`
 }
 
@@ -210,7 +212,7 @@ func checkRoundTrip(t task.Task) error {
 		return fmt.Errorf("store: task %s does not parse back: %w", t.ID, err)
 	}
 	same := back.Title == t.Title && back.Description == t.Description && back.Goal == t.Goal &&
-		back.Repo == t.Repo && back.Check == t.Check && back.Type == t.Type && back.Extra == t.Extra &&
+		back.Repo == t.Repo && back.Existing == t.Existing && back.Check == t.Check && back.Type == t.Type && back.Extra == t.Extra &&
 		slices.Equal(back.Protected, t.Protected) && slices.Equal(back.After, t.After)
 	if !same {
 		return fmt.Errorf("store: task %s does not parse back to the same fields", t.ID)
@@ -224,6 +226,7 @@ func normalize(t task.Task) task.Task {
 	t.Description = strings.TrimSpace(t.Description)
 	t.Goal = strings.TrimSpace(t.Goal)
 	t.Repo = strings.TrimSpace(t.Repo)
+	t.Existing = strings.TrimSpace(t.Existing)
 	t.Check = strings.TrimSpace(t.Check)
 	t.Type = strings.TrimSpace(t.Type)
 	t.Extra = strings.TrimSpace(t.Extra)
@@ -247,7 +250,7 @@ func writeTask(dir string, t task.Task) error {
 	}
 	b, err := json.MarshalIndent(stateFile{
 		State: t.State, Before: t.Before, Round: t.Round, Archived: t.Archived, Source: t.Source, Progress: t.Progress,
-		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Released: t.Released, Branch: t.Branch, Updated: t.Updated,
+		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Released: t.Released, Branch: t.Branch, Lease: t.Lease, Updated: t.Updated,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -278,7 +281,7 @@ func (f files) Task(id string) (task.Task, error) {
 	}
 	t.ID = id
 	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, st.Source
-	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Released, t.Branch, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Released, st.Branch, st.Updated
+	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Released, t.Branch, t.Lease, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Released, st.Branch, st.Lease, st.Updated
 	return t, nil
 }
 

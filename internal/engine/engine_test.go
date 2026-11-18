@@ -119,6 +119,19 @@ type fakeWorkspaces struct {
 	// integrated lists the tasks that Integrate ran for. integrateErr makes it fail.
 	integrated   []string
 	integrateErr error
+	// remoteErr makes RemoteBranch fail. remoteSHA is the sha it returns, "sha1" when empty.
+	remoteErr error
+	remoteSHA string
+}
+
+func (f *fakeWorkspaces) RemoteBranch(task.Task) (string, error) {
+	if f.remoteErr != nil {
+		return "", f.remoteErr
+	}
+	if f.remoteSHA != "" {
+		return f.remoteSHA, nil
+	}
+	return "sha1", nil
 }
 
 func (f *fakeWorkspaces) HasRemote(task.Task) (bool, error) { return !f.localOnly, nil }

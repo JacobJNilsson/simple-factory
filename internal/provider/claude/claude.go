@@ -321,7 +321,11 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 		}
 	case "worker":
 		// A rule with no wildcard matches that command only, so no second branch, force flag or refspec passes.
-		if !spec.NoPush {
+		if !spec.NoPush && spec.Lease != "" {
+			// An existing branch gets a lease on the sha seen at checkout. A bare lease would trust a fetched ref, so it stays denied.
+			rules = append(rules, "Bash(git push -u origin "+spec.Branch+")",
+				"Bash(git push --force-with-lease="+spec.Branch+":"+spec.Lease+" origin HEAD:"+spec.Branch+")")
+		} else if !spec.NoPush {
 			rules = append(rules, "Bash(git push -u origin "+spec.Branch+")", "Bash(git push --force-with-lease origin "+spec.Branch+")")
 		}
 	}

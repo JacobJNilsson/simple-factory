@@ -473,6 +473,42 @@ func TestWorkerPromptAndPushRulesNameTheTaskBranch(t *testing.T) {
 	}
 }
 
+func TestAWorkerOnAnExistingBranchMayPushOnlyWithALeaseOnTheCheckoutSha(t *testing.T) {
+	p, home := setup(t, bin)
+	spec := worker()
+	spec.HasRepo, spec.Branch, spec.Lease = true, "chore/pr", "23da1c9"
+
+	command(t, p, spec)
+
+	rules := bashRules(readSettings(t, home, spec.Name).Permissions.Allow)
+	for _, want := range []string{"Bash(git push -u origin chore/pr)", "Bash(git push --force-with-lease=chore/pr:23da1c9 origin HEAD:chore/pr)"} {
+		if !slices.Contains(rules, want) {
+			t.Errorf("missing rule %s in %q", want, rules)
+		}
+	}
+	if slices.Contains(rules, "Bash(git push --force-with-lease origin chore/pr)") {
+		t.Errorf("a push with a bare lease is allowed: %q", rules)
+	}
+}
+
+func TestAHeldWorkerOnAnExistingBranchHasNoPushAllowRule(t *testing.T) {
+	p, home := setup(t, bin)
+	spec := worker()
+	spec.HasRepo, spec.Branch, spec.Lease, spec.NoPush = true, "chore/pr", "23da1c9", true
+
+	command(t, p, spec)
+
+	perms := readSettings(t, home, spec.Name).Permissions
+	for _, r := range perms.Allow {
+		if strings.Contains(r, "git push") {
+			t.Errorf("held worker allows %s", r)
+		}
+	}
+	if !slices.Contains(perms.Deny, "Bash(git push*)") {
+		t.Errorf("deny rules %q lack the push rule", perms.Deny)
+	}
+}
+
 func TestAHeldWorkerHasNoPushAllowRuleAndEveryPushIsDenied(t *testing.T) {
 	p, home := setup(t, bin)
 	spec := worker()

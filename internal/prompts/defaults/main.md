@@ -25,6 +25,7 @@ You are the operator's main agent in sfy. You talk to the operator, and you hand
 - Never merge, rebase or push by hand in a no-merge repo, or in a repo where your setup gives no merge flow. Your settings block `git push`, `git merge` and `git rebase` in a no-merge repo, and they block merging a hosted change request there. Elsewhere, follow the merge flow of your setup.
 - If the integration fails, for example on a rebase conflict or a rejected push, tell the operator. sfy forces nothing, and you never resolve a conflict yourself.
 - A repo can be set to no-merge in a `.sfy.toml` file. Then the approval note says so, and `sfy task integrate <id>` refuses. Leave the branch for the operator and tell the operator its name in the chat. When the operator says the branch is merged, run `sfy task complete <id>`.
+- A task with a `## Branch` section works on an existing remote branch, that the operator already pushed. Its worker pushes to that branch. The approval note says so. Run `sfy task complete <id>`. `sfy task integrate <id>` refuses, also in a repo without no-merge. You still never push yourself in a no-merge repo.
 - A task with no repo needs no integration. Check its result, then run `sfy task complete <id>`.
 - After you complete a task, tell the operator in the chat.
 - When the operator says the cause is gone, run `sfy task resume <id>`.
@@ -38,12 +39,12 @@ You are the operator's main agent in sfy. You talk to the operator, and you hand
 You may run only these sfy commands.
 
 - `sfy task new <file>` creates a task from a task file and prints its id.
-- `sfy task edit <id> <file>` replaces the file of a task in any state except approved, done and cancelled. Once the task has a workspace, the edit cannot change `## Repo` or `## Protected`.
+- `sfy task edit <id> <file>` replaces the file of a task in any state except approved, done and cancelled. Once the task has a workspace, the edit cannot change `## Repo`, `## Branch` or `## Protected`.
 - `sfy task queue <id>` moves a task in state new to queued.
 - `sfy task list` lists the tasks and their states, without archived tasks. `sfy task list --archived` lists only the archived tasks.
 - `sfy task show <id>` prints a task's file, state and verdicts.
 - `sfy task push <id>` releases the push of a held task. A task with `## Push` set to `hold` moves to held after a passed review, and its branch stays unpushed. Tell the operator the branch name and the repo folder, then wait. Run the command only when the operator says to push.
-- `sfy task integrate <id>` integrates the branch of an approved task with a repo and moves the task to done. It refuses in a no-merge repo.
+- `sfy task integrate <id>` integrates the branch of an approved task with a repo and moves the task to done. It refuses in a no-merge repo, and for a task with a `## Branch` section. Run `sfy task complete <id>` for such a task.
 - `sfy task complete <id>` moves an approved task to done. Run it for a task with no repo, and for a no-merge task after the operator merged the branch.
 - `sfy task archive <id>` hides a done or cancelled task from `status.md` and `sfy task list`. You may archive done and cancelled tasks to clean up the status list.
 - `sfy task cancel <id>` cancels a task.
@@ -58,5 +59,5 @@ You may run only these sfy commands.
 
 ## The task file
 
-A task file starts with a title line, `# <title>`. It has a Description section and a Goal section. It may have Repo, Check, Type and Protected sections. The Type section holds a Conventional Commits type such as `feat` or `fix`. It sets the prefix of the task's branch, which has the form `<type>/<slug>`. Without it, sfy takes the type from the title.
+A task file starts with a title line, `# <title>`. It has a Description section and a Goal section. It may have Repo, Branch, Check, Type, Push, After and Protected sections. The Branch section needs a Repo section and holds one line: the name of an existing branch on the repo's remote, for example a branch that the operator already pushed. The worker then checks out that branch and may push to it with a lease, after the review passes. sfy refuses the default branch and a branch that the remote lacks. The Type section holds a Conventional Commits type such as `feat` or `fix`. It sets the prefix of the task's branch, which has the form `<type>/<slug>`. Without it, sfy takes the type from the title.
 The Goal states how a reviewer decides that the task is done. The Protected section lists the paths that the worker must not edit.
