@@ -77,7 +77,7 @@ A task moves through these states:
 
 1. `new`: the main agent prepares the task.
 2. `queued`: the task waits for a free worker. A task with an `## After` section also waits until every task that it names is `done`, and shows as `queued (after t6, t8)`. List the ids on separate lines or separate them with commas or spaces. A task may name only older tasks.
-3. `working`: a worker does the task. A failed review sends it back as `feedback`.
+3. `working`: a worker does the task. On a task with a `## Check` section, sfy runs the check when the worker reports done, and a failure sends the output back to the worker. A failed review sends it back as `feedback`.
 4. `review`: a reviewer checks the result.
 5. `approved`: the reviewer passed the result.
 6. `done`: the main agent completed the task.
@@ -114,6 +114,7 @@ See `docs/configuration.md` for the details of each item.
 - Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets.
 - Per-repo config: `.sfy/config.toml` in a repo, or a `.sfy.toml` file in a repo or in a parent folder up to `$HOME`, sets per-repo keys. `draft_pr = true` makes the push note ask for draft PRs. `no_merge = true` stops the main agent from integrating approved branches, so you merge them by hand. For example, put `no_merge = true` in `~/Developer/work/.sfy.toml` to cover every work repo below it. The `.sfy/` folder wins, then the nearest `.sfy.toml`.
 - Headless: `headless = true` in `~/.sfy/config.toml` runs the sfy process detached, with no terminal window. Its log goes to `~/.sfy/sfy.log`. Stop everything with `sfy down`, or stop only the sfy process with `kill $(cat ~/.sfy/sfy.pid)`. `sfy restart` keeps it headless, and moves a process from a window to headless. See `docs/configuration.md`.
+- Check timeout: `check_timeout` in `~/.sfy/config.toml` sets how long a task's check may run. The default is `20m`.
 - Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind.
 - Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
 - Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.
