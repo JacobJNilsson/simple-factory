@@ -2,6 +2,12 @@
 
 Read this file before the first commit.
 
+## Purpose
+
+sfy is a minimal core for software factories. An implementation builds on it with its own config, prompts, skills and flows.
+
+The core holds the generic task lifecycle, sessions, review and integration hooks. Personal or company rules, merge flows, models and prompts belong in an implementation. Keep the core minimal. When a feature serves one implementation, push it out to that implementation.
+
 ## Start here
 
 1. Read SPEC.md first. It holds the requirements.

@@ -1,5 +1,27 @@
 # simple factory
 
+sfy is a minimal core for software factories. A software factory implementation builds on it with its own config, prompts, skills and flows.
+
+## What belongs in the core
+
+The core stays small and knows nothing about any one kind of work. It holds the parts that every factory needs:
+
+- The generic task lifecycle, from a queued task to a reviewed result.
+- Agent sessions in terminal panes, behind a provider adapter and a set of multiplexer command templates.
+- A fresh review of each result.
+- Integration hooks, so that an implementation can add its own steps.
+
+An implementation holds everything that is specific to a person or a company: rules, merge flows, models and prompts. A feature that only one implementation needs belongs in that implementation and not in sfy.
+
+## Implementations
+
+These implementations build on sfy. They are examples and not part of the core.
+
+- [sfy-setup](https://github.com/JacobJNilsson/sfy-setup) is the operator's personal factory setup. The repository will be renamed soon.
+- The Knyta orchestrator is planned. The operator intends to rebuild it on sfy.
+
+## How sfy works
+
 sfy runs coding agents as interactive sessions in terminal panes. You talk to a main agent. It hands tasks to workers, and each worker does its task in its own git worktree. A fresh reviewer checks each result, and the main agent integrates the branch with plain git when the review passes. You can watch every session in your terminal.
 
 ## Requirements
