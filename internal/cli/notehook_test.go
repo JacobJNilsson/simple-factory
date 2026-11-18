@@ -1,13 +1,20 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
@@ -165,5 +172,88 @@ func TestNoteWatchHookNamesTheEventOfItsInput(t *testing.T) {
 		if !strings.Contains(out, `"hookEventName":"`+tc.want+`"`) {
 			t.Errorf("input %q: stdout %q", tc.stdin, out)
 		}
+	}
+}
+
+func TestTurnEndedHookDeliversAQueuedNoteAndKeepsTheTurnGoing(t *testing.T) {
+	env, path := noteEnv(t, "worker-t1")
+	if err := claude.AppendNote(path, "", "From main:\nPlease rebase."); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, errb := noteHookRun(env, "turn-ended")
+
+	if code != 2 || !strings.HasPrefix(errb, "From main:\nPlease rebase.") {
+		t.Fatalf("code %d, stderr %q", code, errb)
+	}
+}
+
+// socketEnv returns the env of worker-t1 and a short state folder, because a socket path has a length limit.
+func socketEnv(t *testing.T) (func(string) string, string) {
+	t.Helper()
+	home, err := os.MkdirTemp("", "fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	if err := os.MkdirAll(filepath.Join(home, "sessions", "worker-t1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return envOf(map[string]string{"SFY_HOME": home, "SFY_AGENT": "worker-t1"}), home
+}
+
+// fakeSfy listens on the socket in home, records the command of each request and answers OK.
+func fakeSfy(t *testing.T, home string) *[]string {
+	t.Helper()
+	var lc net.ListenConfig
+	l, err := lc.Listen(context.Background(), "unix", filepath.Join(home, "sfy.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	var commands []string
+	var mu sync.Mutex
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			var req protocol.Request
+			if json.NewDecoder(bufio.NewReader(conn)).Decode(&req) == nil {
+				mu.Lock()
+				commands = append(commands, req.Command)
+				mu.Unlock()
+			}
+			_ = json.NewEncoder(conn).Encode(protocol.Answer{OK: true})
+			_ = conn.Close()
+		}
+	}()
+	return &commands
+}
+
+func TestTurnEndedHookTellsSfyThatTheTurnGoesOn(t *testing.T) {
+	env, home := socketEnv(t)
+	path, _ := claude.NotePath(home, "worker-t1")
+	commands := fakeSfy(t, home)
+	if err := claude.AppendNote(path, "", "From main:\nPlease rebase."); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, _ := noteHookRun(env, "turn-ended")
+
+	if code != 2 || !slices.Equal(*commands, []string{"hook busy"}) {
+		t.Fatalf("code %d, commands %q", code, *commands)
+	}
+}
+
+func TestTurnEndedHookWithoutANoteReportsTheTurnEnd(t *testing.T) {
+	env, home := socketEnv(t)
+	commands := fakeSfy(t, home)
+
+	code, _, _ := noteHookRun(env, "turn-ended")
+
+	if code != 0 || !slices.Equal(*commands, []string{"hook turn-ended"}) {
+		t.Fatalf("code %d, commands %q", code, *commands)
 	}
 }
