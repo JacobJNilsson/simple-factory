@@ -131,6 +131,12 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	if branch := e.branchOf(t); branch != "" {
 		fmt.Fprintf(&b, "Branch: %s\n", branch)
 	}
+	if t.Model != "" {
+		fmt.Fprintf(&b, "Worker model: %s\n", t.Model)
+	}
+	if t.ReviewerModel != "" {
+		fmt.Fprintf(&b, "Reviewer model: %s\n", t.ReviewerModel)
+	}
 	fmt.Fprintf(&b, "\n%s", t.Markdown())
 	for _, v := range verdicts {
 		if v.Feedback {
@@ -527,7 +533,7 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", text(req, req.Args))
 	err = e.l.Start(SessionSpec{
 		Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir,
-		Model: e.cfg.Models.Reviewer, Prompt: prompt, Protected: t.Protected,
+		Model: t.ReviewerModelOr(e.cfg.Models.Reviewer), Prompt: prompt, Protected: t.Protected,
 	})
 	if err != nil {
 		// The worker can retry only if the task is back in its old state.
@@ -717,7 +723,7 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\n%s\n", t.ID, t.Markdown(), pushNow(t))
 	err = e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir,
-		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected, HasRepo: true,
+		Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: true,
 		Branch: e.branchOf(t), Lease: t.Lease,
 	})
 	if err != nil {

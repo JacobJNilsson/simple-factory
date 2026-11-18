@@ -212,7 +212,7 @@ func checkRoundTrip(t task.Task) error {
 		return fmt.Errorf("store: task %s does not parse back: %w", t.ID, err)
 	}
 	same := back.Title == t.Title && back.Description == t.Description && back.Goal == t.Goal &&
-		back.Repo == t.Repo && back.Existing == t.Existing && back.Check == t.Check && back.Type == t.Type && back.Extra == t.Extra &&
+		back.Repo == t.Repo && back.Existing == t.Existing && back.Check == t.Check && back.Type == t.Type && back.Model == t.Model && back.ReviewerModel == t.ReviewerModel && back.Extra == t.Extra &&
 		slices.Equal(back.Protected, t.Protected) && slices.Equal(back.After, t.After)
 	if !same {
 		return fmt.Errorf("store: task %s does not parse back to the same fields", t.ID)
@@ -229,6 +229,8 @@ func normalize(t task.Task) task.Task {
 	t.Existing = strings.TrimSpace(t.Existing)
 	t.Check = strings.TrimSpace(t.Check)
 	t.Type = strings.TrimSpace(t.Type)
+	t.Model = strings.TrimSpace(t.Model)
+	t.ReviewerModel = strings.TrimSpace(t.ReviewerModel)
 	t.Extra = strings.TrimSpace(t.Extra)
 	var protected []string
 	for _, p := range t.Protected {

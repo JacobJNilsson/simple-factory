@@ -2,6 +2,7 @@
 package task
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -45,6 +46,10 @@ type Task struct {
 	Hold bool
 	// Existing is the name of an existing remote branch from the Branch section. The task works on it and pushes to it.
 	Existing string
+	// Model is the optional model name of the task's worker from the Model section. It overrides the configured worker model.
+	Model string
+	// ReviewerModel is the optional model name of the task's reviewer from the Reviewer model section. It overrides the configured reviewer model.
+	ReviewerModel string
 	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
 	Extra string
 
@@ -139,7 +144,7 @@ func Parse(md string) (Task, error) {
 		}
 		body := strings.Trim(strings.Join(buf, "\n"), "\n")
 		switch name {
-		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push", "Branch":
+		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push", "Branch", "Model", "Reviewer model":
 			if _, seen := sections[name]; seen && dup == "" {
 				dup = name
 			}
@@ -233,6 +238,12 @@ func Parse(md string) (Task, error) {
 			return Task{}, &FormatError{Problem: "invalid section", Section: "Branch"}
 		}
 	}
+	if t.Model, err = modelName("Model", sections["Model"]); err != nil {
+		return Task{}, err
+	}
+	if t.ReviewerModel, err = modelName("Reviewer model", sections["Reviewer model"]); err != nil {
+		return Task{}, err
+	}
 	for _, line := range strings.Split(sections["Protected"], "\n") {
 		p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
 		if p = strings.TrimSpace(strings.Trim(p, "`")); p != "" {
@@ -250,6 +261,27 @@ func Parse(md string) (Task, error) {
 
 // validBranch limits a branch name to plain characters, so it cannot act as a git option or a permission rule pattern.
 var validBranch = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._/-]*$`)
+
+// validModel limits a model name to plain characters, so it cannot act as a command line flag.
+var validModel = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.\[\]-]*$`)
+
+// modelName reads the one-line body of a model section and refuses a name with other characters.
+func modelName(section, body string) (string, error) {
+	name, err := oneLine(section, body)
+	if err != nil {
+		return "", err
+	}
+	if name != "" && !validModel.MatchString(name) {
+		return "", &FormatError{Problem: "invalid section", Section: section}
+	}
+	return name, nil
+}
+
+// WorkerModel returns the model of the task's worker. The Model section wins over the configured model.
+func (t Task) WorkerModel(configured string) string { return cmp.Or(t.Model, configured) }
+
+// ReviewerModelOr returns the model of the task's reviewer. The Reviewer model section wins over the configured model.
+func (t Task) ReviewerModelOr(configured string) string { return cmp.Or(t.ReviewerModel, configured) }
 
 // HoldsPush reports that sfy must not let a worker push yet, because the operator has not released the hold.
 func (t Task) HoldsPush() bool { return t.Hold && !t.Released }
@@ -303,7 +335,7 @@ func (t Task) WithFileFieldsOf(edited Task) Task {
 	t.Title, t.Description, t.Goal = edited.Title, edited.Description, edited.Goal
 	t.Repo, t.Check, t.Protected = edited.Repo, edited.Check, edited.Protected
 	t.After, t.Type, t.Extra, t.Hold = edited.After, edited.Type, edited.Extra, edited.Hold
-	t.Existing = edited.Existing
+	t.Existing, t.Model, t.ReviewerModel = edited.Existing, edited.Model, edited.ReviewerModel
 	return t
 }
 
@@ -319,6 +351,12 @@ func (t Task) Markdown() string {
 	}
 	if t.Check != "" {
 		fmt.Fprintf(&b, "\n## Check\n\n%s\n", t.Check)
+	}
+	if t.Model != "" {
+		fmt.Fprintf(&b, "\n## Model\n\n%s\n", t.Model)
+	}
+	if t.ReviewerModel != "" {
+		fmt.Fprintf(&b, "\n## Reviewer model\n\n%s\n", t.ReviewerModel)
 	}
 	if t.Type != "" {
 		fmt.Fprintf(&b, "\n## Type\n\n%s\n", t.Type)

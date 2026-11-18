@@ -40,7 +40,7 @@ func RenderStatus(tasks []task.Task) string {
 			changed = t.Updated.In(time.Local).Format("2006-01-02 15:04")
 		}
 		title := strings.ReplaceAll(t.Title, "|", `\|`)
-		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, t.Label(tasks), t.Round, agents(t), changed)
+		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, t.Label(tasks), t.Round, agents(t)+models(t), changed)
 	}
 	return b.String()
 }
@@ -49,6 +49,21 @@ func RenderStatus(tasks []task.Task) string {
 func zoneName() string {
 	name, _ := time.Now().In(time.Local).Zone()
 	return name
+}
+
+// models names the models that the task sets, and is empty when it sets none.
+func models(t task.Task) string {
+	var parts []string
+	if t.Model != "" {
+		parts = append(parts, "worker model "+t.Model)
+	}
+	if t.ReviewerModel != "" {
+		parts = append(parts, "reviewer model "+t.ReviewerModel)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(parts, ", ") + ")"
 }
 
 // agents names the sessions that the spec's session names give a task in its state.
