@@ -166,6 +166,18 @@ sfy delivers notes to a Claude Code session through a hook on the session's note
 note_fallback_after = "10m"
 ```
 
+## Run the task's check before review
+
+A task may have a `## Check` section with one command line. When the worker reports done, sfy runs that command in the task's workspace. A pass starts the review. A failure goes back to the worker as a message, with the command, the error and the last 8 KiB of the output, and no reviewer starts. A failed check counts as a review round.
+
+The command runs in a sandbox with the worker's `allow_write` and `deny_read` lists. It uses `bwrap` on Linux and `sandbox-exec` on macOS, and it leaves the network open. A check that needs another write path, such as a build cache, needs that path in `allow_write`.
+
+`check_timeout` in `~/.sfy/config.toml` sets how long a check may run. The value is a Go duration. The default is `20m`. It is a global setting, so `.sfy.toml` refuses it.
+
+```toml
+check_timeout = "40m"
+```
+
 ## Terminal tools
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`. `docs/herdr.md` and `docs/rex.md` hold example sets. SPEC.md lists every template.
