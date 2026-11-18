@@ -193,7 +193,7 @@ A command that an agent kind may not run fails with an error that names the comm
 
 ## Permissions
 
-- Workers and reviewers run in the provider's sandbox. Writes reach only the workspace and the paths in `allow_write`. Reads skip the paths in `deny_read`.
+- Workers and reviewers run in the provider's sandbox. Writes reach only the workspace and the paths in `allow_write`. Reads skip the paths in `deny_read`. The provider's Read tool reaches the workspace and the session's own task file, `tasks/<id>/task.md` in the state folder. It reaches no other task's file.
 - The sandbox leaves the network open. It runs no command outside the sandbox. sfy refuses to start a worker or a reviewer where the sandbox is unavailable. On macOS the sandbox lets commands reach the system TLS trust service, so Go tools can verify certificates. On macOS sandboxed commands may use Unix sockets only under the sandbox's own temp folder.
 - A worker or a reviewer never waits on a permission prompt. sfy's permission hook denies the call, gives the agent a reason, and records the denial in `sfy.log`.
 - Workers and reviewers get a clean environment. It holds the `SFY_*` variables, the basic shell variables, the provider's own variables and the names in `pass_env`.
@@ -208,7 +208,7 @@ A command that an agent kind may not run fails with an error that names the comm
 - The operator trusts the sfy home and each repo once, by hand, in the provider. sfy only warns about an untrusted folder and never changes the provider's own config. A sfy home equal to $HOME always warns, because Claude Code keeps trust for $HOME in memory only.
 - Deny rules protect the paths that the task file names, in every mode.
 - Reviewers may run commands in the sandbox, but their edit tools are off. The sandbox limits what a build can write.
-- The sandbox covers shell commands. The provider's edit tools follow the permission rules.
+- The sandbox covers shell commands. The provider's edit and read tools follow the permission rules.
 
 ## Configuration
 

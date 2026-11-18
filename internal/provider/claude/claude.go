@@ -92,6 +92,9 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	default:
 		return nil, fmt.Errorf("claude: unknown session kind %q", spec.Kind)
 	}
+	if spec.Kind != "main" && spec.TaskFile == "" {
+		return nil, fmt.Errorf("claude: %s has no task file", spec.Name)
+	}
 	if !sessionName.MatchString(spec.Name) {
 		return nil, fmt.Errorf("claude: bad session name %q", spec.Name)
 	}
@@ -339,6 +342,8 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 		for _, c := range sfyRules(spec.Kind) {
 			rules = append(rules, "Bash("+c+")")
 		}
+		// The rule names one file, so a session reads its own task and no other. Bash can read it already, so no sandbox list changes.
+		rules = append(rules, "Read("+rulePath(spec.TaskFile)+")")
 	}
 	return rules
 }

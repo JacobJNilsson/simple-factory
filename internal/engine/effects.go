@@ -27,6 +27,9 @@ func (e *Engine) refreshStatus() error {
 	return e.st.WriteStatus(store.RenderStatus(tasks))
 }
 
+// taskFile returns the path of the task's task.md for a session spec or a note.
+func (e *Engine) taskFile(id string) (string, error) { return e.st.TaskFile(id) }
+
 // storeMessage stores a message without a note. Its id sorts in send order and never repeats, because the counter breaks ties within one clock tick.
 func (e *Engine) storeMessage(to, from, body string) error {
 	e.counter++
