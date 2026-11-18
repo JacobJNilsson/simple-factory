@@ -124,7 +124,7 @@ func (e *Engine) startWorker(t task.Task) error {
 	name := "worker-" + t.ID
 	err := e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: dir,
-		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
+		Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
 		Branch: t.Branch, Lease: t.Lease, NoPush: t.HoldsPush(),
 	})
 	if err != nil {

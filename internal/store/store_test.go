@@ -299,6 +299,17 @@ func TestRenderStatusNamesTheWorkerAndReviewerOfATaskInReview(t *testing.T) {
 	}
 }
 
+func TestRenderStatusShowsTheModelsThatATaskSets(t *testing.T) {
+	tk := sample("t3", task.Working)
+	tk.Model, tk.ReviewerModel = "opus", "haiku"
+
+	out := store.RenderStatus([]task.Task{tk})
+
+	if !strings.Contains(out, "worker-t3 (worker model opus, reviewer model haiku)") {
+		t.Fatalf("models missing:\n%s", out)
+	}
+}
+
 func TestRenderStatusShowsADashForAgentsOfAQueuedTask(t *testing.T) {
 	out := store.RenderStatus([]task.Task{sample("t1", task.Queued)})
 

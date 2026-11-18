@@ -46,18 +46,20 @@ func TestParseTrimsBackticksFromProtectedPaths(t *testing.T) {
 // taskFields mirrors task.Task field for field. The conversion below stops compiling when task.Task gains,
 // loses or reorders a field, which forces this file to say whether an edit keeps or replaces the new field.
 type taskFields struct {
-	ID          string
-	Title       string
-	Description string
-	Goal        string
-	Repo        string
-	Check       string
-	Type        string
-	Protected   []string
-	After       []string
-	Hold        bool
-	Existing    string
-	Extra       string
+	ID            string
+	Title         string
+	Description   string
+	Goal          string
+	Repo          string
+	Check         string
+	Type          string
+	Protected     []string
+	After         []string
+	Hold          bool
+	Existing      string
+	Model         string
+	ReviewerModel string
+	Extra         string
 
 	State    task.State
 	Before   task.State
@@ -81,14 +83,14 @@ func TestWithFileFieldsOfReplacesExactlyTheFileFields(t *testing.T) {
 	stored := task.Task{
 		ID: "s-ID", Title: "s-Title", Description: "s-Description", Goal: "s-Goal", Repo: "s-Repo",
 		Check: "s-Check", Type: "s-Type", Protected: []string{"s-Protected"}, After: []string{"s-After"},
-		Existing: "s-Existing", Extra: "s-Extra", State: "s-State", Before: "s-Before", Round: 3,
+		Existing: "s-Existing", Model: "s-Model", ReviewerModel: "s-RModel", Extra: "s-Extra", State: "s-State", Before: "s-Before", Round: 3,
 		Archived: true, Source: "s-Source", Progress: "s-Progress", Pending: []string{"s-Pending"},
 		Reopened: true, Pushing: true, Released: true, Branch: "s-Branch", Lease: "s-Lease", Dir: "s-Dir", Updated: time.Unix(1000, 0),
 	}
 	edited := task.Task{
 		ID: "e-ID", Title: "e-Title", Description: "e-Description", Goal: "e-Goal", Repo: "e-Repo",
 		Check: "e-Check", Type: "e-Type", Protected: []string{"e-Protected"}, After: []string{"e-After"}, Hold: true,
-		Existing: "e-Existing", Extra: "e-Extra", State: "e-State", Before: "e-Before", Round: 9,
+		Existing: "e-Existing", Model: "e-Model", ReviewerModel: "e-RModel", Extra: "e-Extra", State: "e-State", Before: "e-Before", Round: 9,
 		Archived: false, Source: "e-Source", Progress: "e-Progress", Pending: []string{"e-Pending"},
 		Reopened: false, Pushing: false, Released: false, Branch: "e-Branch", Lease: "e-Lease", Dir: "e-Dir", Updated: time.Unix(2000, 0),
 	}
@@ -96,7 +98,7 @@ func TestWithFileFieldsOfReplacesExactlyTheFileFields(t *testing.T) {
 	want := task.Task{
 		ID: "s-ID", Title: "e-Title", Description: "e-Description", Goal: "e-Goal", Repo: "e-Repo",
 		Check: "e-Check", Type: "e-Type", Protected: []string{"e-Protected"}, After: []string{"e-After"}, Hold: true,
-		Existing: "e-Existing", Extra: "e-Extra", State: "s-State", Before: "s-Before", Round: 3,
+		Existing: "e-Existing", Model: "e-Model", ReviewerModel: "e-RModel", Extra: "e-Extra", State: "s-State", Before: "s-Before", Round: 3,
 		Archived: true, Source: "s-Source", Progress: "s-Progress", Pending: []string{"s-Pending"},
 		Reopened: true, Pushing: true, Released: true, Branch: "s-Branch", Lease: "s-Lease", Dir: "s-Dir", Updated: time.Unix(1000, 0),
 	}
