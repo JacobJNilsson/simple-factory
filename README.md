@@ -18,7 +18,7 @@ An implementation holds everything that is specific to a person or a company: ru
 These implementations build on sfy. They are examples and not part of the core.
 
 - [sfy-setup](https://github.com/JacobJNilsson/sfy-setup) is the operator's personal factory setup. The repository will be renamed soon.
-- The Knyta orchestrator is planned. The operator intends to rebuild it on sfy.
+- An orchestration product is planned. The operator intends to rebuild it on sfy.
 
 ## How sfy works
 
