@@ -65,6 +65,32 @@ func TestParseReadsThePushSection(t *testing.T) {
 	}
 }
 
+func TestParseReadsTheBranchSection(t *testing.T) {
+	base := "# A\n\n## Description\n\nd\n\n## Goal\n\ng\n"
+
+	got, err := task.Parse(base + "\n## Repo\n\nr\n\n## Branch\n\nchore/drop-parts\n")
+
+	if err != nil || got.Existing != "chore/drop-parts" {
+		t.Fatalf("got %q, %v", got.Existing, err)
+	}
+}
+
+func TestParseRefusesABranchSectionWithoutARepo(t *testing.T) {
+	_, err := task.Parse("# A\n\n## Description\n\nd\n\n## Goal\n\ng\n\n## Branch\n\nfeat/x\n")
+
+	assertFormat(t, err, "no ## Repo section for", "Branch")
+}
+
+func TestParseRefusesAnInvalidOrMultiLineBranch(t *testing.T) {
+	base := "# A\n\n## Description\n\nd\n\n## Goal\n\ng\n\n## Repo\n\nr\n\n## Branch\n\n"
+	for _, name := range []string{"-x", "a b", "a..b", "a/", "x.lock", "a*"} {
+		_, err := task.Parse(base + name + "\n")
+		assertFormat(t, err, "invalid section", "Branch")
+	}
+	_, err := task.Parse(base + "a\nb\n")
+	assertFormat(t, err, "more than one line in", "Branch")
+}
+
 func TestParseReadsAfterAsCommaSpaceOrLineSeparatedIds(t *testing.T) {
 	for _, after := range []string{"t1, t2", "t1 t2", "t1\nt2", "- t1\n- t2", "t1,t2\n"} {
 		got, err := task.Parse("# A\n\n## Description\n\nd\n\n## Goal\n\ng\n\n## After\n\n" + after + "\n")
@@ -87,6 +113,7 @@ func TestMarkdownRoundTripKeepsEveryField(t *testing.T) {
 		Check:       "make check",
 		Protected:   []string{"a/b", "c.go"},
 		After:       []string{"t1", "t4"},
+		Existing:    "chore/drop-parts",
 		Extra:       "## Notes\n\nSome notes.\n\n## Links\n\n- one\n- two",
 	}
 

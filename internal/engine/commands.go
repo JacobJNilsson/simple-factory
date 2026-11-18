@@ -64,6 +64,9 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 	if err := e.checkAfter(t); err != nil {
 		return "", err
 	}
+	if err := e.checkExisting(t); err != nil {
+		return "", err
+	}
 	t.Updated = e.c.Now()
 	if err := e.st.Create(t); err != nil {
 		return "", err
@@ -161,9 +164,17 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	if t.Dir != "" && !slices.Equal(edited.Protected, t.Protected) {
 		return "", fmt.Errorf("task %s has a workspace, so its protected paths are fixed", t.ID)
 	}
+	if t.Dir != "" && edited.Existing != t.Existing {
+		return "", fmt.Errorf("task %s has a workspace, so its branch is fixed", t.ID)
+	}
 	edited = t.WithFileFieldsOf(edited)
 	if err := e.checkAfter(edited); err != nil {
 		return "", err
+	}
+	if edited.Existing != t.Existing {
+		if err := e.checkExisting(edited); err != nil {
+			return "", err
+		}
 	}
 	if err := e.save(edited); err != nil {
 		return "", err
@@ -172,6 +183,15 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 		return "", nil
 	}
 	return "", e.noteWorker(t)
+}
+
+// checkExisting refuses a task whose Branch section names the default branch or a branch the remote lacks.
+func (e *Engine) checkExisting(t task.Task) error {
+	if t.Existing == "" {
+		return nil
+	}
+	_, err := e.w.RemoteBranch(t)
+	return err
 }
 
 // checkAfter rejects an After id that is the task's own id, names no task, or is newer than the task.
@@ -266,6 +286,9 @@ func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
 	}
 	if t.Repo == "" {
 		return "", fmt.Errorf("task %s has no repo, so there is nothing to integrate. Run sfy task complete %s", t.ID, t.ID)
+	}
+	if t.Existing != "" {
+		return "", fmt.Errorf("task %s works on the existing branch %s, so there is nothing to integrate. Run sfy task complete %s", t.ID, t.Existing, t.ID)
 	}
 	cfg, err := e.configFor(t)
 	if err != nil {
@@ -592,7 +615,7 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 		if err := e.save(t); err != nil {
 			return "", err
 		}
-		note := fmt.Sprintf("Review round %d of task %s passed. Push the branch now, then run sfy report pushed <summary>.", t.Round, t.ID)
+		note := fmt.Sprintf("Review round %d of task %s passed. %s", t.Round, t.ID, pushNow(t))
 		// A repo whose config cannot be read gets no draft rule, because the worker opens no PR unless the task asks.
 		if cfg, err := e.configFor(t); err == nil && cfg.DraftPR {
 			note += " Any PR you open must be a draft. Use gh pr create --draft."
@@ -612,7 +635,21 @@ func (e *Engine) reportPushed(req protocol.Request) (string, error) {
 		return "", fmt.Errorf("task %s waits for no push, so sfy report pushed has nothing to report", t.ID)
 	}
 	t.Pushing = false
+	if t.Existing != "" {
+		// A later round must lease on the sha that this push left on the remote. A failed lookup keeps the old sha, so a push fails safe.
+		if sha, err := e.w.RemoteBranch(t); err == nil {
+			t.Lease = sha
+		}
+	}
 	return "", e.approve(t, req.Caller.Agent, true)
+}
+
+// pushNow tells a worker to push. A task with an existing branch gets the one lease form that its settings allow.
+func pushNow(t task.Task) string {
+	if t.Existing == "" {
+		return "Push the branch now, then run sfy report pushed <summary>."
+	}
+	return fmt.Sprintf("Push the existing branch now with exactly `git push --force-with-lease=%s:%s origin HEAD:%s`, then run sfy report pushed <summary>. The lease makes git refuse the push when the remote branch moved since checkout. In that case run sfy report blocked.", t.Existing, t.Lease, t.Existing)
 }
 
 // approve moves a task to approved and tells main to integrate it. pushed is true when the worker pushed the branch.
@@ -629,7 +666,12 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 		}
 		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s with: sfy task integrate %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
 		// A repo whose config cannot be read counts as no-merge, because the safe side is to leave the merge to the operator.
-		if cfg, err := e.configFor(t); err != nil || cfg.NoMerge {
+		if t.Existing != "" {
+			note = fmt.Sprintf("Task %s is approved. The worker pushed the work to the existing branch %s, so there is nothing to integrate. Tell the operator, then run: sfy task complete %s", t.ID, t.Existing, t.ID)
+			if !pushed {
+				note = fmt.Sprintf("Task %s is approved, but its worker did not push. Branch %s is not updated. Tell the operator.", t.ID, t.Existing)
+			}
+		} else if cfg, err := e.configFor(t); err != nil || cfg.NoMerge {
 			note = fmt.Sprintf("Task %s is approved. %s The repo is set to no-merge, so do not integrate it. Leave branch %s of the repo folder %s for the operator to merge by hand, and tell the operator in the chat. When the operator has merged it, run: sfy task complete %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
 			if err != nil {
 				note += fmt.Sprintf("\n\nThe repo config could not be read: %v", err)
@@ -672,11 +714,11 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 		return "", err
 	}
 	name := "worker-" + t.ID
-	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\nPush the branch now, then run sfy report pushed <summary>.\n", t.ID, t.Markdown())
+	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\n%s\n", t.ID, t.Markdown(), pushNow(t))
 	err = e.l.Start(SessionSpec{
 		Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir,
 		Model: e.cfg.Models.Worker, Prompt: prompt, Protected: t.Protected, HasRepo: true,
-		Branch: e.branchOf(t),
+		Branch: e.branchOf(t), Lease: t.Lease,
 	})
 	if err != nil {
 		return "", errors.Join(err, e.save(before))

@@ -3,6 +3,7 @@ package task
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -42,6 +43,8 @@ type Task struct {
 	After []string
 	// Hold is true when the Push section says hold. The push of the branch then waits for the operator.
 	Hold bool
+	// Existing is the name of an existing remote branch from the Branch section. The task works on it and pushes to it.
+	Existing string
 	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
 	Extra string
 
@@ -65,6 +68,8 @@ type Task struct {
 	Released bool
 	// Branch is the git branch of a task with a repo. sfy picks it once, so it never changes. It is empty until then.
 	Branch string
+	// Lease is the sha that the remote branch of an Existing task had at checkout or at the last push. A push may replace only this sha.
+	Lease string
 	// Dir is the task's workspace folder, empty until sfy creates it.
 	Dir     string
 	Updated time.Time
@@ -134,7 +139,7 @@ func Parse(md string) (Task, error) {
 		}
 		body := strings.Trim(strings.Join(buf, "\n"), "\n")
 		switch name {
-		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push":
+		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push", "Branch":
 			if _, seen := sections[name]; seen && dup == "" {
 				dup = name
 			}
@@ -217,6 +222,17 @@ func Parse(md string) (Task, error) {
 	default:
 		return Task{}, &FormatError{Problem: "invalid section", Section: "Push"}
 	}
+	if t.Existing, err = oneLine("Branch", sections["Branch"]); err != nil {
+		return Task{}, err
+	}
+	if t.Existing != "" {
+		if t.Repo == "" {
+			return Task{}, &FormatError{Problem: "no ## Repo section for", Section: "Branch"}
+		}
+		if !validBranch.MatchString(t.Existing) || strings.Contains(t.Existing, "..") || strings.HasSuffix(t.Existing, "/") || strings.HasSuffix(t.Existing, ".lock") {
+			return Task{}, &FormatError{Problem: "invalid section", Section: "Branch"}
+		}
+	}
 	for _, line := range strings.Split(sections["Protected"], "\n") {
 		p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
 		if p = strings.TrimSpace(strings.Trim(p, "`")); p != "" {
@@ -231,6 +247,9 @@ func Parse(md string) (Task, error) {
 	t.Extra = strings.Join(extra, "\n\n")
 	return t, nil
 }
+
+// validBranch limits a branch name to plain characters, so it cannot act as a git option or a permission rule pattern.
+var validBranch = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._/-]*$`)
 
 // HoldsPush reports that sfy must not let a worker push yet, because the operator has not released the hold.
 func (t Task) HoldsPush() bool { return t.Hold && !t.Released }
@@ -284,6 +303,7 @@ func (t Task) WithFileFieldsOf(edited Task) Task {
 	t.Title, t.Description, t.Goal = edited.Title, edited.Description, edited.Goal
 	t.Repo, t.Check, t.Protected = edited.Repo, edited.Check, edited.Protected
 	t.After, t.Type, t.Extra, t.Hold = edited.After, edited.Type, edited.Extra, edited.Hold
+	t.Existing = edited.Existing
 	return t
 }
 
@@ -293,6 +313,9 @@ func (t Task) Markdown() string {
 	fmt.Fprintf(&b, "# %s\n\n## Description\n\n%s\n\n## Goal\n\n%s\n", t.Title, t.Description, t.Goal)
 	if t.Repo != "" {
 		fmt.Fprintf(&b, "\n## Repo\n\n%s\n", t.Repo)
+	}
+	if t.Existing != "" {
+		fmt.Fprintf(&b, "\n## Branch\n\n%s\n", t.Existing)
 	}
 	if t.Check != "" {
 		fmt.Fprintf(&b, "\n## Check\n\n%s\n", t.Check)

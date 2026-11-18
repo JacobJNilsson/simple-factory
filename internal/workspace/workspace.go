@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,7 +76,11 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	if err := addWorktree(repo, dir, w.branchOf(t), base, restore); err != nil {
+	add := func() error { return addWorktree(repo, dir, w.branchOf(t), base, restore) }
+	if t.Existing != "" {
+		add = func() error { return addExistingWorktree(repo, dir, t.Existing, restore) }
+	}
+	if err := add(); err != nil {
 		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
 			return "", fmt.Errorf("%w (and the folder stays: %v)", err, rmErr)
 		}
@@ -184,6 +189,103 @@ func addWorktree(repo, dir, branch, base string, keep bool) error {
 	}
 	_, err = git(repo, "worktree", "add", dir, branch)
 	return err
+}
+
+// addExistingWorktree checks out branch of origin in dir, as a local branch that tracks origin/<branch>.
+// A leftover local branch that holds no work beyond origin/<branch> moves to it. With keep, a leftover branch stays as it is.
+func addExistingWorktree(repo, dir, branch string, keep bool) error {
+	if _, err := git(repo, "worktree", "prune"); err != nil {
+		return err
+	}
+	remoteRef := "refs/remotes/origin/" + branch
+	if _, err := git(repo, "fetch", "origin", "+refs/heads/"+branch+":"+remoteRef); err != nil {
+		return err
+	}
+	if _, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err != nil {
+		_, err := git(repo, "worktree", "add", "--track", "-b", branch, dir, "origin/"+branch)
+		return err
+	}
+	holder, err := worktreeHolding(repo, branch)
+	if err != nil {
+		return err
+	}
+	if holder != "" {
+		return &BranchBusyError{Branch: branch, Worktree: holder}
+	}
+	if !keep {
+		ahead, err := git(repo, "rev-list", "--count", "origin/"+branch+".."+branch)
+		if err != nil {
+			return err
+		}
+		if ahead != "0" {
+			return &BranchHasWorkError{Branch: branch}
+		}
+		if _, err := git(repo, "branch", "-f", branch, "origin/"+branch); err != nil {
+			return err
+		}
+	}
+	if _, err := git(repo, "branch", "--set-upstream-to=origin/"+branch, branch); err != nil {
+		return err
+	}
+	_, err = git(repo, "worktree", "add", dir, branch)
+	return err
+}
+
+// BranchError reports a Branch section that sfy refuses.
+type BranchError struct {
+	Branch, Reason string
+}
+
+func (e *BranchError) Error() string {
+	return "## Branch " + e.Branch + ": " + e.Reason
+}
+
+// RemoteBranch checks the task's Branch section and returns the sha that the branch has on origin.
+// It refuses a repo with no origin, a branch that origin lacks, and the default branch.
+// The default branch is the one that origin's HEAD names, or the branch that a local repo folder has checked out.
+func (w *Workspaces) RemoteBranch(t task.Task) (string, error) {
+	repo, _, err := w.source(t.Repo)
+	if err != nil {
+		return "", err
+	}
+	branch := t.Existing
+	if remotes, err := git(repo, "remote"); err != nil {
+		return "", err
+	} else if !slices.Contains(strings.Fields(remotes), "origin") {
+		return "", &BranchError{Branch: branch, Reason: "the repo has no remote named origin"}
+	}
+	out, err := git(repo, "ls-remote", "--symref", "origin", "HEAD", "refs/heads/"+branch)
+	if err != nil {
+		return "", err
+	}
+	sha, def := parseLsRemote(out, branch)
+	if sha == "" {
+		return "", &BranchError{Branch: branch, Reason: "the remote has no such branch"}
+	}
+	if local, ok := localRepo(t.Repo); ok {
+		if current, err := git(local, "symbolic-ref", "--short", "HEAD"); err == nil && current == branch {
+			def = branch
+		}
+	}
+	if def == branch {
+		return "", &BranchError{Branch: branch, Reason: "this is the default branch, which a task never pushes to"}
+	}
+	return sha, nil
+}
+
+// parseLsRemote reads the output of git ls-remote --symref for HEAD and one branch.
+// It returns the sha of the branch and the name of the branch that HEAD names, each empty when absent.
+func parseLsRemote(out, branch string) (sha, def string) {
+	for _, line := range strings.Split(out, "\n") {
+		if ref, ok := strings.CutPrefix(line, "ref: refs/heads/"); ok {
+			def, _, _ = strings.Cut(ref, "\t")
+			continue
+		}
+		if id, name, ok := strings.Cut(line, "\t"); ok && name == "refs/heads/"+branch {
+			sha = id
+		}
+	}
+	return sha, def
 }
 
 // worktreeHolding returns the path of the worktree that has branch checked out, or "".

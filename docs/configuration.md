@@ -123,6 +123,7 @@ The value `hold` is the only one. Any other value is a task file error. Other ta
 - Tell the main agent to push. It runs `sfy task push <id>`, and sfy starts a worker that pushes the branch. The task then moves to `approved`, and integrate or no-merge works as usual.
 - `sfy task feedback <id> <text>` on a held task keeps the hold. Feedback after the release also restores it.
 - A repo with no remote has nothing to push, so the hold changes nothing there.
+- The hold works with a `## Branch` section too. The released worker then pushes to the existing branch with its lease.
 
 ## Session rules
 

@@ -28,6 +28,9 @@ type SessionSpec struct {
 	HasRepo bool
 	// Branch is the git branch of the task. It is empty for a task with no repo.
 	Branch string
+	// Lease is the sha that the remote branch of a task with an existing branch had at checkout or at the last push.
+	// A worker may force-push with a lease on that sha, and on no other.
+	Lease string
 	// NoPush is true while the operator holds the push of the task. The session gets no push permission.
 	NoPush bool
 	// ResumePrompt is the first message when the provider resumes the main agent's last conversation.
@@ -70,6 +73,9 @@ type Workspaces interface {
 	Remove(task.Task) error
 	// HoldsWork reports whether the task's workspace holds work that Remove would delete.
 	HoldsWork(task.Task) (bool, error)
+	// RemoteBranch checks the task's existing branch and returns its sha on the remote.
+	// It refuses a repo with no origin, a branch the remote lacks, and the default branch.
+	RemoteBranch(task.Task) (sha string, err error)
 	// NewBranch returns a free branch name for the task, in the repo and on its remotes. It creates nothing.
 	NewBranch(task.Task) (string, error)
 	// LegacyBranch returns the branch name that sfy gave to tasks before they carried a branch of their own.

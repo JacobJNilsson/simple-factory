@@ -13,3 +13,4 @@
 - Push only when sfy tells you that the review passed and to push now. Then push the task branch and run `sfy report pushed <summary>`. The task is approved only after that report.
 - When the repo has no remote, sfy never tells you to push. The task is approved when the review passes.
 - When the task file says to push, run exactly `git push -u origin <branch>`, or `git push --force-with-lease origin <branch>` after a rebase. Other push forms are denied.
+- When the task file has a `## Branch` section, you work on an existing remote branch. sfy's push note then gives the one lease push that you may run, as in `git push --force-with-lease=<branch>:<sha> origin HEAD:<branch>`. Run exactly that command. It refuses when the remote branch moved since checkout. Then run `sfy report blocked`. Never force a push without a lease.
