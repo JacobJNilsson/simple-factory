@@ -146,9 +146,9 @@ func AppendNote(path, id, text string) error {
 	return errors.Join(werr, f.Close())
 }
 
-// DrainNote returns the entries of the note file at path and leaves no file behind.
-// It moves the file aside before it reads it, so a note that arrives meanwhile starts a new file.
-// A file that an earlier drain left behind comes first. It returns no entries when no note waits.
+// DrainNote returns the entries of the note file at path and empties the file in place.
+// The file keeps its path and inode, so the watch that Claude Code holds on it survives every drain.
+// A file that an older sfy left behind comes first. It returns no entries when no note waits.
 func DrainNote(path string) ([]Entry, error) {
 	unlock, err := lockNote(path)
 	if err != nil {
@@ -156,11 +156,9 @@ func DrainNote(path string) ([]Entry, error) {
 	}
 	defer unlock()
 	taken := path + ".taken"
-	if err := os.Rename(path, taken+".new"); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
+	leftovers := []string{taken, taken + ".new"}
 	var out strings.Builder
-	for _, p := range []string{taken, taken + ".new"} {
+	for _, p := range append(leftovers, path) {
 		b, err := os.ReadFile(p)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
@@ -170,8 +168,11 @@ func DrainNote(path string) ([]Entry, error) {
 		}
 		out.Write(b)
 	}
-	// The leftover file stays until both reads worked, so a failed read loses nothing.
-	for _, p := range []string{taken, taken + ".new"} {
+	// Nothing is emptied or removed until every read worked, so a failed drain loses nothing.
+	if err := os.Truncate(path, 0); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	for _, p := range leftovers {
 		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
