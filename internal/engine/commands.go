@@ -1,8 +1,6 @@
 package engine
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -886,7 +884,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	return "", errors.Join(errs...)
 }
 
-// hookIdle runs when Claude Code reports that a session waits for input.
+// hookIdle runs when the provider reports that a session waits for input.
 // It types no reminder, because no turn just ended.
 func (e *Engine) hookIdle(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
@@ -924,6 +922,7 @@ func (e *Engine) remind(name string, s *agentState) error {
 }
 
 // hookPermission runs when an agent's permission prompt opens.
+// The body is a one-line description of the tool call. The answer is the denial reason, or empty when sfy makes no decision.
 // A worker or a reviewer never waits at a prompt. The hook denies the call and records it in the log.
 // Main hears nothing, so a denial does not wake it.
 func (e *Engine) hookPermission(req protocol.Request) (string, error) {
@@ -934,48 +933,15 @@ func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 			return "", nil
 		}
 		e.agent(name).hookSince = true
-		return "", e.l.Notify("main", "Main waits at a permission prompt. "+permissionRequest(req.Body))
+		return "", e.l.Notify("main", "Main waits at a permission prompt. "+req.Body)
 	}
 	// A stale agent of a finished task gets the denial too, because its prompt would wait for nobody.
 	if runs {
-		e.logf("denied tool call of %s. %s", name, permissionRequest(req.Body))
+		e.logf("denied tool call of %s. %s", name, req.Body)
 	}
 	return permissionDenial, nil
 }
 
-// permissionDenial is the PermissionRequest hook reply that denies a call and tells the agent why.
-const permissionDenial = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":` +
-	`"sfy denied this tool call. Change files with the Edit and Write tools inside your folder. ` +
-	`Read files only in your folder and in your own task file. Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."}}}`
-
-// permissionRequest names the tool and its main input from a permission hook payload.
-// A body that is not a payload with a tool name stays as it is.
-func permissionRequest(body string) string {
-	var p struct {
-		Tool  string          `json:"tool_name"`
-		Input json.RawMessage `json:"tool_input"`
-	}
-	if json.Unmarshal([]byte(body), &p) != nil || p.Tool == "" {
-		return body
-	}
-	var in map[string]any
-	_ = json.Unmarshal(p.Input, &in)
-	label, key := "Input", ""
-	switch p.Tool {
-	case "Bash":
-		label, key = "Command", "command"
-	case "Edit", "Write", "Read":
-		label, key = "File", "file_path"
-	}
-	if v, ok := in[key].(string); ok && v != "" {
-		return fmt.Sprintf("Tool: %s. %s: %s", p.Tool, label, v)
-	}
-	if len(p.Input) == 0 {
-		return fmt.Sprintf("Tool: %s", p.Tool)
-	}
-	compact := &bytes.Buffer{}
-	if json.Compact(compact, p.Input) != nil {
-		return fmt.Sprintf("Tool: %s", p.Tool)
-	}
-	return fmt.Sprintf("Tool: %s. Input: %s", p.Tool, compact)
-}
+// permissionDenial is the reason that a denied tool call gives the agent.
+const permissionDenial = "sfy denied this tool call. Change files with the Edit and Write tools inside your folder. " +
+	"Read files only in your folder and in your own task file. Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."

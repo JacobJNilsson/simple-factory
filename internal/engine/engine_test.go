@@ -2,7 +2,6 @@ package engine_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -1077,7 +1076,7 @@ func TestPermissionFromAWorkerWritesNothingToMainsInboxAndLogsTheCall(t *testing
 	var log bytes.Buffer
 	v.e.SetLog(&log)
 
-	mustOK(t, v.run("worker-t1", "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"rm -rf build"}}`))
+	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Tool: Bash. Command: rm -rf build"))
 
 	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
 		t.Fatalf("main got %+v", msgs)
@@ -1100,23 +1099,10 @@ func TestPermissionHookDeniesAWorkerAndAReviewerWithAReason(t *testing.T) {
 		v := newEnv(t)
 		v.seed(t, c.state, 1)
 
-		a := v.run(c.agent, "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+		a := v.run(c.agent, "t1", "hook permission", "Tool: Bash. Command: ls")
 
 		mustOK(t, a)
-		var got struct {
-			Out struct {
-				Event    string `json:"hookEventName"`
-				Decision struct {
-					Behavior string `json:"behavior"`
-					Message  string `json:"message"`
-				} `json:"decision"`
-			} `json:"hookSpecificOutput"`
-		}
-		if err := json.Unmarshal([]byte(a.Text), &got); err != nil {
-			t.Fatalf("%s reply %q: %v", c.agent, a.Text, err)
-		}
-		d := got.Out.Decision
-		if got.Out.Event != "PermissionRequest" || d.Behavior != "deny" || !strings.Contains(d.Message, "sfy report blocked") {
+		if strings.HasPrefix(a.Text, "{") || !strings.Contains(a.Text, "sfy report blocked") {
 			t.Errorf("%s reply %q", c.agent, a.Text)
 		}
 	}
@@ -1141,7 +1127,7 @@ func TestPermissionDenialLeavesTheResendOfAnUnreadNoteRunning(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hello"))
-	mustOK(t, v.run("worker-t1", "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`))
+	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Tool: Bash. Command: ls"))
 	before := len(v.l.sent)
 
 	v.clock.now = v.clock.now.Add(5 * time.Minute)
@@ -1158,10 +1144,10 @@ func TestPermissionFromAStaleWorkerIsDeniedAndNotLogged(t *testing.T) {
 	var log bytes.Buffer
 	v.e.SetLog(&log)
 
-	a := v.run("worker-t1", "t1", "hook permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+	a := v.run("worker-t1", "t1", "hook permission", "Tool: Bash. Command: ls")
 
 	mustOK(t, a)
-	if !strings.Contains(a.Text, `"behavior":"deny"`) || log.Len() != 0 {
+	if !strings.Contains(a.Text, "sfy report blocked") || log.Len() != 0 {
 		t.Fatalf("reply %q, log %q", a.Text, log.String())
 	}
 }
@@ -1902,33 +1888,6 @@ func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.
 
 	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
 		t.Fatalf("sent %v", v.l.sent)
-	}
-}
-
-func TestPermissionLogLineNamesTheToolAndItsMainInput(t *testing.T) {
-	const ids = `"session_id":"s1","transcript_path":"/x/y.jsonl"`
-	cases := map[string]struct{ body, want string }{
-		"bash":                 {`{` + ids + `,"tool_name":"Bash","tool_input":{"command":"ls -la","description":"d"}}`, "Tool: Bash. Command: ls -la"},
-		"edit":                 {`{` + ids + `,"tool_name":"Edit","tool_input":{"file_path":"/w/a.go","old_string":"x"}}`, "Tool: Edit. File: /w/a.go"},
-		"read":                 {`{` + ids + `,"tool_name":"Read","tool_input":{"file_path":"/w/c.go"}}`, "Tool: Read. File: /w/c.go"},
-		"unknown tool":         {`{` + ids + `,"tool_name":"Grep","tool_input":{ "pattern": "x" }}`, `Tool: Grep. Input: {"pattern":"x"}`},
-		"missing tool input":   {`{"tool_name":"Task"}`, "Tool: Task"},
-		"non-string command":   {`{"tool_name":"Bash","tool_input":{"command":5}}`, `Tool: Bash. Input: {"command":5}`},
-		"body that is no JSON": {"Run rm -rf build?", "Run rm -rf build?"},
-	}
-	for name, c := range cases {
-		t.Run(name, func(t *testing.T) {
-			v := newEnv(t)
-			v.seed(t, task.Working, 0)
-			var log bytes.Buffer
-			v.e.SetLog(&log)
-
-			mustOK(t, v.run("worker-t1", "t1", "hook permission", c.body))
-
-			if !strings.Contains(log.String(), "worker-t1") || !strings.Contains(log.String(), c.want) {
-				t.Fatalf("log %q lacks %q", log.String(), c.want)
-			}
-		})
 	}
 }
 
