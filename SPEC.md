@@ -176,7 +176,7 @@ The CLI is the interface for agents, for the operator and for other programs. A 
 | `sfy task archive <id>` | main agent, operator | Archives a `done` or `cancelled` task. The task keeps its state, files, verdicts and id, and its workspace and branch stay. Fails for any other state and for an archived task. `sfy task show` still prints it and says that it is archived. |
 | `sfy task cancel <id>` | main agent, operator | Marks a task `cancelled`. Works in any state except `done` and `cancelled`. |
 | `sfy task resume <id>` | main agent, operator | Returns an `escalated` task to the state it had before, and tells its worker or reviewer to go on. |
-| `sfy send <agent> <text>` | main agent | Sends a message to an agent. |
+| `sfy send <agent> <text>` | operator, main agent | Sends a message to an agent. The operator may send only to `main`, and the message names the operator as its sender. The message follows the normal path of the inbox and the note, so sfy never types it into a busy pane. |
 | `sfy report done <text>` | worker | Reports the result. On a task with a check, sfy runs the check first and starts the review only when it passes. |
 | `sfy report blocked <text>` | worker, reviewer | Tells the main agent that the agent cannot go on. |
 | `sfy report progress <text>` | worker | Records progress in the task's state. |

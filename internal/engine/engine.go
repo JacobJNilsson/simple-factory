@@ -272,7 +272,7 @@ var commands = map[string]command{
 	"task push":       {(*Engine).taskPush, []kind{operator, main}},
 	"task archive":    {(*Engine).taskArchive, []kind{operator, main}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
-	"send":            {(*Engine).send, []kind{main}},
+	"send":            {(*Engine).send, []kind{operator, main}},
 	"report done":     {(*Engine).reportDone, []kind{worker}},
 	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},
 	"report progress": {(*Engine).reportProgress, []kind{worker}},
