@@ -12,6 +12,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 )
@@ -871,8 +872,8 @@ func TestEachSessionGetsItsOwnTokenFile(t *testing.T) {
 	f := identity.Folder{Home: home}
 
 	for _, name := range []string{"worker-t1", "review-t1-1"} {
-		if got, ok := f.Owner(f.Token(name)); !ok || got != name {
-			t.Errorf("the token of %s names %q, %v", name, got, ok)
+		if got, err := f.Authenticate(protocol.Caller{Agent: name, Token: f.Token(name)}); err != nil || got != name {
+			t.Errorf("the token of %s names %q, %v", name, got, err)
 		}
 	}
 }

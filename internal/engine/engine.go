@@ -3,7 +3,6 @@
 package engine
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -108,7 +107,7 @@ type Engine struct {
 
 	log     io.Writer
 	reg     Registration
-	auth    func(token string) (string, bool)
+	auth    Authenticator
 	mu      sync.Mutex
 	counter int
 	// agents holds what sfy knows of each session, in memory only.
@@ -199,30 +198,28 @@ func (e *Engine) SetRegistration(r Registration) {
 	e.reg = r
 }
 
-// SetAuth makes the engine take the caller's identity from the session token in each request.
-// auth returns the session name that owns a token. Without it, the engine trusts the name in the request.
-func (e *Engine) SetAuth(auth func(token string) (string, bool)) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.auth = auth
+// Authenticator decides who calls from the session tokens that the server's state folder holds.
+// It returns the session name that the request's caller proves, or an error that refuses the request.
+type Authenticator interface {
+	Authenticate(protocol.Caller) (agent string, err error)
 }
 
-// authenticate returns the request with the caller's name taken from its token.
-// A named caller needs the token of that session. A request with neither name nor token comes from the operator.
+// SetAuth makes the engine take the caller's identity from the session token in each request.
+// Without it, the engine trusts the name in the request.
+func (e *Engine) SetAuth(a Authenticator) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.auth = a
+}
+
+// authenticate returns the request with the caller's name taken from the authenticator.
 func (e *Engine) authenticate(req protocol.Request) (protocol.Request, error) {
 	if e.auth == nil {
 		return req, nil
 	}
-	claimed := req.Caller.Agent
-	if req.Caller.Token == "" {
-		if claimed != "" {
-			return req, errors.New("missing session token. This session started before sessions had tokens. Restart the session, or run sfy restart, or run sfy from the session that sfy started")
-		}
-		return req, nil
-	}
-	name, ok := e.auth(req.Caller.Token)
-	if !ok || (claimed != "" && claimed != name) {
-		return req, errors.New("bad session token")
+	name, err := e.auth.Authenticate(req.Caller)
+	if err != nil {
+		return req, err
 	}
 	req.Caller.Agent = name
 	return req, nil

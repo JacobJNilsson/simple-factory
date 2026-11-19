@@ -39,7 +39,7 @@ func answer(t *testing.T, home string, env map[string]string, args ...string) (o
 		t.Fatal(err)
 	}
 	eng := engine.New(store.Files(t.TempDir()), quietLauncher{}, repoWorkspaces{}, config.Config{}, fixedClock{})
-	eng.SetAuth(identity.Folder{Home: home}.Owner)
+	eng.SetAuth(identity.Folder{Home: home})
 	ans := eng.Handle(req)
 	return ans.OK, ans.Text + ans.Error
 }
