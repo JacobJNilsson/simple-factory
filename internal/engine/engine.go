@@ -68,19 +68,17 @@ type Registration interface {
 
 // Workspaces creates and removes the folder of a task.
 type Workspaces interface {
-	Create(task.Task) (dir string, err error)
-	// Restore makes the folder of a reopened task again, on the task branch with its earlier work.
-	Restore(task.Task) (dir string, err error)
+	// Prepare fixes the branch and lease of a task and makes its folder when Dir is empty.
+	// It returns the branch and lease it fixed even on an error, so that the engine can record them.
+	Prepare(task.Task) (task.Prepared, error)
+	// BranchOf returns the recorded branch, or the legacy name of a started task with a repo, or "".
+	BranchOf(task.Task) string
 	Remove(task.Task) error
 	// HoldsWork reports whether the task's workspace holds work that Remove would delete.
 	HoldsWork(task.Task) (bool, error)
 	// RemoteBranch checks the task's existing branch and returns its sha on the remote.
 	// It refuses a repo with no origin, a branch the remote lacks, and the default branch.
 	RemoteBranch(task.Task) (sha string, err error)
-	// NewBranch returns a free branch name for the task, in the repo and on its remotes. It creates nothing.
-	NewBranch(task.Task) (string, error)
-	// LegacyBranch returns the branch name that sfy gave to tasks before they carried a branch of their own.
-	LegacyBranch(id string) string
 	// HasRemote reports whether the task's repo has a remote to push to. A repo that exists only locally has none.
 	HasRemote(task.Task) (bool, error)
 	// RepoFolder returns the folder that a task on repo belongs to, which exists after the first clone.
