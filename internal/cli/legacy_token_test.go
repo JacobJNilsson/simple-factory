@@ -8,7 +8,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
-	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
@@ -39,7 +39,7 @@ func answer(t *testing.T, home string, env map[string]string, args ...string) (o
 		t.Fatal(err)
 	}
 	eng := engine.New(store.Files(t.TempDir()), quietLauncher{}, repoWorkspaces{}, config.Config{}, fixedClock{})
-	eng.SetAuth(func(token string) (string, bool) { return claude.AgentForToken(home, token) })
+	eng.SetAuth(identity.Folder{Home: home}.Owner)
 	ans := eng.Handle(req)
 	return ans.OK, ans.Text + ans.Error
 }
@@ -58,7 +58,7 @@ func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 		}
 	}
 	// sfy serve runs at the start of every restart.
-	if err := claude.IssueLegacyTokens(home); err != nil {
+	if err := (identity.Folder{Home: home}).IssueLegacy(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -71,7 +71,7 @@ func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 
 func TestAWorkerCannotUseTheLegacyTokenOfMain(t *testing.T) {
 	home := preTokenHome(t)
-	if err := claude.IssueLegacyTokens(home); err != nil {
+	if err := (identity.Folder{Home: home}).IssueLegacy(); err != nil {
 		t.Fatal(err)
 	}
 	spoof := map[string]string{"SFY_AGENT": "main", "CLAUDE_CODE_SESSION_ID": "worker-session"}
@@ -81,36 +81,6 @@ func TestAWorkerCannotUseTheLegacyTokenOfMain(t *testing.T) {
 	}
 	if ok, _ := answer(t, home, spoof, "status"); ok {
 		t.Fatal("a worker acted as main")
-	}
-}
-
-func TestALegacyTokenOpensOnlyItsOwnSession(t *testing.T) {
-	home := preTokenHome(t)
-	if err := claude.IssueLegacyTokens(home); err != nil {
-		t.Fatal(err)
-	}
-	t1 := claude.ReadLegacyToken(home, "worker-t1", "")
-	t2 := claude.ReadLegacyToken(home, "worker-t2", "")
-
-	if t1 == "" || t1 == t2 {
-		t.Fatalf("tokens %q and %q are not distinct", t1, t2)
-	}
-	if got, ok := claude.AgentForToken(home, t1); !ok || got != "worker-t1" {
-		t.Errorf("AgentForToken = %q, %v", got, ok)
-	}
-}
-
-func TestAStartedSessionKeepsItsOwnToken(t *testing.T) {
-	home := preTokenHome(t)
-	if _, err := claude.IssueToken(home, "worker-t1"); err != nil {
-		t.Fatal(err)
-	}
-	if err := claude.IssueLegacyTokens(home); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := claude.ReadLegacyToken(home, "worker-t1", ""); got != "" {
-		t.Errorf("a session with a token got the legacy token %q", got)
 	}
 }
 

@@ -1,0 +1,125 @@
+package identity
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+const mainConversation = "11111111-2222-4333-8444-555555555555"
+
+// preTokenHome returns a state folder with the session folders that an sfy without tokens left behind.
+func preTokenHome(t *testing.T) Folder {
+	t.Helper()
+	home := t.TempDir()
+	for _, name := range []string{"main", "worker-t1", "worker-t2"} {
+		if err := os.MkdirAll(filepath.Join(home, "sessions", name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := filepath.Join(home, "sessions", "main", "conversation-id")
+	if err := os.WriteFile(id, []byte(mainConversation+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return Folder{Home: home}
+}
+
+func TestIssueWritesAPrivateTokenForEachSession(t *testing.T) {
+	f := Folder{Home: t.TempDir()}
+
+	a, err := f.Issue("worker-t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := f.Issue("review-t1-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(f.tokenPath("worker-t1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("token file mode = %v", info.Mode().Perm())
+	}
+	if len(a) < 32 || a == b {
+		t.Errorf("tokens %q and %q are not distinct secrets", a, b)
+	}
+	if got := f.Token("worker-t1"); got != a {
+		t.Errorf("Token = %q, want %q", got, a)
+	}
+}
+
+func TestIssueRemovesTheLegacyTokenOfTheSession(t *testing.T) {
+	f := preTokenHome(t)
+	if err := f.IssueLegacy(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := f.Issue("worker-t1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := f.LegacyToken("worker-t1", ""); got != "" {
+		t.Errorf("a session with a token kept the legacy token %q", got)
+	}
+}
+
+func TestIssueRefusesABadSessionName(t *testing.T) {
+	f := Folder{Home: t.TempDir()}
+
+	if _, err := f.Issue("../x"); err == nil {
+		t.Fatal("a name that leaves the sessions folder was accepted")
+	}
+}
+
+func TestIssueLegacySkipsSessionsThatHaveATokenOrALegacyToken(t *testing.T) {
+	f := preTokenHome(t)
+	if _, err := f.Issue("worker-t1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.IssueLegacy(); err != nil {
+		t.Fatal(err)
+	}
+	t2 := f.LegacyToken("worker-t2", "")
+
+	if err := f.IssueLegacy(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(f.legacyPath("worker-t1")); err == nil {
+		t.Error("a session with a token got a legacy token")
+	}
+	if t2 == "" || f.LegacyToken("worker-t2", "") != t2 {
+		t.Errorf("legacy token changed from %q to %q", t2, f.LegacyToken("worker-t2", ""))
+	}
+}
+
+func TestIssueLegacyWithoutASessionsFolderIsNoError(t *testing.T) {
+	if err := (Folder{Home: t.TempDir()}).IssueLegacy(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestALegacyTokenOpensOnlyItsOwnSession(t *testing.T) {
+	f := preTokenHome(t)
+	if err := f.IssueLegacy(); err != nil {
+		t.Fatal(err)
+	}
+	t1 := f.LegacyToken("worker-t1", "")
+	t2 := f.LegacyToken("worker-t2", "")
+
+	if t1 == "" || t1 == t2 {
+		t.Fatalf("tokens %q and %q are not distinct", t1, t2)
+	}
+	if got, ok := f.Owner(t1); !ok || got != "worker-t1" {
+		t.Errorf("Owner = %q, %v", got, ok)
+	}
+	if got, ok := f.Owner("guess"); ok {
+		t.Errorf("a wrong token named %q", got)
+	}
+	if got, ok := f.Owner(""); ok {
+		t.Errorf("an empty token named %q", got)
+	}
+}

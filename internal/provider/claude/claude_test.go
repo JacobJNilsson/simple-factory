@@ -11,6 +11,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 )
@@ -867,28 +868,12 @@ func TestEachSessionGetsItsOwnTokenFile(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
 	command(t, p, reviewerSpec())
+	f := identity.Folder{Home: home}
 
-	workerToken := claude.ReadToken(home, "worker-t1")
-	reviewToken := claude.ReadToken(home, "review-t1-1")
-	info, err := os.Stat(claude.TokenPath(home, "worker-t1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("token file mode = %v", info.Mode().Perm())
-	}
-	if len(workerToken) < 32 || workerToken == reviewToken {
-		t.Errorf("tokens %q and %q are not distinct secrets", workerToken, reviewToken)
-	}
-	if got, ok := claude.AgentForToken(home, workerToken); !ok || got != "worker-t1" {
-		t.Errorf("AgentForToken = %q, %v", got, ok)
-	}
-	if got, ok := claude.AgentForToken(home, "guess"); ok {
-		t.Errorf("a wrong token named %q", got)
-	}
-	if got, ok := claude.AgentForToken(home, ""); ok {
-		t.Errorf("an empty token named %q", got)
+	for _, name := range []string{"worker-t1", "review-t1-1"} {
+		if got, ok := f.Owner(f.Token(name)); !ok || got != name {
+			t.Errorf("the token of %s names %q, %v", name, got, ok)
+		}
 	}
 }
 

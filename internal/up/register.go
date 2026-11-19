@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
-	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -69,7 +69,7 @@ func register(o options) error {
 	if _, err := recordMainPrompt(o.home); err != nil {
 		return err
 	}
-	if _, err := claude.IssueToken(o.home, mainSession); err != nil {
+	if _, err := (identity.Folder{Home: o.home}).Issue(mainSession); err != nil {
 		return err
 	}
 	if err := o.record(address, registration.Record{ID: id, Dir: dir}); err != nil {

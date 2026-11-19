@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
@@ -147,12 +148,13 @@ func token(env func(string) string) string {
 	if t := env("SFY_TOKEN"); t != "" {
 		return t
 	}
+	folder := identity.Folder{Home: config.Home(env)}
 	if env("SFY_AGENT") == "" && Agent(env) == "main" {
-		return claude.ReadToken(config.Home(env), "main")
+		return folder.Token("main")
 	}
 	// A session that started before sessions had tokens has no SFY_TOKEN, and sfy serve left it a legacy token.
 	if agent := env("SFY_AGENT"); agent != "" {
-		return claude.ReadLegacyToken(config.Home(env), agent, claude.CurrentSession(env))
+		return folder.LegacyToken(agent, claude.CurrentSession(env))
 	}
 	return ""
 }
@@ -476,7 +478,7 @@ func userHookRequest(event string, env func(string) string, stdin io.Reader) (re
 	if err != nil || claude.HookSession(body) != record.ID {
 		return req, false, err
 	}
-	return protocol.Request{Caller: protocol.Caller{Agent: "main", Token: claude.ReadToken(config.Home(env), "main")}, Command: "hook " + event, Body: claude.HookBody(event, body)}, true, nil
+	return protocol.Request{Caller: protocol.Caller{Agent: "main", Token: identity.Folder{Home: config.Home(env)}.Token("main")}, Command: "hook " + event, Body: claude.HookBody(event, body)}, true, nil
 }
 
 // send calls the sfy process and prints its answer.

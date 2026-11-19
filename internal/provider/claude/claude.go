@@ -15,6 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
@@ -113,7 +114,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if err := removeStaleNote(a.home, spec.Name); err != nil {
 		return nil, err
 	}
-	token, err := IssueToken(a.home, spec.Name)
+	token, err := identity.Folder{Home: a.home}.Issue(spec.Name)
 	if err != nil {
 		return nil, err
 	}
