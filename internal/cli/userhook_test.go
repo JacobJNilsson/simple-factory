@@ -6,8 +6,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/JacobJNilsson/simple-factory/internal/identity"
-	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -97,51 +95,6 @@ func TestUserHookIsSilentForAnAgentThatSfyStarted(t *testing.T) {
 
 	if code != exitOK || out != "" || errb != "" {
 		t.Fatalf("code %d, stdout %q, stderr %q", code, out, errb)
-	}
-}
-
-func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
-	cases := []struct {
-		name string
-		args []string
-		want bool
-	}{
-		{"session event", []string{"hook", "idle"}, true},
-		{"note", []string{"hook", "note"}, true},
-		{"user permission", []string{"hook", "--user", "permission"}, true},
-		{"user turn-ended", []string{"hook", "--user", "turn-ended"}, true},
-		{"user idle", []string{"hook", "--user", "idle"}, true},
-		{"free event", []string{"hook", "x"}, false},
-		{"user free event", []string{"hook", "--user", "x"}, false},
-		{"user note", []string{"hook", "--user", "note"}, false},
-		{"no event", []string{"hook"}, false},
-		{"too many words", []string{"hook", "idle", "x"}, false},
-	}
-	for _, c := range cases {
-		if got := sessionOwnHook(c.args); got != c.want {
-			t.Errorf("%s: sessionOwnHook = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
-	home := t.TempDir()
-	token, err := identity.Folder{Home: home}.Issue("main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := registration.Write(home, registration.Record{ID: "s-main"}); err != nil {
-		t.Fatal(err)
-	}
-	env := envOf(map[string]string{"SFY_HOME": home})
-
-	req, acts, err := userHookRequest("idle", env, strings.NewReader(strings.Replace(permissionInput, "%s", "s-main", 1)))
-
-	if err != nil || !acts {
-		t.Fatalf("acts %v, err %v", acts, err)
-	}
-	if want := (protocol.Caller{Agent: "main", Token: token}); req.Caller != want {
-		t.Fatalf("caller %+v, want %+v", req.Caller, want)
 	}
 }
 

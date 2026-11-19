@@ -1,10 +1,12 @@
-package cli
+package hookcmd
 
 import (
 	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,8 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
+	"github.com/JacobJNilsson/simple-factory/internal/server"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
@@ -24,8 +29,31 @@ func noteHookRun(env func(string) string, event string) (code int, out, errb str
 }
 
 func noteHookRunWith(env func(string) string, event, stdin string) (code int, out, errb string) {
+	return runWith(env, []string{event}, stdin)
+}
+
+func envOf(m map[string]string) func(string) string {
+	return func(k string) string { return m[k] }
+}
+
+// runWith runs the hook command that args name, with a sender that calls the socket of the state folder and prints the reply.
+func runWith(env func(string) string, args []string, stdin string) (code int, out, errb string) {
 	var o, e bytes.Buffer
-	code = Run([]string{"hook", event}, env, strings.NewReader(stdin), &o, &e)
+	caller := func() protocol.Caller { return protocol.Caller{Agent: env("SFY_AGENT")} }
+	send := func(req protocol.Request, reply func(string) string) int {
+		ans, err := server.Call(filepath.Join(env("SFY_HOME"), "sfy.sock"), req)
+		if err != nil {
+			return exitFailed
+		}
+		if text := reply(strings.TrimRight(ans.Text, "\n")); text != "" {
+			_, _ = fmt.Fprintln(&o, text)
+		}
+		return exitOK
+	}
+	code, err := Run(args, env, strings.NewReader(stdin), &o, &e, caller, send)
+	if err != nil {
+		_, _ = fmt.Fprint(&e, err)
+	}
 	return code, o.String(), e.String()
 }
 
@@ -293,5 +321,65 @@ func TestPermissionHookPrintsNothingWhenSfyDecidesNothing(t *testing.T) {
 
 	if code != 0 || out != "" {
 		t.Fatalf("code %d, stdout %q", code, out)
+	}
+}
+
+func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"session event", []string{"idle"}, true},
+		{"note", []string{"note"}, true},
+		{"user permission", []string{"--user", "permission"}, true},
+		{"user turn-ended", []string{"--user", "turn-ended"}, true},
+		{"user idle", []string{"--user", "idle"}, true},
+		{"free event", []string{"x"}, false},
+		{"user free event", []string{"--user", "x"}, false},
+		{"user note", []string{"--user", "note"}, false},
+		{"no event", nil, false},
+		{"too many words", []string{"idle", "x"}, false},
+	}
+	for _, c := range cases {
+		if got := Own(c.args); got != c.want {
+			t.Errorf("%s: Own = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
+	home := t.TempDir()
+	token, err := identity.Folder{Home: home}.Issue("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registration.Write(home, registration.Record{ID: "s-main"}); err != nil {
+		t.Fatal(err)
+	}
+	env := envOf(map[string]string{"SFY_HOME": home})
+	var sent []protocol.Request
+	send := func(req protocol.Request, _ func(string) string) int {
+		sent = append(sent, req)
+		return exitOK
+	}
+
+	code, err := Run([]string{"--user", "idle"}, env, strings.NewReader(`{"session_id":"s-main"}`), &bytes.Buffer{}, &bytes.Buffer{}, nil, send)
+
+	if err != nil || code != exitOK || len(sent) != 1 {
+		t.Fatalf("code %d, err %v, sent %d", code, err, len(sent))
+	}
+	if want := (protocol.Caller{Agent: "main", Token: token}); sent[0].Caller != want {
+		t.Fatalf("caller %+v, want %+v", sent[0].Caller, want)
+	}
+}
+
+func TestRunReportsAFormThatMatchesNoHook(t *testing.T) {
+	for _, args := range [][]string{nil, {"idle", "x"}, {"--user", "bogus"}} {
+		_, err := Run(args, envOf(nil), strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, nil, nil)
+		var ue *UsageError
+		if !errors.As(err, &ue) {
+			t.Errorf("%q: err %v, want a usage error", args, err)
+		}
 	}
 }

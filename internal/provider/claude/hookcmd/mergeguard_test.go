@@ -1,7 +1,6 @@
-package cli
+package hookcmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -30,9 +29,8 @@ func guard(t *testing.T, env func(string) string, cwd, command string) (code int
 	if err != nil {
 		t.Fatal(err)
 	}
-	var e bytes.Buffer
-	code = Run([]string{"hook", "merge-guard"}, env, strings.NewReader(string(in)), &bytes.Buffer{}, &e)
-	return code, e.String()
+	code, _, errb = runWith(env, []string{"merge-guard"}, string(in))
+	return code, errb
 }
 
 func TestMergeGuardBlocksHandMergesInANoMergeRepo(t *testing.T) {
@@ -100,9 +98,8 @@ func TestMergeGuardBlocksWhenTheFolderIsUnknownOrTheFileBroken(t *testing.T) {
 
 func TestMergeGuardBlocksUnreadableInputAndIgnoresOtherCommands(t *testing.T) {
 	env, home := guardEnv(t)
-	var e bytes.Buffer
 
-	if code := Run([]string{"hook", "merge-guard"}, env, strings.NewReader("not json"), &bytes.Buffer{}, &e); code != exitWake {
+	if code, _, _ := runWith(env, []string{"merge-guard"}, "not json"); code != exitWake {
 		t.Errorf("bad input: code %d", code)
 	}
 	if code, _ := guard(t, env, filepath.Join(home, "work"), "make check && git status"); code != exitOK {

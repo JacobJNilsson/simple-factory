@@ -2,7 +2,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,8 +14,8 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude/hookcmd"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
-	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
 // Exit codes of Run.
@@ -25,8 +24,6 @@ const (
 	exitFailed     = 1
 	exitUsage      = 2
 	exitNotRunning = 3
-	// exitWake is the code that makes Claude Code give a background hook's stderr to the agent.
-	exitWake = 2
 )
 
 const usage = `usage:
@@ -90,8 +87,6 @@ type form struct {
 	flags []string
 	// text is true when the rest of the line is free text.
 	text bool
-	// stdin is true when the Body comes from standard input.
-	stdin bool
 	// verdict is true when the rest of the line is the Body text and "-" reads it from standard input.
 	verdict bool
 }
@@ -120,7 +115,6 @@ var forms = map[string]form{
 	"escalate":        {words: 1, ids: 1, text: true},
 	"status":          {words: 1},
 	"down":            {words: 1},
-	"hook":            {words: 1, ids: 1, stdin: true},
 }
 
 // Agent returns the session name of the caller. A started agent has it in SFY_AGENT.
@@ -155,7 +149,7 @@ func WithIdentity(env func(string) string) func(string) string {
 	}
 }
 
-// parse builds the request for a command line. It reads a file argument, and reads stdin for "-" and for hooks.
+// parse builds the request for a command line. It reads a file argument, and reads stdin for "-".
 func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Request, error) {
 	req := protocol.Request{Caller: caller(env)}
 	name, f, ok := lookup(args)
@@ -175,16 +169,7 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 		return req, &usageError{fmt.Sprintf("wrong arguments for %q", name)}
 	}
 	req.Command = name
-	switch {
-	case name == "hook":
-		req.Command = "hook " + rest[0]
-		body, err := io.ReadAll(stdin)
-		if err != nil {
-			return req, err
-		}
-		req.Body = claude.HookBody(rest[0], body)
-		return req, nil
-	case f.file:
+	if f.file {
 		// A worker or reviewer runs sfy outside the sandbox. A path would let it send any file it can read, so it passes text on stdin.
 		if path := rest[need-1]; path != "-" && req.Caller.Agent != "" && req.Caller.Agent != "main" {
 			return req, &usageError{"workers and reviewers pass the text on standard input as -, not as a file path"}
@@ -246,43 +231,17 @@ func readFile(path string, stdin io.Reader) (string, error) {
 	return string(b), err
 }
 
-// sessionHookEvents lists the hook events that the settings of a started session run.
-var sessionHookEvents = []string{"turn-ended", "permission", "idle", "busy", "note", "note-watch"}
-
 // ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the main agent run.
 var ErrRestricted = errors.New("a worker or a reviewer may not run this command")
 
-// sessionOwnHook reports whether args are a hook form that a started session runs itself.
-// The user settings run "hook --user <event>" in every session, and that form stays silent for a started agent.
-func sessionOwnHook(args []string) bool {
-	if len(args) == 2 {
-		return slices.Contains(sessionHookEvents, args[1])
-	}
-	return len(args) == 3 && args[1] == "--user" && slices.Contains(userHookEvents, args[2])
-}
-
 // Run executes one sfy command and returns the exit code.
 func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	if len(args) >= 1 && args[0] == "hook" && Restricted(env) && !sessionOwnHook(args) {
-		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", ErrRestricted)
-		return exitFailed
-	}
-	if len(args) == 2 && args[0] == "hook" && (args[1] == "note" || args[1] == "note-watch") {
-		return noteHook(args[1], env, stdin, stdout, stderr)
-	}
-	if len(args) == 2 && args[0] == "hook" && args[1] == "turn-ended" {
-		return turnEndedHook(env, stdin, stdout, stderr)
-	}
-	if len(args) == 2 && args[0] == "hook" && args[1] == "merge-guard" {
-		return mergeGuardHook(env, stdin, stderr)
-	}
-	var req protocol.Request
+	var code int
 	var err error
-	acts := true
-	if len(args) == 3 && args[0] == "hook" && args[1] == "--user" {
-		req, acts, err = userHookRequest(args[2], env, stdin)
+	if len(args) >= 1 && args[0] == "hook" {
+		code, err = runHook(args[1:], env, stdin, stdout, stderr)
 	} else {
-		req, err = parse(args, env, stdin)
+		code, err = runCommand(args, env, stdin, stdout, stderr)
 	}
 	var ue *usageError
 	if errors.As(err, &ue) {
@@ -293,174 +252,36 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed
 	}
-	if !acts {
-		return exitOK
-	}
-	return send(req, env, stdout, stderr)
+	return code
 }
 
-// mergeGuardHook is the PreToolUse hook of the main agent. It exits with exitWake, which blocks the tool call, for a hand push, merge or rebase in a no-merge repo.
-// It reads the repo config on each call. A config that cannot be read, and a folder that a shell expansion hides, count as no-merge.
-func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) int {
-	raw, _ := io.ReadAll(stdin)
-	in, err := claude.ParseHookInput(raw)
+// runHook runs "sfy hook" with the words after it. A worker or a reviewer runs only the forms that its own settings hold.
+func runHook(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if Restricted(env) && !hookcmd.Own(args) {
+		return exitFailed, ErrRestricted
+	}
+	sender := func(req protocol.Request, reply func(string) string) int {
+		return send(req, env, stdout, stderr, reply)
+	}
+	code, err := hookcmd.Run(args, env, stdin, stdout, stderr, func() protocol.Caller { return caller(env) }, sender)
+	var ue *hookcmd.UsageError
+	if errors.As(err, &ue) {
+		return code, &usageError{ue.Msg}
+	}
+	return code, err
+}
+
+// runCommand runs every command except a hook.
+func runCommand(args []string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	req, err := parse(args, env, stdin)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "sfy: merge guard cannot read the hook input: %v\n", err)
-		return exitWake
+		return exitFailed, err
 	}
-	targets := claude.MergeTargets(in.ToolInput.Command, in.Cwd, env("HOME"))
-	if len(targets) == 0 {
-		return exitOK
-	}
-	cfg, err := config.LoadFactory(config.Home(env), env("HOME"))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "sfy: merge guard cannot read the config, so it blocks %s: %v\n", targets[0].Command, err)
-		return exitWake
-	}
-	for _, t := range targets {
-		if t.Unknown {
-			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s, because its folder comes from a shell expansion and sfy cannot check whether the repo is no-merge. Write the folder out.\n", t.Command)
-			return exitWake
-		}
-		repo, err := config.ForRepo(cfg, env("HOME"), t.Folder)
-		if err != nil || repo.NoMerge {
-			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s in %s. The repo is set to no-merge, or its .sfy.toml cannot be read. Leave the merge to the operator and tell the operator.\n", t.Command, t.Folder)
-			return exitWake
-		}
-	}
-	return exitOK
+	return send(req, env, stdout, stderr, nil), nil
 }
 
-// hookEventName reads the hook input JSON and returns its hook_event_name, or "" when the input has none.
-func hookEventName(stdin io.Reader) string {
-	var in struct {
-		Name string `json:"hook_event_name"`
-	}
-	_ = json.NewDecoder(stdin).Decode(&in)
-	return in.Name
-}
-
-// noteHook runs the two hooks that deliver notes through the session's note file. It needs no sfy process.
-// note-watch prints the SessionStart or CwdChanged output that names the file. note prints the file's text to stderr and exits with exitWake.
-// A caller with no session name, such as a registered main agent, gets no output and exit code 0.
-func noteHook(event string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT"))
-	if !ok {
-		return exitOK
-	}
-	if event == "note-watch" {
-		out, err := claude.WatchNote(path, hookEventName(stdin))
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-			return exitFailed
-		}
-		_, _ = fmt.Fprintln(stdout, out)
-		return exitOK
-	}
-	text, err := drainNoteText(env, path)
-	if text != "" {
-		_, _ = fmt.Fprintln(stderr, text)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-		}
-		return exitWake
-	}
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-		return exitFailed
-	}
-	return exitOK
-}
-
-// drainNoteText empties the note file at path and returns the text that still waits.
-// It marks the delivered messages read, even when it returns an error together with text.
-func drainNoteText(env func(string) string, path string) (string, error) {
-	entries, err := claude.DrainNote(path)
-	if err != nil {
-		return "", err
-	}
-	return takeDelivered(store.Files(config.Home(env)), env("SFY_AGENT"), entries)
-}
-
-// turnEndedHook is the Stop hook of a started session. It drains the note file first, so a message that came during the turn reaches the agent at the turn end at the latest.
-// When text waits, it reports "busy" to sfy, prints the text to stderr and exits with exitWake, which keeps the turn going.
-// Otherwise it reports the turn end. A failed drain never blocks the turn end.
-func turnEndedHook(env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	req, err := parse([]string{"hook", "turn-ended"}, env, stdin)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-		return exitFailed
-	}
-	if path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT")); ok {
-		text, err := drainNoteText(env, path)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-		}
-		if text != "" {
-			// The turn goes on, so sfy must not count the session as waiting. A failed report must not hide the text.
-			busy := req
-			busy.Command = "hook busy"
-			_, _ = server.Call(filepath.Join(config.Home(env), "sfy.sock"), busy)
-			_, _ = fmt.Fprintln(stderr, text)
-			return exitWake
-		}
-	}
-	return send(req, env, stdout, stderr)
-}
-
-// takeDelivered returns the text of the entries that still wait and marks their messages read.
-// An entry for a message that sfy inbox already showed, or that an earlier entry already carried, adds nothing.
-func takeDelivered(st store.Store, agent string, entries []claude.Entry) (string, error) {
-	unread := map[string]bool{}
-	if slices.ContainsFunc(entries, func(e claude.Entry) bool { return e.ID != "" }) {
-		msgs, err := st.Unread(agent)
-		if err != nil {
-			return "", err
-		}
-		for _, m := range msgs {
-			unread[m.ID] = true
-		}
-	}
-	var texts, ids []string
-	for _, e := range entries {
-		if e.ID != "" {
-			if !unread[e.ID] {
-				continue
-			}
-			delete(unread, e.ID)
-			ids = append(ids, e.ID)
-		}
-		texts = append(texts, e.Text)
-	}
-	return strings.Join(texts, "\n\n"), st.MarkRead(agent, ids)
-}
-
-// userHookEvents lists the events that the hooks in the user settings report.
-var userHookEvents = []string{"turn-ended", "permission", "idle", "busy"}
-
-// userHookRequest builds the request for a hook that comes from the user settings.
-// The user settings reach every session of the user, so the hook acts only for the registered main agent.
-// It acts for no other session and for no agent that sfy started. It makes no socket call then, and it prints nothing.
-func userHookRequest(event string, env func(string) string, stdin io.Reader) (req protocol.Request, acts bool, err error) {
-	if !slices.Contains(userHookEvents, event) {
-		return req, false, &usageError{fmt.Sprintf("unknown hook event %q", event)}
-	}
-	if env("SFY_AGENT") != "" {
-		return req, false, nil
-	}
-	body, err := io.ReadAll(stdin)
-	if err != nil {
-		return req, false, err
-	}
-	c := identity.Folder{Home: config.Home(env)}.Resolve(identity.Claim{Session: claude.HookSession(body)})
-	if c.Agent != "main" {
-		return req, false, nil
-	}
-	return protocol.Request{Caller: c, Command: "hook " + event, Body: claude.HookBody(event, body)}, true, nil
-}
-
-// send calls the sfy process and prints its answer.
-func send(req protocol.Request, env func(string) string, stdout, stderr io.Writer) int {
+// send calls the sfy process and prints its answer. It passes the answer text through reply first, and a nil reply keeps the text.
+func send(req protocol.Request, env func(string) string, stdout, stderr io.Writer, reply func(string) string) int {
 	home := config.Home(env)
 	ans, err := server.Call(filepath.Join(home, "sfy.sock"), req)
 	var nr *server.NotRunningError
@@ -481,8 +302,8 @@ func send(req protocol.Request, env func(string) string, stdout, stderr io.Write
 		return exitFailed
 	}
 	text := strings.TrimRight(ans.Text, "\n")
-	if event, ok := strings.CutPrefix(req.Command, "hook "); ok {
-		text = claude.HookReply(event, text)
+	if reply != nil {
+		text = reply(text)
 	}
 	if req.Command == "task new" {
 		// The reply holds the id, then any warning. The warning goes to stderr so $(sfy task new f) yields the id.
