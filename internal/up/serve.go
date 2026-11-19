@@ -13,6 +13,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
@@ -134,7 +135,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 		}
 	}()
 	// Sessions that started under an older sfy have no token, and restart keeps them running.
-	if err := claude.IssueLegacyTokens(p.home); err != nil {
+	if err := (identity.Folder{Home: p.home}).IssueLegacy(); err != nil {
 		return err
 	}
 	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
@@ -142,7 +143,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
 	eng.SetChecker(checker(ctx, p))
 	eng.SetRegistration(registration.Folder{Home: p.home})
-	eng.SetAuth(func(token string) (string, bool) { return claude.AgentForToken(p.home, token) })
+	eng.SetAuth(identity.Folder{Home: p.home}.Owner)
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
 }
 

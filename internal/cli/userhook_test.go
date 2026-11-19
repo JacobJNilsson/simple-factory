@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
-	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -126,7 +126,7 @@ func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
 
 func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
 	home := t.TempDir()
-	token, err := claude.IssueToken(home, "main")
+	token, err := identity.Folder{Home: home}.Issue("main")
 	if err != nil {
 		t.Fatal(err)
 	}
