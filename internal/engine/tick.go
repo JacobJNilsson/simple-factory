@@ -3,9 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
@@ -132,7 +130,7 @@ func (e *Engine) startWorker(t task.Task) error {
 	}
 	delete(e.startFails, t.ID)
 	delete(e.checking, t.ID)
-	e.agents[name] = &agentState{}
+	e.forget(name)
 	return nil
 }
 
@@ -182,24 +180,7 @@ func (e *Engine) startFailed(t task.Task, err error) error {
 	return errors.Join(err, e.escalateTask(t, why, true))
 }
 
-// hookGrace returns how long the hook has to take queued messages before sfy types the note.
-// A config without the setting, as tests build it, gets the default.
-func (e *Engine) hookGrace() time.Duration {
-	if e.cfg.NoteFallbackAfter > 0 {
-		return e.cfg.NoteFallbackAfter
-	}
-	return config.DefaultNoteFallbackAfter
-}
-
-// typeAfterHook types the new-message note for an agent whose hook left the queued messages unread.
-func (e *Engine) typeAfterHook(name string, s *agentState) error {
-	s.hookedAt, s.lastNote = time.Time{}, e.c.Now()
-	e.logf("note typed to %s: the hook left its messages unread", name)
-	return e.ignoreGone(name, e.l.Send(name, newMessageNote))
-}
-
-// resendNotes types the note again for an agent whose messages stay unread.
-// It does so only when the agent waits, or when no hook event came since the last note, which means the note was lost.
+// resendNotes gives the late notes to main, the workers of active tasks and the reviewers of tasks in review.
 func (e *Engine) resendNotes() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {
@@ -214,58 +195,7 @@ func (e *Engine) resendNotes() error {
 			names = append(names, reviewerOf(t))
 		}
 	}
-	wait := time.Duration(e.cfg.ResendMinutes) * time.Minute
-	var errs []error
-	for _, name := range names {
-		s := e.agent(name)
-		down := false
-		if name == "main" {
-			alive, known := e.probe(name)
-			down = known && !alive
-			if !down {
-				s.skipLogged = false
-			}
-		}
-		// A pane that no hook reported busy may take a held note after the resend wait, as it may take a new-message note.
-		if len(s.held) > 0 && !down && e.c.Now().Sub(s.heldAt) >= wait && (s.waiting || (!s.hookSince && !s.busy)) {
-			errs = append(errs, e.typeHeld(name))
-		}
-		unread, err := e.st.Unread(name)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if len(unread) == 0 {
-			if !s.hookedAt.IsZero() {
-				e.logf("messages taken by the hook of %s", name)
-				// The hook woke the agent, so a turn runs now.
-				s.hookedAt, s.waiting, s.hookSince = time.Time{}, false, false
-			}
-			continue
-		}
-		if !down && !s.hookedAt.IsZero() {
-			// A busy session reads its notes between tool calls or at the turn end, however long the turn runs.
-			if s.waiting && e.c.Now().Sub(s.hookedAt) >= e.hookGrace() {
-				errs = append(errs, e.typeAfterHook(name, s))
-			}
-			continue
-		}
-		if down {
-			if !s.skipLogged {
-				e.logf("note skipped for %s: its session is not alive", name)
-				s.skipLogged = true
-			}
-			continue
-		}
-		last := s.lastNote
-		if last.IsZero() {
-			last = unread[0].Created
-		}
-		if e.c.Now().Sub(last) >= wait && (s.waiting || !s.hookSince) {
-			errs = append(errs, e.noteMessages(name, "resend"))
-		}
-	}
-	return errors.Join(errs...)
+	return e.notes.Tick(names)
 }
 
 // retryCleanup repeats the cleanup of done and cancelled tasks that still have a workspace.

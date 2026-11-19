@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine/delivery"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -110,6 +111,8 @@ type Engine struct {
 	counter int
 	// agents holds what sfy knows of each session, in memory only.
 	agents map[string]*agentState
+	// notes gives notes to sessions and tracks when they may take one.
+	notes *delivery.Delivery
 	// startFails counts the failed starts in a row of each task.
 	startFails map[string]int
 	// cleanupWait holds, for each task whose cleanup could not tell whether a session runs, the number of retries to skip.
@@ -126,44 +129,26 @@ type Engine struct {
 	down atomic.Bool
 }
 
-// agentState tracks when a session may take a note.
+// agentState tracks the report rule and the liveness of a session. The delivery module holds the note state.
 type agentState struct {
-	// waiting is true after a turn ended and until sfy types into the pane.
-	waiting bool
 	// reported is true when the agent ran report or verdict in its current turn.
 	reported bool
-	// hookSince is true when a hook event came after the last note.
-	hookSince bool
 	// reminders counts the turns in a row that ended without a report.
 	reminders int
-	lastNote  time.Time
-	// hookedAt is when sfy queued unread messages in the note file for the session's hook. It is zero when no hook is due.
-	hookedAt time.Time
-	// notedID is the id of the newest unread message that the last note covered.
-	notedID string
 	// gone is true after sfy told main that the session no longer runs.
 	gone bool
-	// skipLogged is true after the log named this agent as not alive, until it lives again.
-	skipLogged bool
 	// aliveErrs counts the alive checks in a row that failed. A check that answers resets it.
 	aliveErrs int
 	// aliveErr is the error of the latest failed alive check.
 	aliveErr error
 	// aliveTold is true after sfy told main that it cannot tell whether the session runs.
 	aliveTold bool
-	// held lists the plain notes that wait until the session waits for input, oldest first.
-	held []string
-	// heldAt is when the oldest held note arrived. It is zero when nothing is held.
-	heldAt time.Time
-	// busy is true after a hook reported that a turn started, until the next hook that says the session waits.
-	busy bool
 }
 
-// restartGrace gives the hook a fresh grace period when the session starts to wait with queued messages.
-func (s *agentState) restartGrace(now time.Time) {
-	if !s.hookedAt.IsZero() {
-		s.hookedAt = now
-	}
+// forget drops what sfy knows of a session that ended or starts again.
+func (e *Engine) forget(name string) {
+	delete(e.agents, name)
+	e.notes.Forget(name)
 }
 
 func (e *Engine) agent(name string) *agentState {
@@ -241,7 +226,19 @@ func (e *Engine) logf(format string, args ...any) {
 
 // New returns an Engine that works through the given store and interfaces.
 func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
-	return &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
+	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
+	grace := cfg.NoteFallbackAfter
+	// A config without the setting, as tests build it, gets the default.
+	if grace <= 0 {
+		grace = config.DefaultNoteFallbackAfter
+	}
+	e.notes = delivery.New(delivery.Deps{
+		Panes: l, Channel: l, Mailbox: st, Now: c.Now,
+		Logf:       e.logf,
+		Registered: e.registeredMain, Runs: e.runs, Probe: e.probe,
+		Resend: time.Duration(cfg.ResendMinutes) * time.Minute, Grace: grace,
+	})
+	return e
 }
 
 type kind string
@@ -377,7 +374,7 @@ func (e *Engine) noteCommand(req protocol.Request) {
 	name := req.Caller.Agent
 	switch {
 	case strings.HasPrefix(req.Command, "verdict "):
-		delete(e.agents, name)
+		e.forget(name)
 	case strings.HasPrefix(req.Command, "report "):
 		s := e.agent(name)
 		s.reported, s.reminders = true, 0
