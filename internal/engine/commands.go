@@ -448,6 +448,13 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 	if body == "" {
 		return "", errors.New("send needs a text")
 	}
+	from := req.Caller.Agent
+	if from == "" {
+		if req.Args[0] != "main" {
+			return "", errors.New("the operator may send only to main. Run: sfy send main <text>")
+		}
+		from = "operator"
+	}
 	if err := e.live(req.Args[0]); err != nil {
 		return "", err
 	}
@@ -456,7 +463,7 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 			return "", err
 		}
 	}
-	return "", e.message(req.Args[0], req.Caller.Agent, body)
+	return "", e.message(req.Args[0], from, body)
 }
 
 // refuseGone fails when the session of an agent no longer runs, because nobody would read a message for it.

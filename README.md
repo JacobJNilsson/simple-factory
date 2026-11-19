@@ -105,6 +105,7 @@ sfy keeps its state in `~/.sfy`:
 | `sfy restart` | Restarts the sfy process and keeps the agents running. |
 | `sfy status` | Prints `status.md`. |
 | `sfy task list` | Lists the tasks. |
+| `sfy send main <text>` | Sends a message to the main agent. The operator may send only to `main`. The main agent may send to any agent. |
 | `sfy help` | Lists every command. |
 
 ## Configure
