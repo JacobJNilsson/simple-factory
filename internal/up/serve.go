@@ -143,7 +143,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
 	eng.SetChecker(checker(ctx, p))
 	eng.SetRegistration(registration.Folder{Home: p.home})
-	eng.SetAuth(identity.Folder{Home: p.home}.Owner)
+	eng.SetAuth(identity.Folder{Home: p.home})
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
 }
 

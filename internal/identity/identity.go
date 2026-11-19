@@ -134,8 +134,29 @@ func (f Folder) legacyToken(name, sessionID string) string {
 	return readFile(f.legacyPath(name))
 }
 
-// Owner returns the session that owns token. It reports false for an empty or unknown token.
-func (f Folder) Owner(token string) (string, bool) {
+var (
+	errMissingToken = errors.New("missing session token. This session started before sessions had tokens. Restart the session, or run sfy restart, or run sfy from the session that sfy started")
+	errBadToken     = errors.New("bad session token")
+)
+
+// Authenticate returns the name that the server takes as the caller of a request.
+// A named caller needs the token of that session. A request with neither name nor token comes from the operator and gets an empty name.
+func (f Folder) Authenticate(c protocol.Caller) (string, error) {
+	if c.Token == "" {
+		if c.Agent != "" {
+			return "", errMissingToken
+		}
+		return "", nil
+	}
+	name, ok := f.owner(c.Token)
+	if !ok || (c.Agent != "" && c.Agent != name) {
+		return "", errBadToken
+	}
+	return name, nil
+}
+
+// owner returns the session that owns token. It reports false for an empty or unknown token.
+func (f Folder) owner(token string) (string, bool) {
 	if token == "" {
 		return "", false
 	}

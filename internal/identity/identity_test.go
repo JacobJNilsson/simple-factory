@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -116,14 +117,95 @@ func TestALegacyTokenOpensOnlyItsOwnSession(t *testing.T) {
 	if t1 == "" || t1 == t2 {
 		t.Fatalf("tokens %q and %q are not distinct", t1, t2)
 	}
-	if got, ok := f.Owner(t1); !ok || got != "worker-t1" {
-		t.Errorf("Owner = %q, %v", got, ok)
+	if got, err := f.Authenticate(protocol.Caller{Token: t1}); err != nil || got != "worker-t1" {
+		t.Errorf("Authenticate = %q, %v", got, err)
 	}
-	if got, ok := f.Owner("guess"); ok {
-		t.Errorf("a wrong token named %q", got)
+	if _, err := f.Authenticate(protocol.Caller{Agent: "worker-t2", Token: t1}); err == nil {
+		t.Error("a legacy token opened another session")
 	}
-	if got, ok := f.Owner(""); ok {
-		t.Errorf("an empty token named %q", got)
+}
+
+func authFolder(t *testing.T) Folder {
+	t.Helper()
+	f := Folder{Home: t.TempDir()}
+	for _, name := range []string{"main", "worker-t1"} {
+		if _, err := f.Issue(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return f
+}
+
+func TestAuthenticateRefusesAWorkerThatClaimsToBeMain(t *testing.T) {
+	f := authFolder(t)
+
+	_, err := f.Authenticate(protocol.Caller{Agent: "main", Token: f.Token("worker-t1")})
+
+	if !errors.Is(err, errBadToken) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestAuthenticateRefusesANameWithoutAToken(t *testing.T) {
+	f := authFolder(t)
+
+	_, err := f.Authenticate(protocol.Caller{Agent: "worker-t1"})
+
+	if !errors.Is(err, errMissingToken) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestAuthenticateRefusesATokenThatNoSessionOwns(t *testing.T) {
+	f := authFolder(t)
+
+	if _, err := f.Authenticate(protocol.Caller{Agent: "worker-t1", Token: "guess"}); err == nil {
+		t.Fatal("an unknown token was accepted")
+	}
+}
+
+func TestAuthenticateAcceptsTheOwnerAndTheOperator(t *testing.T) {
+	f := authFolder(t)
+
+	for name, c := range map[string]struct {
+		caller protocol.Caller
+		want   string
+	}{
+		"worker":                {protocol.Caller{Agent: "worker-t1", Token: f.Token("worker-t1")}, "worker-t1"},
+		"main":                  {protocol.Caller{Agent: "main", Token: f.Token("main")}, "main"},
+		"token without a name":  {protocol.Caller{Token: f.Token("main")}, "main"},
+		"operator with no name": {protocol.Caller{}, ""},
+	} {
+		if got, err := f.Authenticate(c.caller); err != nil || got != c.want {
+			t.Errorf("%s: got %q, %v, want %q", name, got, err, c.want)
+		}
+	}
+}
+
+func TestResolveAndAuthenticateAgree(t *testing.T) {
+	started := authFolder(t)
+	registeredMain := authFolder(t)
+	registered(t, registeredMain)
+	preToken := preTokenHome(t)
+	if err := preToken.IssueLegacy(); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, c := range map[string]struct {
+		folder Folder
+		claim  Claim
+		want   string
+	}{
+		"started worker":  {started, Claim{Agent: "worker-t1", Token: started.Token("worker-t1")}, "worker-t1"},
+		"registered main": {registeredMain, Claim{Session: "s-main"}, "main"},
+		"pre-token main":  {preToken, Claim{Agent: "main", Session: mainConversation}, "main"},
+		"pre-token agent": {preToken, Claim{Agent: "worker-t2"}, "worker-t2"},
+		"operator":        {started, Claim{}, ""},
+	} {
+		got, err := c.folder.Authenticate(c.folder.Resolve(c.claim))
+		if err != nil || got != c.want {
+			t.Errorf("%s: got %q, %v, want %q", name, got, err, c.want)
+		}
 	}
 }
 
