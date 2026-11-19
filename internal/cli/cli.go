@@ -202,7 +202,7 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 		if err != nil {
 			return req, err
 		}
-		req.Body = string(body)
+		req.Body = claude.HookBody(rest[0], body)
 		return req, nil
 	case f.file:
 		// A worker or reviewer runs sfy outside the sandbox. A path would let it send any file it can read, so it passes text on stdin.
@@ -476,7 +476,7 @@ func userHookRequest(event string, env func(string) string, stdin io.Reader) (re
 	if err != nil || claude.HookSession(body) != record.ID {
 		return req, false, err
 	}
-	return protocol.Request{Caller: protocol.Caller{Agent: "main", Token: claude.ReadToken(config.Home(env), "main")}, Command: "hook " + event, Body: string(body)}, true, nil
+	return protocol.Request{Caller: protocol.Caller{Agent: "main", Token: claude.ReadToken(config.Home(env), "main")}, Command: "hook " + event, Body: claude.HookBody(event, body)}, true, nil
 }
 
 // send calls the sfy process and prints its answer.
@@ -501,6 +501,9 @@ func send(req protocol.Request, env func(string) string, stdout, stderr io.Write
 		return exitFailed
 	}
 	text := strings.TrimRight(ans.Text, "\n")
+	if event, ok := strings.CutPrefix(req.Command, "hook "); ok {
+		text = claude.HookReply(event, text)
+	}
 	if req.Command == "task new" {
 		// The reply holds the id, then any warning. The warning goes to stderr so $(sfy task new f) yields the id.
 		var warning string

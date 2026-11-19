@@ -205,13 +205,20 @@ func socketEnv(t *testing.T) (func(string) string, string) {
 // fakeSfy listens on the socket in home, records the command of each request and answers OK.
 func fakeSfy(t *testing.T, home string) *[]string {
 	t.Helper()
+	commands, _ := fakeSfyAnswering(t, home, "")
+	return commands
+}
+
+// fakeSfyAnswering is fakeSfy with an answer text. It also returns the body of each request.
+func fakeSfyAnswering(t *testing.T, home, text string) (*[]string, *[]string) {
+	t.Helper()
 	var lc net.ListenConfig
 	l, err := lc.Listen(context.Background(), "unix", filepath.Join(home, "sfy.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = l.Close() })
-	var commands []string
+	var commands, bodies []string
 	var mu sync.Mutex
 	go func() {
 		for {
@@ -223,13 +230,14 @@ func fakeSfy(t *testing.T, home string) *[]string {
 			if json.NewDecoder(bufio.NewReader(conn)).Decode(&req) == nil {
 				mu.Lock()
 				commands = append(commands, req.Command)
+				bodies = append(bodies, req.Body)
 				mu.Unlock()
 			}
-			_ = json.NewEncoder(conn).Encode(protocol.Answer{OK: true})
+			_ = json.NewEncoder(conn).Encode(protocol.Answer{OK: true, Text: text})
 			_ = conn.Close()
 		}
 	}()
-	return &commands
+	return &commands, &bodies
 }
 
 func TestTurnEndedHookTellsSfyThatTheTurnGoesOn(t *testing.T) {
@@ -255,5 +263,35 @@ func TestTurnEndedHookWithoutANoteReportsTheTurnEnd(t *testing.T) {
 
 	if code != 0 || !slices.Equal(*commands, []string{"hook turn-ended"}) {
 		t.Fatalf("code %d, commands %q", code, *commands)
+	}
+}
+
+func TestPermissionHookWrapsTheDenialReasonForClaude(t *testing.T) {
+	env, home := socketEnv(t)
+	_, bodies := fakeSfyAnswering(t, home, "why")
+
+	code, out, _ := noteHookRunWith(env, "permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+
+	var got struct {
+		Out struct {
+			Decision struct{ Behavior, Message string } `json:"decision"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("stdout %q: %v", out, err)
+	}
+	if code != 0 || !slices.Equal(*bodies, []string{"Tool: Bash. Command: ls"}) || got.Out.Decision.Behavior != "deny" || got.Out.Decision.Message != "why" {
+		t.Fatalf("code %d, bodies %q, stdout %q", code, *bodies, out)
+	}
+}
+
+func TestPermissionHookPrintsNothingWhenSfyDecidesNothing(t *testing.T) {
+	env, home := socketEnv(t)
+	fakeSfy(t, home)
+
+	code, out, _ := noteHookRunWith(env, "permission", `{"tool_name":"Bash","tool_input":{"command":"ls"}}`)
+
+	if code != 0 || out != "" {
+		t.Fatalf("code %d, stdout %q", code, out)
 	}
 }
