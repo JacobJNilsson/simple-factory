@@ -113,7 +113,7 @@ type fakeWorkspaces struct {
 	createErr   error
 	// localOnly makes HasRemote report a repo with no remote.
 	localOnly bool
-	// branchErr makes NewBranch fail. branchesMade counts the names it gave out.
+	// branchErr fails the branch step of Prepare. branchesMade counts the names it gave out.
 	branchErr    error
 	branchesMade int
 	// integrated lists the tasks that Integrate ran for. integrateErr makes it fail.

@@ -40,12 +40,8 @@ func (w *Workspaces) dir(id string) string {
 	return filepath.Join(w.home, "work", id)
 }
 
-// Prepare fixes the branch and lease of a task and makes its folder. A task with a set Dir keeps that folder.
-// A task with a repo gets its branch once: the existing branch, the recorded one, the legacy name of a started task, or a new free name.
-// A failed Prepare leaves no folder behind. It runs git and may fetch or clone, and the engine holds its lock meanwhile, so it can block commands for up to the git timeout.
-// A reopened task keeps a folder that still holds its work, and otherwise gets its branch with its earlier commits.
-// Any other task is refused a branch that holds work.
-// It returns the branch and lease it fixed even on an error, so a caller can record them.
+// Prepare fixes the branch and lease of a task and makes its folder, unless t.Dir is set, and it returns the branch and lease even on an error.
+// It runs git and may block up to the git timeout, and a reopened task keeps a folder or branch that holds its work.
 func (w *Workspaces) Prepare(t task.Task) (task.Prepared, error) {
 	p := task.Prepared{Dir: t.Dir, Branch: t.Branch, Lease: t.Lease}
 	if t.Repo != "" {
