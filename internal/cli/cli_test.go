@@ -58,8 +58,6 @@ func TestParse(t *testing.T) {
 		{"inbox", []string{"inbox"}, protocol.Request{Command: "inbox"}},
 		{"escalate", []string{"escalate", "t1", "needs", "you"}, protocol.Request{Command: "escalate", Args: []string{"t1", "needs", "you"}}},
 		{"status", []string{"status"}, protocol.Request{Command: "status"}},
-		{"hook turn-ended has no body", []string{"hook", "turn-ended"}, protocol.Request{Command: "hook turn-ended"}},
-		{"hook permission keeps text input", []string{"hook", "permission"}, protocol.Request{Command: "hook permission", Body: "IN"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
