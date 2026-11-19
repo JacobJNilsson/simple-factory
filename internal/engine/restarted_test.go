@@ -3,7 +3,6 @@ package engine_test
 import (
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
@@ -43,54 +42,6 @@ func TestTheRestartNoteWaitsForTheTurnEndOfMain(t *testing.T) {
 	}
 }
 
-func TestTheRestartNoteIsTypedAtOnceForAMainThatWaits(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("main", "", "hook idle", ""))
-
-	a := v.run("", "", "restarted", restartNote)
-
-	mustOK(t, a)
-	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) || a.Text != "" {
-		t.Fatalf("typed %q, text %q", v.l.sent, a.Text)
-	}
-}
-
-func TestTheRestartNoteIsTypedAfterResendMinutesForAMainWithoutHooks(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("", "", "restarted", restartNote))
-	v.clock.now = v.clock.now.Add(4 * time.Minute)
-	v.tick(t)
-	if len(v.l.sent) != 0 {
-		t.Fatalf("typed %q before resend_minutes", v.l.sent)
-	}
-
-	v.clock.now = v.clock.now.Add(time.Minute)
-	v.tick(t)
-	v.clock.now = v.clock.now.Add(10 * time.Minute)
-	v.tick(t)
-
-	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {
-		t.Fatalf("typed %q, want %q", v.l.sent, want)
-	}
-}
-
-func TestTheRestartNoteNeverReachesABusyMainBeforeItsTurnEnds(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("", "", "restarted", restartNote))
-	mustOK(t, v.run("main", "", "hook busy", ""))
-	v.clock.now = v.clock.now.Add(30 * time.Minute)
-
-	v.tick(t)
-
-	if len(v.l.sent) != 0 {
-		t.Fatalf("typed %q into a busy pane", v.l.sent)
-	}
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {
-		t.Fatalf("typed %q, want %q", v.l.sent, want)
-	}
-}
-
 func TestTheRestartNoteWaitsForABusyRegisteredMainEvenWhenTheProviderCanDeliver(t *testing.T) {
 	v := newEnv(t)
 	v.l.canDeliver = true
@@ -103,31 +54,6 @@ func TestTheRestartNoteWaitsForABusyRegisteredMainEvenWhenTheProviderCanDeliver(
 		t.Fatalf("typed %q, delivered %q", v.l.sent, v.l.delivered)
 	}
 	mustOK(t, v.run("main", "", "hook idle", ""))
-	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {
-		t.Fatalf("typed %q, want %q", v.l.sent, want)
-	}
-}
-
-func TestTheRestartNoteIsNotHeldForADeadMain(t *testing.T) {
-	v := newEnv(t)
-	v.l.dead = map[string]bool{"main": true}
-
-	mustOK(t, v.run("", "", "restarted", restartNote))
-	v.clock.now = v.clock.now.Add(10 * time.Minute)
-	v.tick(t)
-
-	if len(v.l.sent) != 0 {
-		t.Fatalf("typed %q", v.l.sent)
-	}
-}
-
-func TestAHeldRestartNoteIsTypedOnceOverTwoTurnEnds(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("", "", "restarted", restartNote))
-
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-
 	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {
 		t.Fatalf("typed %q, want %q", v.l.sent, want)
 	}

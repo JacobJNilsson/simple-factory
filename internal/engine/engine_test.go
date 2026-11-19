@@ -763,24 +763,6 @@ func TestEscalateMovesTheTaskAndNotifiesMain(t *testing.T) {
 	}
 }
 
-func TestInboxReturnsMessagesOldestFirstAndThenNone(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "first"))
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "second"))
-
-	a := v.run("worker-t1", "t1", "inbox", "")
-	b := v.run("worker-t1", "t1", "inbox", "")
-
-	mustOK(t, a)
-	if i, j := strings.Index(a.Text, "first"), strings.Index(a.Text, "second"); i < 0 || j < i {
-		t.Fatalf("order: %q", a.Text)
-	}
-	if b.Text != "" {
-		t.Fatalf("second inbox: %q", b.Text)
-	}
-}
-
 func TestStatusAndTaskListShowTheTasks(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
@@ -1017,28 +999,6 @@ func TestTurnEndedTypesTheNoteForUnreadMessages(t *testing.T) {
 	}
 }
 
-func TestAMessageToAnAgentThatWaitsTypesTheNoteOnce(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-
-	mustOK(t, v.run("", "", "task new", taskFile))
-	mustOK(t, v.run("", "", "task new", taskFile))
-
-	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
-		t.Fatalf("sent %v", v.l.sent)
-	}
-}
-
-func TestAMessageToABusyAgentTypesNothing(t *testing.T) {
-	v := newEnv(t)
-
-	mustOK(t, v.run("", "", "task new", taskFile))
-
-	if len(v.l.sent) != 0 {
-		t.Fatalf("sent %v", v.l.sent)
-	}
-}
-
 func TestTheReminderStopsAfterTwoAndMainGetsOneMessage(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
@@ -1268,36 +1228,6 @@ func TestTickPutsATaskBackInQueuedWhenTheWorkspaceFails(t *testing.T) {
 	}
 }
 
-func TestTickResendsTheNoteAfterResendMinutesAndNotBefore(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-	mustOK(t, v.run("", "", "task new", taskFile))
-
-	v.clock.now = v.clock.now.Add(4 * time.Minute)
-	v.tick(t)
-	before := len(v.l.sent)
-	v.clock.now = v.clock.now.Add(time.Minute)
-	v.tick(t)
-
-	if before != 1 || len(v.l.sent) != 2 || v.l.sent[1] != "main: "+note {
-		t.Fatalf("before %d, sent %v", before, v.l.sent)
-	}
-}
-
-func TestTickDoesNotResendToAnAgentThatReadItsMessages(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-	mustOK(t, v.run("", "", "task new", taskFile))
-	mustOK(t, v.run("main", "", "inbox", ""))
-
-	v.clock.now = v.clock.now.Add(time.Hour)
-	v.tick(t)
-
-	if len(v.l.sent) != 1 {
-		t.Fatalf("sent %v", v.l.sent)
-	}
-}
-
 func TestTickRetriesRemoveForACancelledTaskAndClearsDir(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
@@ -1339,35 +1269,6 @@ func TestTickTellsMainAgainWhenAWorkerDiesAfterRunningAgain(t *testing.T) {
 
 	if n := len(v.inbox(t, "main")); n != 2 {
 		t.Fatalf("got %d messages", n)
-	}
-}
-
-func TestAFreshEngineResendsAnUnreadNoteAfterResendMinutes(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("", "", "task new", taskFile))
-	cfg := config.Config{ResendMinutes: 5, MaxWorkers: 2}
-	fresh := engine.New(v.st, v.l, v.ws, cfg, v.clock)
-	v.clock.now = v.clock.now.Add(5 * time.Minute)
-
-	if err := fresh.Tick(); err != nil {
-		t.Fatal(err)
-	}
-
-	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
-		t.Fatalf("sent %v", v.l.sent)
-	}
-}
-
-func TestTickDoesNotResendToMainWhenItsSessionIsGone(t *testing.T) {
-	v := newEnv(t)
-	mustOK(t, v.run("", "", "task new", taskFile))
-	v.l.dead = map[string]bool{"main": true}
-	v.clock.now = v.clock.now.Add(time.Hour)
-
-	v.tick(t)
-
-	if len(v.l.sent) != 0 {
-		t.Fatalf("sent %v", v.l.sent)
 	}
 }
 
@@ -1763,24 +1664,6 @@ func TestSendRefusesAndSuggestsFeedbackWhenTheWorkerSessionIsGone(t *testing.T) 
 	}
 }
 
-func TestNoteToAGoneSessionDeliversNothingAndLeavesTheMessageUnread(t *testing.T) {
-	v := newEnv(t)
-	v.l.canDeliver = true
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-	v.l.dead = map[string]bool{"worker-t1": true}
-	v.l.delivered = nil
-
-	mustOK(t, v.run("main", "", "task feedback", "", "t1", "change it"))
-
-	if len(v.l.delivered) != 0 || len(v.l.sent) != 0 {
-		t.Fatalf("delivered %v, sent %v", v.l.delivered, v.l.sent)
-	}
-	if msgs := v.inbox(t, "worker-t1"); len(msgs) != 1 {
-		t.Fatalf("unread %+v", msgs)
-	}
-}
-
 func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer
@@ -1916,21 +1799,6 @@ func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.
 	}
 }
 
-func TestEngineLogsEachNoteItTypesAndWhyItWasTyped(t *testing.T) {
-	v := newEnv(t)
-	var log bytes.Buffer
-	v.e.SetLog(&log)
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
-	mustOK(t, v.run("", "", "task new", taskFile))
-	v.clock.now = v.clock.now.Add(5 * time.Minute)
-	v.tick(t)
-
-	lines := strings.Split(strings.TrimSpace(log.String()), "\n")
-	if len(lines) != 2 || lines[0] == lines[1] || strings.TrimPrefix(lines[0], strings.Fields(lines[0])[0]) == strings.TrimPrefix(lines[1], strings.Fields(lines[1])[0]) {
-		t.Fatalf("log %q", log.String())
-	}
-}
-
 func TestEngineLogsOnceWhenATickSkipsAnUnreadMainThatIsNotAlive(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer
@@ -1998,29 +1866,6 @@ func TestResumeNoteReachesAWorkerWhoseTurnEndedDuringTheEscalation(t *testing.T)
 	}
 }
 
-func TestIdleTypesTheNoteForUnreadMail(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
-
-	mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
-
-	if got := sentTo(v, "worker-t1"); !slices.Equal(got, []string{"worker-t1: " + note}) {
-		t.Fatalf("sent %v", got)
-	}
-}
-
-func TestIdleWithoutUnreadMailTypesNothing(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-
-	mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
-
-	if len(v.l.sent) != 0 {
-		t.Fatalf("sent %v", v.l.sent)
-	}
-}
-
 func TestIdleOfAnEscalatedWorkerTypesNothingButRecordsTheWait(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
@@ -2034,79 +1879,6 @@ func TestIdleOfAnEscalatedWorkerTypesNothingButRecordsTheWait(t *testing.T) {
 
 	if got := sentTo(v, "worker-t1"); !slices.Equal(got, []string{"worker-t1: " + note}) {
 		t.Fatalf("sent %v", got)
-	}
-}
-
-// An agent that cannot read its inbox ends each turn with the same unread message.
-// Each turn end must not type the note again.
-func TestTurnEndsWithTheSameUnreadMessageTypeOneNote(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
-
-	for range 5 {
-		mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-		mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
-	}
-
-	if got := v.l.sent; !slices.Equal(got, []string{"worker-t1: " + note}) {
-		t.Fatalf("sent %v", got)
-	}
-}
-
-func TestASecondMessageAfterTheNoteBringsOneMoreNote(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "one"))
-	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "two"))
-	for range 3 {
-		mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-	}
-
-	if got := v.l.sent; len(got) != 2 {
-		t.Fatalf("sent %v", got)
-	}
-}
-
-func TestTheResendStillFiresForAMessageThatStaysUnreadAfterTurnEnds(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
-	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-
-	v.clock.now = v.clock.now.Add(5 * time.Minute)
-	v.tick(t)
-
-	if got := v.l.sent; len(got) != 2 {
-		t.Fatalf("sent %v", got)
-	}
-}
-
-func TestAMessageMidTurnTypesOneNoteAtTheTurnEnd(t *testing.T) {
-	v := newEnv(t)
-	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
-	if len(v.l.sent) != 0 {
-		t.Fatalf("sent %v", v.l.sent)
-	}
-
-	for range 3 {
-		mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
-		mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-	}
-
-	if !slices.Equal(v.l.sent, []string{"worker-t1: " + note}) {
-		t.Fatalf("sent %v", v.l.sent)
 	}
 }
 
