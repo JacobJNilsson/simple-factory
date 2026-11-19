@@ -52,6 +52,58 @@ func (w *Workspaces) Restore(t task.Task) (dir string, err error) {
 	return w.create(t, true)
 }
 
+// Prepare fixes the branch and lease of a task and makes its folder. A task with a set Dir keeps that folder.
+// A task with a repo gets its branch once: the existing branch, the recorded one, the legacy name of a started task, or a new free name.
+// A reopened task keeps a folder or a branch that holds its work. Prepare runs git and may fetch or clone, so it can take up to the git timeout.
+// It returns the branch and lease it fixed even on an error, so a caller can record them.
+func (w *Workspaces) Prepare(t task.Task) (task.Prepared, error) {
+	p := task.Prepared{Dir: t.Dir, Branch: t.Branch, Lease: t.Lease}
+	if t.Repo != "" {
+		if err := w.chooseBranch(t, &p); err != nil {
+			return p, fmt.Errorf("choose branch: %w", err)
+		}
+	}
+	if p.Dir != "" {
+		return p, nil
+	}
+	t.Branch, t.Lease = p.Branch, p.Lease
+	dir, err := w.create(t, t.Reopened)
+	if err != nil {
+		return p, fmt.Errorf("create workspace: %w", err)
+	}
+	p.Dir = dir
+	return p, nil
+}
+
+// chooseBranch fixes the branch of a task with a repo in p.
+func (w *Workspaces) chooseBranch(t task.Task, p *task.Prepared) error {
+	if t.Existing != "" {
+		p.Branch = t.Existing
+		if p.Lease != "" {
+			return nil
+		}
+		// The checkout records the remote sha, which later pushes must still find on the remote.
+		sha, err := w.RemoteBranch(t)
+		p.Lease = sha
+		return err
+	}
+	if p.Branch = w.BranchOf(t); p.Branch != "" {
+		return nil
+	}
+	branch, err := w.newBranch(t)
+	p.Branch = branch
+	return err
+}
+
+// BranchOf returns the task's branch. A task with a repo that started before tasks carried a branch keeps its old name.
+// It returns "" for a task with no repo and for a task that has not started and has no branch yet.
+func (w *Workspaces) BranchOf(t task.Task) string {
+	if t.Branch == "" && t.Repo != "" && (t.Dir != "" || t.Reopened) {
+		return w.legacyBranch(t.ID)
+	}
+	return t.Branch
+}
+
 func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	dir = w.dir(t.ID)
 	if restore && w.holdsTask(t) {
@@ -90,7 +142,9 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 }
 
 // LegacyBranch returns the branch name from before tasks carried their own: sfy/<prefix><id>.
-func (w *Workspaces) LegacyBranch(id string) string { return "sfy/" + w.prefix + id }
+func (w *Workspaces) LegacyBranch(id string) string { return w.legacyBranch(id) }
+
+func (w *Workspaces) legacyBranch(id string) string { return "sfy/" + w.prefix + id }
 
 // branchOf returns the task's recorded branch, or the legacy name for a task that has none.
 func (w *Workspaces) branchOf(t task.Task) string {
@@ -103,7 +157,9 @@ func (w *Workspaces) branchOf(t task.Task) string {
 // NewBranch returns the first free name of the form <type>/<slug>, <type>/<slug>-2, <type>/<slug>-3 and so on.
 // A name is taken when the repo has a local branch of that name or any remote has one.
 // It fetches no branch and creates none.
-func (w *Workspaces) NewBranch(t task.Task) (string, error) {
+func (w *Workspaces) NewBranch(t task.Task) (string, error) { return w.newBranch(t) }
+
+func (w *Workspaces) newBranch(t task.Task) (string, error) {
 	repo, _, err := w.source(t.Repo)
 	if err != nil {
 		return "", err
