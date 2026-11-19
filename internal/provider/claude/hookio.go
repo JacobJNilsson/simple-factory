@@ -63,9 +63,7 @@ func HookReply(event, answer string) string {
 	r.Output.Event = "PermissionRequest"
 	r.Output.Decision.Behavior = "deny"
 	r.Output.Decision.Message = answer
-	out, err := json.Marshal(r)
-	if err != nil {
-		return answer
-	}
+	// Marshal cannot fail for a struct of strings.
+	out, _ := json.Marshal(r)
 	return string(out)
 }
