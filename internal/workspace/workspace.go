@@ -40,7 +40,7 @@ func (w *Workspaces) dir(id string) string {
 	return filepath.Join(w.home, "work", id)
 }
 
-// Prepare fixes the branch and lease of a task and makes its folder, unless t.Dir is set, and it returns the branch and lease even on an error.
+// Prepare fixes the branch and lease of a task, makes its folder unless t.Dir is set, and returns both even on an error.
 // It runs git and may block up to the git timeout, and a reopened task keeps a folder or branch that holds its work.
 func (w *Workspaces) Prepare(t task.Task) (task.Prepared, error) {
 	p := task.Prepared{Dir: t.Dir, Branch: t.Branch, Lease: t.Lease}
