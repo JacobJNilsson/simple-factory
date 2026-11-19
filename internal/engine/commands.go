@@ -252,7 +252,7 @@ func (e *Engine) taskQueue(req protocol.Request) (string, error) {
 	if err := need(t, task.New); err != nil {
 		return "", err
 	}
-	t.State = task.Queued
+	t.Queue()
 	return "", e.save(t)
 }
 
@@ -264,7 +264,7 @@ func (e *Engine) taskCancel(req protocol.Request) (string, error) {
 	if err := need(t, task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Held, task.Approved, task.Escalated); err != nil {
 		return "", err
 	}
-	t.State, t.Before = task.Cancelled, ""
+	t.Cancel()
 	if err := e.save(t); err != nil {
 		return "", err
 	}
@@ -280,7 +280,7 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 	if err := need(t, task.Approved); err != nil {
 		return "", err
 	}
-	t.State = task.Done
+	t.Complete()
 	if err := e.save(t); err != nil {
 		return "", err
 	}
@@ -322,7 +322,7 @@ func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
 	if err := e.w.Integrate(t); err != nil {
 		return "", err
 	}
-	t.State = task.Done
+	t.Complete()
 	if err := e.save(t); err != nil {
 		return "", err
 	}
@@ -352,33 +352,26 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		note += " " + holdPush
 	}
 	note += "\n\n" + body
-	switch t.State {
-	case task.Working, task.Feedback:
+	reviewer := reviewerOf(t)
+	switch t.TakeFeedback(body) {
+	case task.FeedbackToWorker:
 		if err := e.save(t); err != nil {
 			return "", err
 		}
 		return "", e.message(to, from, note)
-	case task.Review:
-		if t.Released {
-			// The running worker may push. A new worker starts without that permission, so the hold returns.
-			if err := e.endSessions(t); err != nil {
-				return "", err
-			}
-			t.State, t.Pushing, t.Released, t.Reopened = task.Queued, false, false, true
-			t.Pending = append(t.Pending, body)
-			return "", e.save(t)
+	case task.FeedbackEndsSessions:
+		// The running worker may push. A new worker starts without that permission, so the hold returns.
+		if err := e.endSessions(t); err != nil {
+			return "", err
 		}
+	case task.FeedbackStopsReviewer:
 		// The review judges a result that the feedback may change, so it ends without a verdict.
-		reviewer := reviewerOf(t)
-		t.State, t.Pushing = task.Feedback, false
 		if err := e.save(t); err != nil {
 			return "", err
 		}
 		return "", errors.Join(e.sess.end(reviewer), e.message(to, from, note))
-	case task.Held, task.Approved, task.Done, task.Cancelled:
-		t.State, t.Archived, t.Reopened, t.Pushing, t.Released = task.Queued, false, true, false, false
+	case task.FeedbackKept:
 	}
-	t.Pending = append(t.Pending, body)
 	return "", e.save(t)
 }
 
@@ -394,7 +387,7 @@ func (e *Engine) taskArchive(req protocol.Request) (string, error) {
 	if err := need(t, task.Done, task.Cancelled); err != nil {
 		return "", err
 	}
-	t.Archived = true
+	t.Archive()
 	return "", e.save(t)
 }
 
@@ -410,20 +403,19 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 	if t.Before == "" {
 		return "", fmt.Errorf("task %s has no recorded state to return to", t.ID)
 	}
-	if active(task.Task{State: t.Before}) {
+	if t.Before.Active() {
 		if err := e.refuseGone("worker-" + t.ID); err != nil {
 			return "", err
 		}
 	}
-	t.State, t.Before = t.Before, ""
-	pending := t.Pending
-	if active(t) {
-		t.Pending = nil
+	pending, err := t.Resume()
+	if err != nil {
+		return "", err
 	}
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	if !active(t) {
+	if !t.State.Active() {
 		return "", nil
 	}
 	note := fmt.Sprintf("Task %s is resumed. Go on, and report as usual.", t.ID)
@@ -541,8 +533,7 @@ func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 		return err
 	}
 	before := t
-	t.State = task.Review
-	t.Round++
+	t.StartReview()
 	if err := e.save(t); err != nil {
 		return err
 	}
@@ -639,7 +630,7 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 	}
 	if remote {
 		// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
-		t.Pushing = true
+		t.AwaitPush()
 		if err := e.save(t); err != nil {
 			return "", err
 		}
@@ -662,7 +653,6 @@ func (e *Engine) reportPushed(req protocol.Request) (string, error) {
 	if !t.Pushing {
 		return "", fmt.Errorf("task %s waits for no push, so sfy report pushed has nothing to report", t.ID)
 	}
-	t.Pushing = false
 	if t.Existing != "" {
 		// A later round must lease on the sha that this push left on the remote. A failed lookup keeps the old sha, so a push fails safe.
 		if sha, err := e.w.RemoteBranch(t); err == nil {
@@ -682,7 +672,7 @@ func pushNow(t task.Task) string {
 
 // approve moves a task to approved and tells main to integrate it. pushed is true when the worker pushed the branch.
 func (e *Engine) approve(t task.Task, from string, pushed bool) error {
-	t.State = task.Approved
+	t.Approve()
 	if err := e.save(t); err != nil {
 		return err
 	}
@@ -716,7 +706,7 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 // hold moves a task with a passed review to held and tells main that the push waits for the operator.
 // The worker never pushes, so both sessions end and the workspace stays.
 func (e *Engine) hold(t task.Task, from string) error {
-	t.State = task.Held
+	t.PlaceOnHold()
 	if err := e.save(t); err != nil {
 		return err
 	}
@@ -737,7 +727,7 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 		return "", err
 	}
 	before := t
-	t.State, t.Released, t.Pushing = task.Review, true, true
+	t.ReleasePush()
 	if err := e.save(t); err != nil {
 		return "", err
 	}
@@ -768,7 +758,7 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	reviewer := reviewerOf(t)
 	note := fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run sfy report done.\n\n%s", t.Round, t.ID, req.Body)
 	// The worker has to fix the result, so an escalated task resumes in feedback and not in a review that no longer runs.
-	t.State = task.Feedback
+	t.FailReview()
 	if t.Round >= e.cfg.ReviewRounds {
 		msgErr := e.message("worker-"+t.ID, req.Caller.Agent, note)
 		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round), true)
@@ -798,7 +788,7 @@ func (e *Engine) escalate(req protocol.Request) (string, error) {
 // escalateTask moves a task to escalated and draws the operator's attention.
 // It also tells main, unless main escalated the task itself and already knows.
 func (e *Engine) escalateTask(t task.Task, why string, tellMain bool) error {
-	t.Before, t.State = t.State, task.Escalated
+	t.Escalate()
 	if err := e.save(t); err != nil {
 		return err
 	}

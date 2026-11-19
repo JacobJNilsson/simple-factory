@@ -111,8 +111,7 @@ func (e *Engine) applyCheck(id string, run checkRun, r CheckResult) error {
 		return nil
 	}
 	// A failed check counts as a review round, so a worker that never fixes it ends up escalated.
-	t.Round++
-	t.State = task.Feedback
+	t.FailCheck()
 	note := e.checkFailedNote(t, run.command, r)
 	if t.Round >= e.cfg.ReviewRounds {
 		msgErr := e.message(worker, "sfy", note)

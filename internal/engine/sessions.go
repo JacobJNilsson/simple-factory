@@ -217,7 +217,7 @@ func (e *Engine) checkWorkers() error {
 	}
 	var errs []error
 	for _, t := range tasks {
-		if !active(t) {
+		if !t.State.Active() {
 			continue
 		}
 		name := workerOf(t)
