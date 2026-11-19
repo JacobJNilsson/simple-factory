@@ -226,7 +226,7 @@ func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg conf
 		grace = config.DefaultNoteFallbackAfter
 	}
 	e.notes = delivery.New(delivery.Deps{
-		Panes: l, Channel: ch, Mailbox: st, Now: c.Now,
+		Panes: l, Channel: ch, Mailbox: st, Now: func() time.Time { return c.Now() },
 		Logf:       e.logf,
 		Registered: e.registeredMain, Runs: e.runs, Probe: e.probe,
 		Resend: time.Duration(cfg.ResendMinutes) * time.Minute, Grace: grace,
