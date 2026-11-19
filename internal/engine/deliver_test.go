@@ -14,19 +14,19 @@ import (
 func TestTheReminderGoesThroughTheProvider(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	v.l.canDeliver = true
+	v.ch.canDeliver = true
 
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
 
-	if !slices.Equal(v.l.delivered, []string{"worker-t1: " + reminder}) || len(v.l.sent) != 0 {
-		t.Fatalf("delivered %q, typed %q", v.l.delivered, v.l.sent)
+	if !slices.Equal(v.ch.delivered, []string{"worker-t1: " + reminder}) || len(v.l.sent) != 0 {
+		t.Fatalf("delivered %q, typed %q", v.ch.delivered, v.l.sent)
 	}
 }
 
 func TestTheReminderIsTypedWhenTheProviderCannotDeliver(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	v.l.deliverErr = errors.New("no session")
+	v.ch.deliverErr = errors.New("no session")
 
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
 
@@ -37,13 +37,13 @@ func TestTheReminderIsTypedWhenTheProviderCannotDeliver(t *testing.T) {
 
 func TestAMessageToAWaitingWorkerGoesThroughTheProviderWithItsSenderAndText(t *testing.T) {
 	v := newEnv(t)
-	v.l.canDeliver = true
+	v.ch.canDeliver = true
 	waitingWorker(v, t)
 
 	mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
 
-	if want := []string{"worker-t1: From main:\nPlease rebase."}; !slices.Equal(v.l.delivered, want) || len(v.l.sent) != 0 {
-		t.Fatalf("delivered %q, typed %q", v.l.delivered, v.l.sent)
+	if want := []string{"worker-t1: From main:\nPlease rebase."}; !slices.Equal(v.ch.delivered, want) || len(v.l.sent) != 0 {
+		t.Fatalf("delivered %q, typed %q", v.ch.delivered, v.l.sent)
 	}
 }
 
@@ -60,8 +60,8 @@ func TestTheNoteFallbackDefaultIsFiveMinutes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			v := newEnv(t)
-			v.e = engine.New(v.st, v.l, v.ws, config.Config{ResendMinutes: 60, MaxWorkers: 2}, v.clock)
-			v.l.canDeliver = true
+			v.e = engine.New(v.st, v.l, v.ch, v.ws, config.Config{ResendMinutes: 60, MaxWorkers: 2}, v.clock)
+			v.ch.canDeliver = true
 			waitingWorker(v, t)
 			mustOK(t, v.run("main", "", "send", "", "worker-t1", "Please rebase."))
 

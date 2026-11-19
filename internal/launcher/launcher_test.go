@@ -105,16 +105,6 @@ func TestAFailedPreflightStartsNoSession(t *testing.T) {
 	}
 }
 
-func TestDeliverAsksTheProvider(t *testing.T) {
-	p := &fakeProvider{deliverable: true}
-
-	ok, err := New(&fakeMux{}, p, nil).Deliver("main", "hi", "")
-
-	if err != nil || !ok || len(p.delivered) != 1 {
-		t.Fatalf("ok %v, err %v, delivered %q", ok, err, p.delivered)
-	}
-}
-
 func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {
 	resumeGrace = 0
 	m, p := &fakeMux{}, &fakeProvider{}

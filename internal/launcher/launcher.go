@@ -107,17 +107,6 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 	return nil
 }
 
-// Deliver asks the provider to deliver text without typing into the pane.
-func (l launcher) Deliver(name, text, messageID string) (bool, error) {
-	return l.p.Deliver(name, text, messageID)
-}
-
-// Stuck asks the provider whether delivered text waits for a session that cannot take it.
-func (l launcher) Stuck(name string) bool { return l.p.Stuck(name) }
-
-// Drain asks the provider for the stuck text that is no stored message.
-func (l launcher) Drain(name string) (string, error) { return l.p.Drain(name) }
-
 // TrustWarning asks the provider whether it would stop at a trust prompt for dir.
 func (l launcher) TrustWarning(dir string) string { return l.p.TrustWarning(dir) }
 

@@ -43,10 +43,6 @@ func (l *launcher) Stop(string) error           { return nil }
 func (l *launcher) Notify(string, string) error { return nil }
 func (l *launcher) TrustWarning(string) string  { return "" }
 
-func (l *launcher) Deliver(string, string, string) (bool, error) { return false, nil }
-func (l *launcher) Stuck(string) bool                            { return false }
-func (l *launcher) Drain(string) (string, error)                 { return "", nil }
-
 type workspaces struct{}
 
 func (workspaces) Prepare(t task.Task) (task.Prepared, error) {
@@ -82,7 +78,7 @@ func newEngine(t *testing.T) (*engine.Engine, *launcher, store.Store) {
 	st := store.Files(t.TempDir())
 	l := &launcher{}
 	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5}
-	return engine.New(st, l, workspaces{}, cfg, clock{}), l, st
+	return engine.New(st, l, nil, workspaces{}, cfg, clock{}), l, st
 }
 
 type running struct {
@@ -338,7 +334,7 @@ func TestServeTicks(t *testing.T) {
 
 // panicEngine returns an engine whose store is nil, so Handle and Tick panic on their first read.
 func panicEngine() *engine.Engine {
-	return engine.New(nil, &launcher{}, workspaces{}, config.Config{}, clock{})
+	return engine.New(nil, &launcher{}, nil, workspaces{}, config.Config{}, clock{})
 }
 
 func TestPanicInHandleBecomesErrorAnswer(t *testing.T) {

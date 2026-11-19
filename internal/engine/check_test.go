@@ -27,7 +27,7 @@ const checkCommand = "make check"
 func (v *env) seedChecked(t *testing.T, state task.State, round int) *fakeChecker {
 	t.Helper()
 	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, CheckTimeout: 20 * time.Minute}
-	v.e = engine.New(v.st, v.l, v.ws, cfg, v.clock)
+	v.e = engine.New(v.st, v.l, v.ch, v.ws, cfg, v.clock)
 	fc := &fakeChecker{}
 	v.e.SetChecker(fc)
 	v.seed(t, state, round)

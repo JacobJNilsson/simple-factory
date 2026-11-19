@@ -88,26 +88,11 @@ type fakeLauncher struct {
 	resumes bool
 	// commands lists the specs that MainCommand received.
 	commands []engine.SessionSpec
-	// deliverable makes Deliver take a text, and delivered lists the texts it took.
-	deliverable bool
-	delivered   [][2]string
 }
 
 func (l *fakeLauncher) TrustWarning(dir string) string {
 	l.trustAsked = append(l.trustAsked, dir)
 	return l.warning
-}
-
-// Deliver delivers nothing when delivered is false, and records the text otherwise.
-func (l *fakeLauncher) Stuck(string) bool            { return false }
-func (l *fakeLauncher) Drain(string) (string, error) { return "", nil }
-
-func (l *fakeLauncher) Deliver(name, text, _ string) (bool, error) {
-	if !l.deliverable {
-		return false, nil
-	}
-	l.delivered = append(l.delivered, [2]string{name, text})
-	return true, nil
 }
 
 func (l *fakeLauncher) Start(s engine.SessionSpec) error {

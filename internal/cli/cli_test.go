@@ -136,10 +136,6 @@ func (quietLauncher) Stop(string) error              { return nil }
 func (quietLauncher) Notify(string, string) error    { return nil }
 func (quietLauncher) TrustWarning(string) string     { return "" }
 
-func (quietLauncher) Deliver(string, string, string) (bool, error) { return false, nil }
-func (quietLauncher) Stuck(string) bool                            { return false }
-func (quietLauncher) Drain(string) (string, error)                 { return "", nil }
-
 type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC) }
@@ -167,7 +163,7 @@ func liveServerWith(t *testing.T, l engine.Launcher, ws engine.Workspaces) func(
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	eng := engine.New(store.Files(t.TempDir()), l, ws, config.Config{}, fixedClock{})
+	eng := engine.New(store.Files(t.TempDir()), l, nil, ws, config.Config{}, fixedClock{})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(ctx, filepath.Join(home, "sfy.sock"), eng, time.Hour, io.Discard) }()

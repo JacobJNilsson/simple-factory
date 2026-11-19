@@ -39,7 +39,8 @@ func taskNewReply(t *testing.T, repo string, trusted ...string) string {
 	sfyHome := t.TempDir()
 	cfg := config.Config{}
 	m := &fakeMux{alive: map[string]bool{}}
-	e := engine.New(store.Files(sfyHome), launcher.New(m, claude.New(cfg, sfyHome, "/bin/sfy"), nil), workspace.New(sfyHome), cfg, fixedClock{})
+	agent := claude.New(cfg, sfyHome, "/bin/sfy")
+	e := engine.New(store.Files(sfyHome), launcher.New(m, agent, nil), agent, workspace.New(sfyHome), cfg, fixedClock{})
 	body := "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n\n## Repo\n\n" + repo + "\n"
 	ans := e.Handle(protocol.Request{Command: "task new", Body: body})
 	if !ans.OK {
