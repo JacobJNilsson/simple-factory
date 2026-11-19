@@ -7,11 +7,6 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-// active reports whether a task holds a worker slot.
-func active(t task.Task) bool {
-	return t.State == task.Working || t.State == task.Review || t.State == task.Feedback
-}
-
 // Tick does the periodic work. A step that fails does not stop the later steps, and Tick returns every error.
 func (e *Engine) Tick() error {
 	e.mu.Lock()
@@ -34,7 +29,7 @@ func (e *Engine) startQueued() error {
 	}
 	running := 0
 	for _, t := range tasks {
-		if active(t) {
+		if t.State.Active() {
 			running++
 		}
 	}
@@ -107,16 +102,13 @@ func (e *Engine) startWorker(t task.Task) error {
 		return e.startFailed(t, fmt.Errorf("task %s: %w", t.ID, err))
 	}
 	dir := p.Dir
-	t.State, t.Dir, t.Pending = task.Working, dir, nil
+	t.StartWork(dir)
 	if err := e.save(t); err != nil {
 		return errors.Join(err, e.discard(t))
 	}
 	if err := e.sess.start(t, worker, prompt); err != nil {
 		rmErr := e.discard(t)
-		t.State, t.Pending = task.Queued, pending
-		if rmErr == nil && !t.Reopened {
-			t.Dir = ""
-		}
+		t.RequeueAfterFailedStart(pending, rmErr == nil && !t.Reopened)
 		return e.startFailed(t, errors.Join(fmt.Errorf("task %s: start worker: %w", t.ID, err), rmErr, e.save(t)))
 	}
 	delete(e.startFails, t.ID)
@@ -178,7 +170,7 @@ func (e *Engine) resendNotes() error {
 	}
 	names := []string{"main"}
 	for _, t := range tasks {
-		if active(t) {
+		if t.State.Active() {
 			names = append(names, workerOf(t))
 		}
 		if t.State == task.Review {
