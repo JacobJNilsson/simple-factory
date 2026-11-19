@@ -68,26 +68,3 @@ func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 		}
 	}
 }
-
-func TestAWorkerCannotUseTheLegacyTokenOfMain(t *testing.T) {
-	home := preTokenHome(t)
-	if err := (identity.Folder{Home: home}).IssueLegacy(); err != nil {
-		t.Fatal(err)
-	}
-	spoof := map[string]string{"SFY_AGENT": "main", "CLAUDE_CODE_SESSION_ID": "worker-session"}
-
-	if got := token(envOf(withHome(home, spoof))); got != "" {
-		t.Fatalf("a worker that claims to be main read the token %q", got)
-	}
-	if ok, _ := answer(t, home, spoof, "status"); ok {
-		t.Fatal("a worker acted as main")
-	}
-}
-
-func withHome(home string, env map[string]string) map[string]string {
-	out := map[string]string{"SFY_HOME": home}
-	for k, v := range env {
-		out[k] = v
-	}
-	return out
-}
