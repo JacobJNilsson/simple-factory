@@ -43,7 +43,7 @@ func TestFatalAcceptErrorEndsServe(t *testing.T) {
 	defer func() { _ = os.RemoveAll(dir) }()
 	socket := filepath.Join(dir, "f.sock")
 	boom := errors.New("boom")
-	eng := engine.New(nil, nil, nil, config.Config{}, nil)
+	eng := engine.New(nil, nil, nil, nil, config.Config{}, nil)
 	wrap := func(ln net.Listener) net.Listener { return failingListener{ln, boom} }
 
 	done := make(chan error, 1)

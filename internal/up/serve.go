@@ -139,7 +139,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	if err := (identity.Folder{Home: p.home}).IssueLegacy(); err != nil {
 		return err
 	}
-	eng := engine.New(store.Files(p.home), p.launcher, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
+	eng := engine.New(store.Files(p.home), p.launcher, p.agent, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
 	eng.SetChecker(checker(ctx, p))

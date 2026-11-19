@@ -11,7 +11,7 @@ type Provider interface {
 	// Resumes reports whether Command would resume the recorded conversation of the main agent in spec.
 	Resumes(spec engine.SessionSpec) bool
 	// Deliver gives text to the running session without typing into its input line.
-	// It returns false, with nothing delivered, when the provider has no such way or the running session has no delivery set up.
+	// It returns false, with nothing delivered, when the provider has no such way or the running session has no delivery set up. The core then types the note.
 	// A non-empty messageID names the stored message that the text carries. It stays unread until the session takes the text.
 	Deliver(name, text, messageID string) (delivered bool, err error)
 	// Stuck reports whether delivered text waits for a session that cannot take it.

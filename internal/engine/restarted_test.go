@@ -17,13 +17,13 @@ const (
 
 func TestTheRestartNoteGoesThroughTheProviderAndNothingIsTyped(t *testing.T) {
 	v := newEnv(t)
-	v.l.canDeliver = true
+	v.ch.canDeliver = true
 
 	a := v.run("", "", "restarted", restartNote)
 
 	mustOK(t, a)
-	if want := []string{"main: " + restartNote}; !slices.Equal(v.l.delivered, want) || len(v.l.sent) != 0 || a.Text != "" {
-		t.Fatalf("delivered %q, typed %q, text %q", v.l.delivered, v.l.sent, a.Text)
+	if want := []string{"main: " + restartNote}; !slices.Equal(v.ch.delivered, want) || len(v.l.sent) != 0 || a.Text != "" {
+		t.Fatalf("delivered %q, typed %q, text %q", v.ch.delivered, v.l.sent, a.Text)
 	}
 }
 
@@ -44,14 +44,14 @@ func TestTheRestartNoteWaitsForTheTurnEndOfMain(t *testing.T) {
 
 func TestTheRestartNoteWaitsForABusyRegisteredMainEvenWhenTheProviderCanDeliver(t *testing.T) {
 	v := newEnv(t)
-	v.l.canDeliver = true
+	v.ch.canDeliver = true
 	v.e.SetRegistration(&fakeRegistration{registered: true})
 	mustOK(t, v.run("main", "", "hook busy", ""))
 
 	mustOK(t, v.run("", "", "restarted", restartNote))
 
-	if len(v.l.sent) != 0 || len(v.l.delivered) != 0 {
-		t.Fatalf("typed %q, delivered %q", v.l.sent, v.l.delivered)
+	if len(v.l.sent) != 0 || len(v.ch.delivered) != 0 {
+		t.Fatalf("typed %q, delivered %q", v.l.sent, v.ch.delivered)
 	}
 	mustOK(t, v.run("main", "", "hook idle", ""))
 	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {

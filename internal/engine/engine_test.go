@@ -35,6 +35,10 @@ type fakeLauncher struct {
 	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
 	warning    string
 	trustAsked []string
+}
+
+// fakeChannel is the provider's channel for notes.
+type fakeChannel struct {
 	// canDeliver makes Deliver take the text. deliverErr makes it fail. delivered lists the texts that it took.
 	canDeliver bool
 	deliverErr error
@@ -45,8 +49,8 @@ type fakeLauncher struct {
 	drainErr error
 }
 
-func (f *fakeLauncher) Stuck(string) bool { return f.stuck }
-func (f *fakeLauncher) Drain(string) (string, error) {
+func (f *fakeChannel) Stuck(string) bool { return f.stuck }
+func (f *fakeChannel) Drain(string) (string, error) {
 	if f.drainErr != nil {
 		return "", f.drainErr
 	}
@@ -55,7 +59,7 @@ func (f *fakeLauncher) Drain(string) (string, error) {
 	return d, nil
 }
 
-func (f *fakeLauncher) Deliver(name, text, _ string) (bool, error) {
+func (f *fakeChannel) Deliver(name, text, _ string) (bool, error) {
 	if f.deliverErr != nil {
 		return false, f.deliverErr
 	}
@@ -206,6 +210,7 @@ type env struct {
 	home  string
 	st    store.Store
 	l     *fakeLauncher
+	ch    *fakeChannel
 	ws    *fakeWorkspaces
 	clock *fakeClock
 	e     *engine.Engine
@@ -215,10 +220,10 @@ func newEnv(t *testing.T) env {
 	t.Helper()
 	home := t.TempDir()
 	st := store.Files(home)
-	l, ws := &fakeLauncher{}, &fakeWorkspaces{}
+	l, ch, ws := &fakeLauncher{}, &fakeChannel{}, &fakeWorkspaces{}
 	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, NoteFallbackAfter: 4 * time.Second, Models: config.Models{Worker: "work-model", Reviewer: "rev-model"}}
 	clock := &fakeClock{now: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
-	return env{home, st, l, ws, clock, engine.New(st, l, ws, cfg, clock)}
+	return env{home, st, l, ch, ws, clock, engine.New(st, l, ch, ws, cfg, clock)}
 }
 
 const taskFile = "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n"
@@ -1538,7 +1543,7 @@ func TestCancelTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
 func TestPassKeepsAPlainFolderThatHoldsAFile(t *testing.T) {
 	v := newEnv(t)
 	ws := workspace.New(t.TempDir())
-	v.e = engine.New(v.st, v.l, ws, config.Config{ReviewRounds: 3, MaxWorkers: 2}, v.clock)
+	v.e = engine.New(v.st, v.l, v.ch, ws, config.Config{ReviewRounds: 3, MaxWorkers: 2}, v.clock)
 	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Review, Round: 1, Source: "main"}
 	p, err := ws.Prepare(tk)
 	if err != nil {
@@ -1785,7 +1790,7 @@ func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
 
 func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.T) {
 	v := newEnv(t)
-	fresh := engine.New(v.st, v.l, v.ws, config.Config{ResendMinutes: 5, MaxWorkers: 2}, v.clock)
+	fresh := engine.New(v.st, v.l, v.ch, v.ws, config.Config{ResendMinutes: 5, MaxWorkers: 2}, v.clock)
 	answer := fresh.Handle(protocol.Request{Caller: protocol.Caller{}, Command: "task new", Body: taskFile})
 	mustOK(t, answer)
 	v.clock.now = v.clock.now.Add(5 * time.Minute)

@@ -48,14 +48,6 @@ type Launcher interface {
 	Alive(name string) (bool, error)
 	Stop(name string) error
 	Notify(name, text string) error
-	// Deliver gives text to the agent through the provider, without typing into the pane.
-	// It returns false, with nothing delivered, when the provider cannot. The caller then types the text with Send.
-	// A non-empty messageID names the stored message that the text carries. It stays unread until the agent takes the text.
-	Deliver(name, text, messageID string) (delivered bool, err error)
-	// Stuck reports whether delivered text waits for a session that cannot take it.
-	Stuck(name string) bool
-	// Drain takes the stuck text that is no stored message and returns it.
-	Drain(name string) (string, error)
 	// TrustWarning returns a warning when the provider would stop an agent at a trust prompt for dir.
 	TrustWarning(dir string) string
 }
@@ -225,7 +217,8 @@ func (e *Engine) logf(format string, args ...any) {
 }
 
 // New returns an Engine that works through the given store and interfaces.
-func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *Engine {
+// ch gives notes to sessions without typing. A nil ch means that every note is typed.
+func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg config.Config, c Clock) *Engine {
 	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
 	grace := cfg.NoteFallbackAfter
 	// A config without the setting, as tests build it, gets the default.
@@ -233,7 +226,7 @@ func New(st store.Store, l Launcher, w Workspaces, cfg config.Config, c Clock) *
 		grace = config.DefaultNoteFallbackAfter
 	}
 	e.notes = delivery.New(delivery.Deps{
-		Panes: l, Channel: l, Mailbox: st, Now: c.Now,
+		Panes: l, Channel: ch, Mailbox: st, Now: c.Now,
 		Logf:       e.logf,
 		Registered: e.registeredMain, Runs: e.runs, Probe: e.probe,
 		Resend: time.Duration(cfg.ResendMinutes) * time.Minute, Grace: grace,
