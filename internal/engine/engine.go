@@ -101,8 +101,8 @@ type Engine struct {
 	auth    Authenticator
 	mu      sync.Mutex
 	counter int
-	// agents holds what sfy knows of each session, in memory only.
-	agents map[string]*agentState
+	// sess starts, stops and checks sessions, and holds what sfy knows of each one.
+	sess *sessions
 	// notes gives notes to sessions and tracks when they may take one.
 	notes *delivery.Delivery
 	// startFails counts the failed starts in a row of each task.
@@ -119,35 +119,6 @@ type Engine struct {
 	checkSeq int
 	// down is true after sfy down stopped the sessions. The server then ends the sfy process.
 	down atomic.Bool
-}
-
-// agentState tracks the report rule and the liveness of a session. The delivery module holds the note state.
-type agentState struct {
-	// reported is true when the agent ran report or verdict in its current turn.
-	reported bool
-	// reminders counts the turns in a row that ended without a report.
-	reminders int
-	// gone is true after sfy told main that the session no longer runs.
-	gone bool
-	// aliveErrs counts the alive checks in a row that failed. A check that answers resets it.
-	aliveErrs int
-	// aliveErr is the error of the latest failed alive check.
-	aliveErr error
-	// aliveTold is true after sfy told main that it cannot tell whether the session runs.
-	aliveTold bool
-}
-
-// forget drops what sfy knows of a session that ended or starts again.
-func (e *Engine) forget(name string) {
-	delete(e.agents, name)
-	e.notes.Forget(name)
-}
-
-func (e *Engine) agent(name string) *agentState {
-	if e.agents[name] == nil {
-		e.agents[name] = &agentState{}
-	}
-	return e.agents[name]
 }
 
 // SetLog makes the engine write one line to w for each note it types and for each unread agent it skips as not alive.
@@ -219,7 +190,13 @@ func (e *Engine) logf(format string, args ...any) {
 // New returns an Engine that works through the given store and interfaces.
 // ch gives notes to sessions without typing. A nil ch means that every note is typed.
 func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg config.Config, c Clock) *Engine {
-	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, agents: map[string]*agentState{}, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
+	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
+	e.sess = &sessions{
+		l: l, cfg: cfg, logf: e.logf,
+		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },
+		branchOf:    func(t task.Task) string { return e.w.BranchOf(t) },
+		forgetNotes: func(name string) { e.notes.Forget(name) }, agents: map[string]*agentState{},
+	}
 	grace := cfg.NoteFallbackAfter
 	// A config without the setting, as tests build it, gets the default.
 	if grace <= 0 {
@@ -228,7 +205,7 @@ func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg conf
 	e.notes = delivery.New(delivery.Deps{
 		Panes: l, Channel: ch, Mailbox: st, Now: func() time.Time { return c.Now() },
 		Logf:       e.logf,
-		Registered: e.registeredMain, Runs: e.runs, Probe: e.probe,
+		Registered: e.registeredMain, Runs: e.runs, Gone: e.sess.isGone, Probe: e.sess.probeGone,
 		Resend: time.Duration(cfg.ResendMinutes) * time.Minute, Grace: grace,
 	})
 	return e
@@ -362,14 +339,10 @@ func allowedBy(k kind) string {
 }
 
 // noteCommand records what a successful command means for the caller's session.
-// A verdict ends its reviewer's session, so its state goes. Only a worker or a reviewer has a report to track.
+// Only a worker or a reviewer has a report to track.
 func (e *Engine) noteCommand(req protocol.Request) {
-	name := req.Caller.Agent
-	switch {
-	case strings.HasPrefix(req.Command, "verdict "):
-		e.forget(name)
-	case strings.HasPrefix(req.Command, "report "):
-		s := e.agent(name)
+	if strings.HasPrefix(req.Command, "report ") {
+		s := e.sess.agent(req.Caller.Agent)
 		s.reported, s.reminders = true, 0
 	}
 }

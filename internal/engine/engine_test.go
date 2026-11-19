@@ -1669,6 +1669,31 @@ func TestSendRefusesAndSuggestsFeedbackWhenTheWorkerSessionIsGone(t *testing.T) 
 	}
 }
 
+func TestSendToAWorkerWhoseAliveCheckFailsStoresTheMessage(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.aliveErr = errors.New("exit status 2")
+
+	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hello"))
+
+	if msgs := v.inbox(t, "worker-t1"); len(msgs) != 1 || msgs[0].Body != "hello" {
+		t.Fatalf("worker got %+v", msgs)
+	}
+}
+
+func TestResumeOfAWorkerWhoseAliveCheckFailsResumesTheTask(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	v.l.aliveErr = errors.New("exit status 2")
+
+	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+
+	if tk := v.state(t, "t1"); tk.State != task.Working {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
 func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer

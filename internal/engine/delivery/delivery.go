@@ -51,8 +51,10 @@ type Deps struct {
 	Registered func() bool
 	// Runs reports whether sfy still counts the session as running. Other hooks only record the wait. It may be nil.
 	Runs func(name string) bool
-	// Probe is the counted alive check that Tick runs for main. It may be nil, and Panes then answers.
-	Probe func(name string) (alive, known bool)
+	// Gone reports whether an alive check answered that the session is gone. A failed check is never gone. It may be nil, and Panes then answers.
+	Gone func(name string) bool
+	// Probe is Gone for the counted check that Tick runs for main. It may be nil, and Gone then answers.
+	Probe func(name string) bool
 	// Resend is how long an unread message waits before sfy types its note again.
 	Resend time.Duration
 	// Grace is how long the hook has to take queued messages before sfy types the note.
@@ -101,11 +103,14 @@ func New(deps Deps) *Delivery {
 	if deps.Runs == nil {
 		deps.Runs = func(string) bool { return true }
 	}
-	if deps.Probe == nil {
-		deps.Probe = func(name string) (bool, bool) {
+	if deps.Gone == nil {
+		deps.Gone = func(name string) bool {
 			alive, err := deps.Panes.Alive(name)
-			return alive, err == nil
+			return err == nil && !alive
 		}
+	}
+	if deps.Probe == nil {
+		deps.Probe = deps.Gone
 	}
 	return &Delivery{d: deps, sessions: map[string]*session{}}
 }
@@ -220,8 +225,7 @@ func (d *Delivery) tickOne(name string) error {
 	s := d.session(name)
 	down := false
 	if name == "main" {
-		alive, known := d.d.Probe(name)
-		down = known && !alive
+		down = d.d.Probe(name)
 		if !down {
 			s.skipLogged = false
 		}
@@ -424,7 +428,7 @@ func (d *Delivery) ignoreGone(name string, err error) error {
 	if err == nil {
 		return nil
 	}
-	if alive, aerr := d.d.Panes.Alive(name); aerr == nil && !alive {
+	if d.d.Gone(name) {
 		return nil
 	}
 	return err
@@ -434,7 +438,7 @@ func (d *Delivery) ignoreGone(name string, err error) error {
 // The log names the skip once, until the session lives again.
 func (d *Delivery) reachable(name string) bool {
 	s := d.session(name)
-	if alive, err := d.d.Panes.Alive(name); err != nil || alive {
+	if !d.d.Gone(name) {
 		s.skipLogged = false
 		return true
 	}

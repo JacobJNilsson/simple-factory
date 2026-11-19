@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -60,6 +61,24 @@ func TestTaskPushReleasesTheHoldAndStartsAWorkerThatMayPush(t *testing.T) {
 	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed."))
 	if tk := v.state(t, "t1"); tk.State != task.Approved {
 		t.Fatalf("got %+v", tk)
+	}
+}
+
+func TestThePushWorkerStartsWithTheSpecOfTheFirstWorker(t *testing.T) {
+	v := newEnv(t)
+	v.heldReview(t)
+	first := v.l.started[0]
+
+	mustOK(t, v.run("main", "", "task push", "", "t1"))
+
+	last := v.l.started[len(v.l.started)-1]
+	if !first.NoPush || last.NoPush {
+		t.Fatalf("NoPush of the first worker %v and the push worker %v", first.NoPush, last.NoPush)
+	}
+	first.Prompt, last.Prompt = "", ""
+	first.NoPush = false
+	if !reflect.DeepEqual(first, last) {
+		t.Fatalf("first worker %+v, push worker %+v", first, last)
 	}
 }
 

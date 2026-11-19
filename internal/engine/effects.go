@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/JacobJNilsson/simple-factory/internal/store"
@@ -25,9 +24,6 @@ func (e *Engine) refreshStatus() error {
 	return e.st.WriteStatus(store.RenderStatus(tasks))
 }
 
-// taskFile returns the path of the task's task.md for a session spec or a note.
-func (e *Engine) taskFile(id string) (string, error) { return e.st.TaskFile(id) }
-
 // storeMessage stores a message without a note. Its id sorts in send order and never repeats, because the counter breaks ties within one clock tick.
 func (e *Engine) storeMessage(to, from, body string) error {
 	e.counter++
@@ -48,38 +44,16 @@ func (e *Engine) message(to, from, body string) error {
 // noReportNote is the reminder for a turn that ended without a report.
 const noReportNote = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
 
-// stop ends a session. A failure counts only while the session still runs, because a session may already be gone.
-func (e *Engine) stop(name string) error {
-	err := e.l.Stop(name)
-	if err == nil {
-		return nil
-	}
-	alive, aerr := e.l.Alive(name)
-	if aerr != nil {
-		return errors.Join(err, fmt.Errorf("%w of %s: %w", errAliveUnknown, name, aerr))
-	}
-	if !alive {
-		return nil
-	}
-	return err
-}
-
-// errAliveUnknown marks a failure that follows from an alive check that could not tell whether a session runs.
-var errAliveUnknown = errors.New("cannot tell whether the session runs")
-
 // endSessions stops the worker and every reviewer of a task, and forgets their state.
 func (e *Engine) endSessions(t task.Task) error {
-	if err := e.stop("worker-" + t.ID); err != nil {
+	if err := e.sess.end(workerOf(t)); err != nil {
 		return err
 	}
-	e.forget("worker-" + t.ID)
 	delete(e.checking, t.ID)
 	for r := 1; r <= t.Round; r++ {
-		name := fmt.Sprintf("review-%s-%d", t.ID, r)
-		if err := e.stop(name); err != nil {
+		if err := e.sess.end(reviewerOfRound(t.ID, r)); err != nil {
 			return err
 		}
-		e.forget(name)
 	}
 	return nil
 }
