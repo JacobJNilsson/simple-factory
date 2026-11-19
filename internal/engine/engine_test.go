@@ -3,6 +3,7 @@ package engine_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -135,15 +136,47 @@ func (f *fakeWorkspaces) RemoteBranch(task.Task) (string, error) {
 
 func (f *fakeWorkspaces) HasRemote(task.Task) (bool, error) { return !f.localOnly, nil }
 
-func (f *fakeWorkspaces) Create(t task.Task) (string, error) {
-	if f.createErr != nil {
-		return "", f.createErr
+// Prepare copies a simple version of the real rules, so that tests can seed a legacy task.
+func (f *fakeWorkspaces) Prepare(t task.Task) (task.Prepared, error) {
+	p := task.Prepared{Dir: t.Dir, Branch: t.Branch, Lease: t.Lease}
+	if t.Repo != "" {
+		switch {
+		case t.Existing != "":
+			p.Branch = t.Existing
+			if p.Lease == "" {
+				sha, err := f.RemoteBranch(t)
+				p.Lease = sha
+				if err != nil {
+					return p, fmt.Errorf("choose branch: %w", err)
+				}
+			}
+		case f.BranchOf(t) != "":
+			p.Branch = f.BranchOf(t)
+		case f.branchErr != nil:
+			return p, fmt.Errorf("choose branch: %w", f.branchErr)
+		default:
+			f.branchesMade++
+			p.Branch = "feat/" + strings.ToLower(t.ID) + "-title"
+		}
 	}
-	return "/work/" + t.ID, nil
+	if p.Dir != "" {
+		return p, nil
+	}
+	if t.Reopened {
+		f.restored = append(f.restored, t.ID)
+	}
+	if f.createErr != nil {
+		return p, fmt.Errorf("create workspace: %w", f.createErr)
+	}
+	p.Dir = "/work/" + t.ID
+	return p, nil
 }
-func (f *fakeWorkspaces) Restore(t task.Task) (string, error) {
-	f.restored = append(f.restored, t.ID)
-	return f.Create(t)
+
+func (f *fakeWorkspaces) BranchOf(t task.Task) string {
+	if t.Branch == "" && t.Repo != "" && (t.Dir != "" || t.Reopened) {
+		return "sfy/" + t.ID
+	}
+	return t.Branch
 }
 func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 	if f.beforeCheck != nil {
@@ -151,19 +184,10 @@ func (f *fakeWorkspaces) HoldsWork(t task.Task) (bool, error) {
 	}
 	return f.dirty[t.ID], nil
 }
-func (f *fakeWorkspaces) LegacyBranch(id string) string { return "sfy/" + id }
 func (f *fakeWorkspaces) RepoFolder(repo string) string { return "/folder/" + repo }
 func (f *fakeWorkspaces) Integrate(t task.Task) error {
 	f.integrated = append(f.integrated, t.ID)
 	return f.integrateErr
-}
-
-func (f *fakeWorkspaces) NewBranch(t task.Task) (string, error) {
-	if f.branchErr != nil {
-		return "", f.branchErr
-	}
-	f.branchesMade++
-	return "feat/" + strings.ToLower(t.ID) + "-title", nil
 }
 
 func (f *fakeWorkspaces) Remove(t task.Task) error {
@@ -1615,10 +1639,11 @@ func TestPassKeepsAPlainFolderThatHoldsAFile(t *testing.T) {
 	ws := workspace.New(t.TempDir())
 	v.e = engine.New(v.st, v.l, ws, config.Config{ReviewRounds: 3, MaxWorkers: 2}, v.clock)
 	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Review, Round: 1, Source: "main"}
-	dir, err := ws.Create(tk)
+	p, err := ws.Prepare(tk)
 	if err != nil {
 		t.Fatal(err)
 	}
+	dir := p.Dir
 	tk.Dir = dir
 	if err := v.st.Create(tk); err != nil {
 		t.Fatal(err)

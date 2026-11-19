@@ -72,6 +72,21 @@ func TestAWorkerThatCannotCheckOutTheBranchFailsToStart(t *testing.T) {
 	}
 }
 
+func TestAnEscalatedStartKeepsTheBranchAndLeaseThatPrepareReturned(t *testing.T) {
+	v := newEnv(t)
+	v.ws.remoteSHA = "23da1c9"
+	v.ws.createErr = errors.New("disk full")
+	v.seedExisting(t, false)
+
+	for range 3 {
+		_ = v.e.Tick()
+	}
+
+	if tk := v.state(t, "t1"); tk.State != task.Escalated || tk.Branch != "chore/pr-branch" || tk.Lease != "23da1c9" {
+		t.Fatalf("got %+v", tk)
+	}
+}
+
 func TestEditCannotChangeTheBranchOnceTheTaskHasAWorkspace(t *testing.T) {
 	v := newEnv(t)
 	v.seedExisting(t, false)

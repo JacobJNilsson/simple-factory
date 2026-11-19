@@ -127,7 +127,7 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 		b.WriteString("Archived: yes\n")
 	}
 	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n", t.Round, t.Progress)
-	if branch := e.branchOf(t); branch != "" {
+	if branch := e.w.BranchOf(t); branch != "" {
 		fmt.Fprintf(&b, "Branch: %s\n", branch)
 	}
 	if t.Model != "" {
@@ -317,7 +317,7 @@ func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
 		return "", err
 	}
 	if cfg.NoMerge {
-		return "", &NoMergeError{Task: t.ID, Branch: e.branchOf(t), Repo: e.w.RepoFolder(t.Repo)}
+		return "", &NoMergeError{Task: t.ID, Branch: e.w.BranchOf(t), Repo: e.w.RepoFolder(t.Repo)}
 	}
 	if err := e.w.Integrate(t); err != nil {
 		return "", err
@@ -700,7 +700,7 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 		if pushed {
 			where = "The repo has a remote, and the worker pushed the branch."
 		}
-		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s with: sfy task integrate %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+		note = fmt.Sprintf("Task %s is approved. %s Integrate branch %s of the repo folder %s with: sfy task integrate %s", t.ID, where, e.w.BranchOf(t), e.w.RepoFolder(t.Repo), t.ID)
 		// A repo whose config cannot be read counts as no-merge, because the safe side is to leave the merge to the operator.
 		if t.Existing != "" {
 			note = fmt.Sprintf("Task %s is approved. The worker pushed the work to the existing branch %s, so there is nothing to integrate. Tell the operator, then run: sfy task complete %s", t.ID, t.Existing, t.ID)
@@ -708,7 +708,7 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 				note = fmt.Sprintf("Task %s is approved, but its worker did not push. Branch %s is not updated. Tell the operator.", t.ID, t.Existing)
 			}
 		} else if cfg, err := e.configFor(t); err != nil || cfg.NoMerge {
-			note = fmt.Sprintf("Task %s is approved. %s The repo is set to no-merge, so do not integrate it. Leave branch %s of the repo folder %s for the operator to merge by hand, and tell the operator in the chat. When the operator has merged it, run: sfy task complete %s", t.ID, where, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+			note = fmt.Sprintf("Task %s is approved. %s The repo is set to no-merge, so do not integrate it. Leave branch %s of the repo folder %s for the operator to merge by hand, and tell the operator in the chat. When the operator has merged it, run: sfy task complete %s", t.ID, where, e.w.BranchOf(t), e.w.RepoFolder(t.Repo), t.ID)
 			if err != nil {
 				note += fmt.Sprintf("\n\nThe repo config could not be read: %v", err)
 			}
@@ -728,7 +728,7 @@ func (e *Engine) hold(t task.Task, from string) error {
 	if err := e.save(t); err != nil {
 		return err
 	}
-	note := fmt.Sprintf("Task %s passed its review, and its push is on hold. Branch %s of the repo folder %s is not pushed. The push waits for the operator. Tell the operator, and run sfy task push %s only when the operator says to push.", t.ID, e.branchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+	note := fmt.Sprintf("Task %s passed its review, and its push is on hold. Branch %s of the repo folder %s is not pushed. The push waits for the operator. Tell the operator, and run sfy task push %s only when the operator says to push.", t.ID, e.w.BranchOf(t), e.w.RepoFolder(t.Repo), t.ID)
 	if err := e.message("main", from, note); err != nil {
 		return err
 	}
@@ -756,7 +756,7 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 		err = e.l.Start(SessionSpec{
 			Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir, TaskFile: taskFile,
 			Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: true,
-			Branch: e.branchOf(t), Lease: t.Lease,
+			Branch: e.w.BranchOf(t), Lease: t.Lease,
 		})
 	}
 	if err != nil {

@@ -103,20 +103,12 @@ const maxStartFailures = 3
 // A reopened task has earlier work in its workspace, so a failed start keeps the workspace.
 func (e *Engine) startWorker(t task.Task) error {
 	prompt, pending := workerPrompt(t), t.Pending
-	dir := t.Dir
-	if err := e.chooseBranch(&t); err != nil {
-		return e.startFailed(t, fmt.Errorf("task %s: choose branch: %w", t.ID, err))
+	p, err := e.w.Prepare(t)
+	t.Branch, t.Lease = p.Branch, p.Lease
+	if err != nil {
+		return e.startFailed(t, fmt.Errorf("task %s: %w", t.ID, err))
 	}
-	if dir == "" {
-		create := e.w.Create
-		if t.Reopened {
-			create = e.w.Restore
-		}
-		var err error
-		if dir, err = create(t); err != nil {
-			return e.startFailed(t, fmt.Errorf("task %s: create workspace: %w", t.ID, err))
-		}
-	}
+	dir := p.Dir
 	t.State, t.Dir, t.Pending = task.Working, dir, nil
 	if err := e.save(t); err != nil {
 		return errors.Join(err, e.discard(t))
@@ -142,38 +134,6 @@ func (e *Engine) startWorker(t task.Task) error {
 	delete(e.checking, t.ID)
 	e.agents[name] = &agentState{}
 	return nil
-}
-
-// branchOf returns the task's branch. A task with a repo that started before tasks carried a branch keeps its old name.
-// It returns "" for a task with no repo and for a task that has not started and has no branch yet.
-func (e *Engine) branchOf(t task.Task) string {
-	if t.Branch == "" && t.Repo != "" && (t.Dir != "" || t.Reopened) {
-		return e.w.LegacyBranch(t.ID)
-	}
-	return t.Branch
-}
-
-// chooseBranch fixes the branch of a task with a repo, once.
-func (e *Engine) chooseBranch(t *task.Task) error {
-	if t.Repo == "" {
-		return nil
-	}
-	if t.Existing != "" {
-		t.Branch = t.Existing
-		if t.Lease != "" {
-			return nil
-		}
-		// The checkout records the remote sha, which later pushes must still find on the remote.
-		sha, err := e.w.RemoteBranch(*t)
-		t.Lease = sha
-		return err
-	}
-	if t.Branch = e.branchOf(*t); t.Branch != "" {
-		return nil
-	}
-	branch, err := e.w.NewBranch(*t)
-	t.Branch = branch
-	return err
 }
 
 // discard removes the workspace of a task whose start failed, unless it holds the earlier work of a reopened task.
