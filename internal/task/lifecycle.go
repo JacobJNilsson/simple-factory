@@ -71,7 +71,7 @@ func (t *Task) Complete() { t.State = Done }
 
 // Cancel moves any task that is not done or cancelled to cancelled.
 func (t *Task) Cancel() {
-	t.State, t.Before = Cancelled, ""
+	t.State, t.Before, t.Pushing, t.Released = Cancelled, "", false, false
 }
 
 // Archive hides a done or cancelled task from the default views.

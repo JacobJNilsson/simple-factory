@@ -133,6 +133,19 @@ func TestResumeWithoutAnEarlierStateFails(t *testing.T) {
 	}
 }
 
+func TestCancelClearsThePushFlags(t *testing.T) {
+	for _, in := range []task.Task{
+		{State: task.Review, Pushing: true, Released: true},
+		{State: task.Escalated, Before: task.Review, Pushing: true},
+	} {
+		in.Cancel()
+		want := task.Task{State: task.Cancelled}
+		if !reflect.DeepEqual(in, want) {
+			t.Errorf("got %+v, want %+v", in, want)
+		}
+	}
+}
+
 func TestStateActive(t *testing.T) {
 	want := map[task.State]bool{task.Working: true, task.Review: true, task.Feedback: true}
 	for _, s := range []task.State{task.New, task.Queued, task.Working, task.Review, task.Feedback, task.Held, task.Approved, task.Done, task.Escalated, task.Cancelled} {
@@ -184,7 +197,7 @@ func TestTransitionsKeepTheInvariants(t *testing.T) {
 		"release":  {{State: task.Held}},
 		"approve":  {{State: task.Review, Pushing: true}},
 		"complete": {{State: task.Approved}},
-		"cancel":   {{State: task.New}, {State: task.Escalated, Before: task.Working}},
+		"cancel":   {{State: task.New}, {State: task.Escalated, Before: task.Working}, {State: task.Review, Pushing: true, Released: true}, {State: task.Escalated, Before: task.Review, Pushing: true}},
 		"archive":  {{State: task.Done}, {State: task.Cancelled}},
 		"escalate": {{State: task.New}, {State: task.Queued}, {State: task.Working}, {State: task.Review, Pushing: true}, {State: task.Feedback}},
 		"resume":   {{State: task.Escalated, Before: task.Review, Pushing: true}, {State: task.Escalated, Before: task.Working, Pending: []string{"a"}}},
