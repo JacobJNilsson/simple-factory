@@ -241,7 +241,7 @@ func (e *Engine) noteTaskFile(t task.Task, name string) error {
 	if err := e.storeMessage(name, "main", "The task file for "+t.ID+" changed. Read "+path+" with the Read tool."); err != nil {
 		return err
 	}
-	return e.ignoreGone(name, e.noteOrQueue(name, "task file changed"))
+	return e.notes.Message(name, "task file changed")
 }
 
 func (e *Engine) taskQueue(req protocol.Request) (string, error) {
@@ -375,7 +375,7 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 			return "", err
 		}
 		err := e.stop(reviewer)
-		delete(e.agents, reviewer)
+		e.forget(reviewer)
 		return "", errors.Join(err, e.message(to, from, note))
 	case task.Held, task.Approved, task.Done, task.Cancelled:
 		t.State, t.Archived, t.Reopened, t.Pushing, t.Released = task.Queued, false, true, false, false
@@ -445,7 +445,7 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 			errs = append(errs, err)
 			continue
 		}
-		errs = append(errs, e.ignoreGone(name, e.noteOrQueue(name, "new message")))
+		errs = append(errs, e.notes.Message(name, "new message"))
 	}
 	return "", errors.Join(errs...)
 }
@@ -572,7 +572,7 @@ func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 		}
 		return err
 	}
-	e.agents[reviewerOf(t)] = &agentState{}
+	e.forget(reviewerOf(t))
 	return nil
 }
 
@@ -762,7 +762,7 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", errors.Join(err, e.save(before))
 	}
-	e.agents[name] = &agentState{}
+	e.forget(name)
 	return "", nil
 }
 
@@ -799,21 +799,7 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 }
 
 func (e *Engine) inbox(req protocol.Request) (string, error) {
-	msgs, err := e.st.Unread(req.Caller.Agent)
-	if err != nil {
-		return "", err
-	}
-	// The provider's stuck text covers notes that no hook drained. Stuck messages are unread, so msgs already holds them.
-	// A failed drain is only logged, so the messages still reach the agent.
-	stuck, derr := e.l.Drain(req.Caller.Agent)
-	if derr != nil {
-		e.logf("draining the stuck notes of %s failed: %v", req.Caller.Agent, derr)
-	}
-	out := formatMessages(msgs)
-	if stuck != "" {
-		out += stuck + "\n"
-	}
-	return out, e.st.MarkRead(req.Caller.Agent, messageIDs(msgs))
+	return e.notes.Inbox(req.Caller.Agent)
 }
 
 func (e *Engine) escalate(req protocol.Request) (string, error) {
@@ -862,51 +848,29 @@ func (e *Engine) runs(name string) bool {
 // A session that has a queued note gets it from the Stop hook, which reports busy instead, because the turn goes on.
 func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
-	s := e.agent(name)
-	// The pane waits even when the task does not run. A later message must find that out.
-	s.waiting, s.hookSince, s.busy = true, true, false
-	if !e.runs(name) {
-		return "", nil
-	}
 	var errs []error
-	errs = append(errs, e.typeHeld(name))
-	if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
-		errs = append(errs, e.remind(name, s))
+	reminder := ""
+	if e.runs(name) {
+		s := e.agent(name)
+		if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
+			var err error
+			reminder, err = e.reminder(name, s)
+			errs = append(errs, err)
+		}
+		s.reported = false
 	}
-	s.reported = false
-	unread, err := e.st.Unread(name)
-	if err != nil {
-		return "", errors.Join(append(errs, err)...)
-	}
-	s.restartGrace(e.c.Now())
-	if len(unread) > 0 && e.noteDue(name, unread) {
-		errs = append(errs, e.noteMessages(name, "turn ended"))
-	}
-	return "", errors.Join(errs...)
+	return "", errors.Join(append(errs, e.notes.TurnEnded(name, reminder))...)
 }
 
 // hookIdle runs when the provider reports that a session waits for input.
 // It types no reminder, because no turn just ended.
 func (e *Engine) hookIdle(req protocol.Request) (string, error) {
-	name := req.Caller.Agent
-	s := e.agent(name)
-	s.waiting, s.hookSince, s.busy = true, true, false
-	if !e.runs(name) {
-		return "", nil
-	}
-	typeErr := e.typeHeld(name)
-	s.restartGrace(e.c.Now())
-	unread, err := e.st.Unread(name)
-	if err != nil || len(unread) == 0 || !e.noteDue(name, unread) {
-		return "", errors.Join(typeErr, err)
-	}
-	return "", errors.Join(typeErr, e.noteMessages(name, "idle"))
+	return "", e.notes.Idle(req.Caller.Agent)
 }
 
 // hookBusy runs when a prompt reaches the session, so a turn starts. The pane takes no typed note until the turn ends.
 func (e *Engine) hookBusy(req protocol.Request) (string, error) {
-	s := e.agent(req.Caller.Agent)
-	s.waiting, s.hookSince, s.busy = false, false, true
+	e.notes.Busy(req.Caller.Agent)
 	return "", nil
 }
 
@@ -915,7 +879,7 @@ func (e *Engine) restarted(req protocol.Request) (string, error) {
 	if strings.TrimSpace(req.Body) == "" {
 		return "", errors.New("restarted needs a note")
 	}
-	held, err := e.noteWhenWaiting("main", req.Body)
+	held, err := e.notes.Note("main", req.Body)
 	if held {
 		return restartHeld, err
 	}
@@ -925,17 +889,17 @@ func (e *Engine) restarted(req protocol.Request) (string, error) {
 // restartHeld is the answer to restarted when the note waits for the main agent.
 const restartHeld = "The main agent gets the note when it waits."
 
-// remind types the reminder for a missing report. After maxReminders it tells main once and types nothing.
-func (e *Engine) remind(name string, s *agentState) error {
+// reminder counts a turn that ended without a report and returns the reminder text.
+// After maxReminders it tells main once and returns no text.
+func (e *Engine) reminder(name string, s *agentState) (string, error) {
 	s.reminders++
 	if s.reminders > maxReminders {
 		if s.reminders > maxReminders+1 {
-			return nil
+			return "", nil
 		}
-		return e.message("main", "sfy", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
+		return "", e.message("main", "sfy", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
 	}
-	s.waiting, s.hookSince = false, false
-	return e.note(name, noReportNote)
+	return noReportNote, nil
 }
 
 // hookPermission runs when an agent's permission prompt opens.
@@ -949,7 +913,7 @@ func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 		if !runs {
 			return "", nil
 		}
-		e.agent(name).hookSince = true
+		e.notes.Prompted(name)
 		return "", e.l.Notify("main", "Main waits at a permission prompt. "+req.Body)
 	}
 	// A stale agent of a finished task gets the denial too, because its prompt would wait for nobody.
