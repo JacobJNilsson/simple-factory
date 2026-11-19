@@ -16,6 +16,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -83,6 +84,8 @@ type options struct {
 	launcher launcher.Launcher
 	// answers reports whether a sfy process answers on its socket.
 	answers func() bool
+	// call sends a request to the running sfy process.
+	call func(protocol.Request) (protocol.Answer, error)
 	// wait limits how long run waits for the socket, and poll sets the pause between checks.
 	wait, poll time.Duration
 	out        io.Writer

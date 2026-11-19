@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -37,6 +38,11 @@ func overrideMainPrompt(t *testing.T, home string) {
 	if err := os.WriteFile(filepath.Join(dir, "main.md"), []byte("A new prompt.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// noteRequest returns the request that restart sends to give the main agent a note.
+func noteRequest(body string) protocol.Request {
+	return protocol.Request{Command: "restarted", Body: body}
 }
 
 func TestRestartStopsAndStartsOnlyServe(t *testing.T) {
@@ -83,28 +89,14 @@ func TestRestartNotesThatSfyRestarted(t *testing.T) {
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
-	want := [][2]string{{"main", "sfy restarted."}}
-	if !reflect.DeepEqual(r.m.sends, want) {
-		t.Errorf("sends = %q, want %q", r.m.sends, want)
+	if want := []protocol.Request{noteRequest("sfy restarted.")}; !reflect.DeepEqual(r.calls, want) || len(r.m.sends) != 0 {
+		t.Errorf("requests %q, typed %q, want %q and nothing typed", r.calls, r.m.sends, want)
 	}
 }
 
-func TestRestartDeliversTheNoteThroughTheProviderWhenItCan(t *testing.T) {
+// The main agent often runs sfy restart itself, so its turn is busy and the pane takes no typed note.
+func TestRestartTypesNothingIntoARegisteredMainPane(t *testing.T) {
 	r := runningRig(t)
-	r.l.deliverable = true
-
-	if err := restart(r.o); err != nil {
-		t.Fatal(err)
-	}
-
-	if want := [][2]string{{"main", "sfy restarted."}}; !reflect.DeepEqual(r.l.delivered, want) || len(r.m.sends) != 0 {
-		t.Fatalf("delivered %q, typed %q", r.l.delivered, r.m.sends)
-	}
-}
-
-func TestRestartTypesTheNoteForARegisteredMainAgent(t *testing.T) {
-	r := runningRig(t)
-	r.l.deliverable = true
 	if err := registration.Write(r.o.home, registration.Record{ID: "s-main"}); err != nil {
 		t.Fatal(err)
 	}
@@ -113,8 +105,39 @@ func TestRestartTypesTheNoteForARegisteredMainAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := [][2]string{{"main", "sfy restarted."}}; !reflect.DeepEqual(r.m.sends, want) || len(r.l.delivered) != 0 {
-		t.Fatalf("delivered %q, typed %q", r.l.delivered, r.m.sends)
+	if len(r.m.sends) != 0 {
+		t.Fatalf("typed %q", r.m.sends)
+	}
+	if want := []protocol.Request{noteRequest("sfy restarted.")}; !reflect.DeepEqual(r.calls, want) {
+		t.Fatalf("requests %q, want %q", r.calls, want)
+	}
+}
+
+func TestRestartFailsWhenTheNoteRequestFails(t *testing.T) {
+	r := runningRig(t)
+	closed := errors.New("socket closed")
+	r.callErr = closed
+
+	err := restart(r.o)
+
+	if !errors.Is(err, closed) {
+		t.Fatalf("err = %v", err)
+	}
+	if strings.Contains(r.out.String(), "Told the main agent.") {
+		t.Errorf("output %q", r.out.String())
+	}
+}
+
+func TestRestartPrintsWhatTheEngineSaysWhenItHoldsTheNote(t *testing.T) {
+	r := runningRig(t)
+	r.callText = "The main agent gets the note when it waits."
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "Stopped the sfy process.\nStarted the sfy process.\nThe main agent gets the note when it waits.\n"; r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }
 
@@ -125,9 +148,9 @@ func TestRestartNotesAChangedPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(r.o.home, "main-prompt.md")
-	want := [][2]string{{"main", "sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool."}}
-	if !reflect.DeepEqual(r.m.sends, want) {
-		t.Fatalf("sends = %q, want %q", r.m.sends, want)
+	want := []protocol.Request{noteRequest("sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool.")}
+	if !reflect.DeepEqual(r.calls, want) {
+		t.Fatalf("requests = %q, want %q", r.calls, want)
 	}
 	if b, _ := os.ReadFile(path); string(b) != "A new prompt.\n" {
 		t.Errorf("%s holds %q", path, b)
@@ -147,9 +170,9 @@ func TestRestartNotesAChangedPromptAddition(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(r.o.home, "main-prompt.md")
-	want := [][2]string{{"main", "sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool."}}
-	if !reflect.DeepEqual(r.m.sends, want) {
-		t.Fatalf("sends = %q, want %q", r.m.sends, want)
+	want := []protocol.Request{noteRequest("sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool.")}
+	if !reflect.DeepEqual(r.calls, want) {
+		t.Fatalf("requests = %q, want %q", r.calls, want)
 	}
 	if b, _ := os.ReadFile(path); !strings.HasSuffix(string(b), "\n\nExtra rule.\n") {
 		t.Errorf("%s lacks the addition", path)
@@ -162,14 +185,14 @@ func TestRestartNotesAChangedPromptOnce(t *testing.T) {
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
-	r.m.sends = nil
+	r.calls = nil
 	r.m.alive["sfy"] = true
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
-	want := [][2]string{{"main", "sfy restarted."}}
-	if !reflect.DeepEqual(r.m.sends, want) {
-		t.Errorf("second restart sends = %q, want %q", r.m.sends, want)
+	want := []protocol.Request{noteRequest("sfy restarted.")}
+	if !reflect.DeepEqual(r.calls, want) {
+		t.Errorf("second restart requests = %q, want %q", r.calls, want)
 	}
 }
 
@@ -184,8 +207,8 @@ func TestRestartWithNothingRunningActsLikeUp(t *testing.T) {
 	if len(r.m.starts) != 1 || len(r.l.specs) != 1 {
 		t.Errorf("starts: %v %v", r.m.starts, r.l.specs)
 	}
-	if len(r.m.sends) != 0 {
-		t.Errorf("sends = %q, want none for a new main agent", r.m.sends)
+	if len(r.m.sends) != 0 || len(r.calls) != 0 {
+		t.Errorf("sends = %q, requests %q, want none for a new main agent", r.m.sends, r.calls)
 	}
 	if r.out.String() != "Started the sfy process and the main agent (new conversation).\n" {
 		t.Errorf("output %q", r.out.String())
@@ -201,8 +224,8 @@ func TestRestartWithDeadMainStartsMain(t *testing.T) {
 	if !reflect.DeepEqual(r.m.stops, []string{"sfy"}) {
 		t.Errorf("stops = %v", r.m.stops)
 	}
-	if len(r.l.specs) != 1 || len(r.m.sends) != 0 {
-		t.Errorf("starts %v, sends %q", r.l.specs, r.m.sends)
+	if len(r.l.specs) != 1 || len(r.m.sends) != 0 || len(r.calls) != 0 {
+		t.Errorf("starts %v, sends %q, requests %q", r.l.specs, r.m.sends, r.calls)
 	}
 	if !strings.HasPrefix(r.out.String(), "Stopped the sfy process.\nStarted ") {
 		t.Errorf("output %q", r.out.String())
@@ -216,7 +239,7 @@ func TestRestartFailsWhenServeKeepsAnswering(t *testing.T) {
 	if err := restart(r.o); !errors.Is(err, ErrNotStopped) {
 		t.Fatalf("err = %v", err)
 	}
-	if len(r.m.starts) != 0 || len(r.l.specs) != 0 || len(r.m.sends) != 0 {
+	if len(r.m.starts) != 0 || len(r.l.specs) != 0 || len(r.m.sends) != 0 || len(r.calls) != 0 {
 		t.Error("restart started or sent something after a failed stop")
 	}
 }

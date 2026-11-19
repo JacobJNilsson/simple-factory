@@ -864,11 +864,12 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
 	s := e.agent(name)
 	// The pane waits even when the task does not run. A later message must find that out.
-	s.waiting, s.hookSince = true, true
+	s.waiting, s.hookSince, s.busy = true, true, false
 	if !e.runs(name) {
 		return "", nil
 	}
 	var errs []error
+	errs = append(errs, e.typeHeld(name))
 	if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
 		errs = append(errs, e.remind(name, s))
 	}
@@ -889,24 +890,40 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 func (e *Engine) hookIdle(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
 	s := e.agent(name)
-	s.waiting, s.hookSince = true, true
+	s.waiting, s.hookSince, s.busy = true, true, false
 	if !e.runs(name) {
 		return "", nil
 	}
+	typeErr := e.typeHeld(name)
 	s.restartGrace(e.c.Now())
 	unread, err := e.st.Unread(name)
 	if err != nil || len(unread) == 0 || !e.noteDue(name, unread) {
-		return "", err
+		return "", errors.Join(typeErr, err)
 	}
-	return "", e.noteMessages(name, "idle")
+	return "", errors.Join(typeErr, e.noteMessages(name, "idle"))
 }
 
 // hookBusy runs when a prompt reaches the session, so a turn starts. The pane takes no typed note until the turn ends.
 func (e *Engine) hookBusy(req protocol.Request) (string, error) {
 	s := e.agent(req.Caller.Agent)
-	s.waiting, s.hookSince = false, false
+	s.waiting, s.hookSince, s.busy = false, false, true
 	return "", nil
 }
+
+// restarted runs when a new sfy process tells the main agent that sfy restarted. The note waits until the main agent waits for input.
+func (e *Engine) restarted(req protocol.Request) (string, error) {
+	if strings.TrimSpace(req.Body) == "" {
+		return "", errors.New("restarted needs a note")
+	}
+	held, err := e.noteWhenWaiting("main", req.Body)
+	if held {
+		return restartHeld, err
+	}
+	return "", err
+}
+
+// restartHeld is the answer to restarted when the note waits for the main agent.
+const restartHeld = "The main agent gets the note when it waits."
 
 // remind types the reminder for a missing report. After maxReminders it tells main once and types nothing.
 func (e *Engine) remind(name string, s *agentState) error {

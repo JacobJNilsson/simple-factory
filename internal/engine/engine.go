@@ -151,6 +151,12 @@ type agentState struct {
 	aliveErr error
 	// aliveTold is true after sfy told main that it cannot tell whether the session runs.
 	aliveTold bool
+	// held lists the plain notes that wait until the session waits for input, oldest first.
+	held []string
+	// heldAt is when the oldest held note arrived. It is zero when nothing is held.
+	heldAt time.Time
+	// busy is true after a hook reported that a turn started, until the next hook that says the session waits.
+	busy bool
 }
 
 // restartGrace gives the hook a fresh grace period when the session starts to wait with queued messages.
@@ -313,6 +319,7 @@ var commands = map[string]command{
 	"hook permission": {(*Engine).hookPermission, agents},
 	"hook idle":       {(*Engine).hookIdle, agents},
 	"hook busy":       {(*Engine).hookBusy, agents},
+	"restarted":       {(*Engine).restarted, []kind{operator, main}},
 }
 
 // Handle runs one command and returns its answer.
@@ -355,8 +362,8 @@ func allowed(kinds []kind, k kind) bool {
 func allowedBy(k kind) string {
 	var names []string
 	for name, c := range commands {
-		// The hook commands are internal, so no error names them.
-		if allowed(c.kind, k) && !strings.HasPrefix(name, "hook ") {
+		// The hook commands and restarted are internal, so no error names them.
+		if allowed(c.kind, k) && !strings.HasPrefix(name, "hook ") && name != "restarted" {
 			names = append(names, name)
 		}
 	}

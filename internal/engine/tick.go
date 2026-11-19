@@ -226,6 +226,10 @@ func (e *Engine) resendNotes() error {
 				s.skipLogged = false
 			}
 		}
+		// A pane that no hook reported busy may take a held note after the resend wait, as it may take a new-message note.
+		if len(s.held) > 0 && !down && e.c.Now().Sub(s.heldAt) >= wait && (s.waiting || (!s.hookSince && !s.busy)) {
+			errs = append(errs, e.typeHeld(name))
+		}
 		unread, err := e.st.Unread(name)
 		if err != nil {
 			errs = append(errs, err)

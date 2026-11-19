@@ -105,36 +105,6 @@ func TestAFailedPreflightStartsNoSession(t *testing.T) {
 	}
 }
 
-func TestNoteDeliversThroughTheProviderAndTypesNothing(t *testing.T) {
-	m, p := &fakeMux{}, &fakeProvider{deliverable: true}
-
-	err := New(m, p, nil).Note("worker-t1", "sfy restarted.")
-
-	if err != nil || m.sent != "" || len(p.delivered) != 1 || p.delivered[0] != "worker-t1:sfy restarted." {
-		t.Fatalf("err %v, typed %q, delivered %q", err, m.sent, p.delivered)
-	}
-}
-
-func TestNoteTypesTheTextWhenTheProviderCannotDeliver(t *testing.T) {
-	m, p := &fakeMux{}, &fakeProvider{}
-
-	err := New(m, p, nil).Note("worker-t1", "sfy restarted.")
-
-	if err != nil || m.sent != "worker-t1:sfy restarted." {
-		t.Fatalf("err %v, typed %q", err, m.sent)
-	}
-}
-
-func TestNoteTypesTheTextWhenDeliveryFails(t *testing.T) {
-	m, p := &fakeMux{}, &fakeProvider{deliverErr: errors.New("disk full")}
-
-	err := New(m, p, nil).Note("worker-t1", "sfy restarted.")
-
-	if err != nil || m.sent != "worker-t1:sfy restarted." {
-		t.Fatalf("err %v, typed %q", err, m.sent)
-	}
-}
-
 func TestDeliverAsksTheProvider(t *testing.T) {
 	p := &fakeProvider{deliverable: true}
 
