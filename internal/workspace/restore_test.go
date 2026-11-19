@@ -14,7 +14,7 @@ func TestRestoreChecksOutTheBranchWithItsWork(t *testing.T) {
 	repo := newRepo(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t12", Repo: repo}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestRestoreChecksOutTheBranchWithItsWork(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err = ws.Restore(tk)
+	dir, err = restore(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestRestoreKeepsAFolderThatStillHoldsTheTask(t *testing.T) {
 	repo := newRepo(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t13", Repo: repo}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestRestoreKeepsAFolderThatStillHoldsTheTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	again, err := ws.Restore(tk)
+	again, err := restore(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestRestoreKeepsAFolderThatStillHoldsTheTask(t *testing.T) {
 func TestRestoreGivesATaskWithoutRepoAnEmptyFolder(t *testing.T) {
 	ws := workspace.New(t.TempDir())
 
-	dir, err := ws.Restore(task.Task{ID: "t14"})
+	dir, err := restore(ws, task.Task{ID: "t14"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestRestoreGivesATaskWithoutRepoAnEmptyFolder(t *testing.T) {
 func TestRestoreKeepsAPlainFolderWithFiles(t *testing.T) {
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t15"}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestRestoreKeepsAPlainFolderWithFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	again, err := ws.Restore(tk)
+	again, err := restore(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}

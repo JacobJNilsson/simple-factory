@@ -40,21 +40,11 @@ func (w *Workspaces) dir(id string) string {
 	return filepath.Join(w.home, "work", id)
 }
 
-// Create makes the folder of a task and returns its path. A failed Create leaves no folder behind.
-// The engine holds its lock during Create, so a slow clone blocks commands for up to the git timeout.
-func (w *Workspaces) Create(t task.Task) (dir string, err error) {
-	return w.create(t, false)
-}
-
-// Restore makes the folder of a task that did work before. A folder that still holds the task's work stays as it is.
-// Otherwise Restore checks out the task branch with its commits, where Create refuses a branch that holds work.
-func (w *Workspaces) Restore(t task.Task) (dir string, err error) {
-	return w.create(t, true)
-}
-
 // Prepare fixes the branch and lease of a task and makes its folder. A task with a set Dir keeps that folder.
 // A task with a repo gets its branch once: the existing branch, the recorded one, the legacy name of a started task, or a new free name.
-// A reopened task keeps a folder or a branch that holds its work. Prepare runs git and may fetch or clone, so it can take up to the git timeout.
+// A failed Prepare leaves no folder behind. It runs git and may fetch or clone, and the engine holds its lock meanwhile, so it can block commands for up to the git timeout.
+// A reopened task keeps a folder that still holds its work, and otherwise gets its branch with its earlier commits.
+// Any other task is refused a branch that holds work.
 // It returns the branch and lease it fixed even on an error, so a caller can record them.
 func (w *Workspaces) Prepare(t task.Task) (task.Prepared, error) {
 	p := task.Prepared{Dir: t.Dir, Branch: t.Branch, Lease: t.Lease}
@@ -104,6 +94,7 @@ func (w *Workspaces) BranchOf(t task.Task) string {
 	return t.Branch
 }
 
+// create makes the folder of a task on t.Branch. With restore, a branch that holds work is checked out as it is.
 func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	dir = w.dir(t.ID)
 	if restore && w.holdsTask(t) {
@@ -128,7 +119,7 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	if err := os.Mkdir(dir, 0o700); err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create folder %s: %w", dir, err)
 	}
-	add := func() error { return addWorktree(repo, dir, w.branchOf(t), base, restore) }
+	add := func() error { return addWorktree(repo, dir, t.Branch, base, restore) }
 	if t.Existing != "" {
 		add = func() error { return addExistingWorktree(repo, dir, t.Existing, restore) }
 	}
@@ -141,24 +132,12 @@ func (w *Workspaces) create(t task.Task, restore bool) (dir string, err error) {
 	return dir, nil
 }
 
-// LegacyBranch returns the branch name from before tasks carried their own: sfy/<prefix><id>.
-func (w *Workspaces) LegacyBranch(id string) string { return w.legacyBranch(id) }
-
+// legacyBranch returns the branch name from before tasks carried their own: sfy/<prefix><id>.
 func (w *Workspaces) legacyBranch(id string) string { return "sfy/" + w.prefix + id }
 
-// branchOf returns the task's recorded branch, or the legacy name for a task that has none.
-func (w *Workspaces) branchOf(t task.Task) string {
-	if t.Branch != "" {
-		return t.Branch
-	}
-	return w.LegacyBranch(t.ID)
-}
-
-// NewBranch returns the first free name of the form <type>/<slug>, <type>/<slug>-2, <type>/<slug>-3 and so on.
+// newBranch returns the first free name of the form <type>/<slug>, <type>/<slug>-2, <type>/<slug>-3 and so on.
 // A name is taken when the repo has a local branch of that name or any remote has one.
 // It fetches no branch and creates none.
-func (w *Workspaces) NewBranch(t task.Task) (string, error) { return w.newBranch(t) }
-
 func (w *Workspaces) newBranch(t task.Task) (string, error) {
 	repo, _, err := w.source(t.Repo)
 	if err != nil {
@@ -206,7 +185,7 @@ func (w *Workspaces) holdsTask(t task.Task) bool {
 		return err == nil && len(entries) > 0
 	}
 	head, err := git(dir, "rev-parse", "--abbrev-ref", "HEAD")
-	return err == nil && head == w.branchOf(t)
+	return err == nil && head == w.BranchOf(t)
 }
 
 // addWorktree checks out branch in dir. A leftover branch that holds no work of its own moves to base.

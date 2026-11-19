@@ -41,6 +41,21 @@ func git(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// create prepares the folder of a task that has not started. A repo task without a branch gets sfy/<id>.
+func create(ws *workspace.Workspaces, tk task.Task) (string, error) {
+	if tk.Repo != "" && tk.Branch == "" && tk.Existing == "" {
+		tk.Branch = "sfy/" + tk.ID
+	}
+	p, err := ws.Prepare(tk)
+	return p.Dir, err
+}
+
+// restore prepares the folder of a reopened task.
+func restore(ws *workspace.Workspaces, tk task.Task) (string, error) {
+	tk.Reopened = true
+	return create(ws, tk)
+}
+
 func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -57,7 +72,7 @@ func TestCreateGivesATaskWithoutRepoAnEmptyFolder(t *testing.T) {
 	gitEnv(t)
 	home := t.TempDir()
 
-	dir, err := workspace.New(home).Create(task.Task{ID: "t1"})
+	dir, err := create(workspace.New(home), task.Task{ID: "t1"})
 
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +98,7 @@ func TestCreateGivesALocalRepoAWorktreeOnATaskBranch(t *testing.T) {
 	repo := newRepo(t)
 	home := t.TempDir()
 
-	dir, err := workspace.New(home).Create(task.Task{ID: "t2", Repo: repo})
+	dir, err := create(workspace.New(home), task.Task{ID: "t2", Repo: repo})
 
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +116,7 @@ func TestRemoveDeletesAWorktreeAndKeepsItsBranch(t *testing.T) {
 	repo := newRepo(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t3", Repo: repo}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +139,7 @@ func TestRemoveDeletesAWorktreeAndKeepsItsBranch(t *testing.T) {
 func TestRemoveDeletesAPlainFolder(t *testing.T) {
 	gitEnv(t)
 	ws := workspace.New(t.TempDir())
-	dir, err := ws.Create(task.Task{ID: "t4"})
+	dir, err := create(ws, task.Task{ID: "t4"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +164,7 @@ func TestCreateFailsOnANonEmptyFolderAndNamesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := workspace.New(home).Create(task.Task{ID: "t5"})
+	_, err := create(workspace.New(home), task.Task{ID: "t5"})
 
 	var notEmpty *workspace.NotEmptyError
 	if !errors.As(err, &notEmpty) || notEmpty.Dir != dir {
@@ -185,7 +200,7 @@ func TestCreateClonesAURLRepoOnce(t *testing.T) {
 	gitEnv(t)
 	home, url, ws := urlRepo(t)
 
-	dir, err := ws.Create(task.Task{ID: "t7", Repo: url})
+	dir, err := create(ws, task.Task{ID: "t7", Repo: url})
 
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +219,7 @@ func TestCreateClonesAURLRepoOnce(t *testing.T) {
 func TestCreateReusesTheCloneForASecondTask(t *testing.T) {
 	gitEnv(t)
 	home, url, ws := urlRepo(t)
-	if _, err := ws.Create(task.Task{ID: "t7", Repo: url}); err != nil {
+	if _, err := create(ws, task.Task{ID: "t7", Repo: url}); err != nil {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(home, "repos", cloneFolders(t, home)[0].Name(), "marker")
@@ -212,7 +227,7 @@ func TestCreateReusesTheCloneForASecondTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	second, err := ws.Create(task.Task{ID: "t8", Repo: url})
+	second, err := create(ws, task.Task{ID: "t8", Repo: url})
 
 	if err != nil {
 		t.Fatal(err)
@@ -233,14 +248,14 @@ func TestCreateAfterRemoveSucceedsAgainOnTheSameBranch(t *testing.T) {
 	repo := newRepo(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t9", Repo: repo}
-	if _, err := ws.Create(tk); err != nil {
+	if _, err := create(ws, tk); err != nil {
 		t.Fatal(err)
 	}
 	if err := ws.Remove(tk); err != nil {
 		t.Fatal(err)
 	}
 
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +270,7 @@ func TestCreateMovesAnOldBranchToTheCurrentHead(t *testing.T) {
 	repo := newRepo(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t10", Repo: repo}
-	if _, err := ws.Create(tk); err != nil {
+	if _, err := create(ws, tk); err != nil {
 		t.Fatal(err)
 	}
 	if err := ws.Remove(tk); err != nil {
@@ -263,7 +278,7 @@ func TestCreateMovesAnOldBranchToTheCurrentHead(t *testing.T) {
 	}
 	git(t, repo, "commit", "--allow-empty", "-m", "second")
 
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 
 	if err != nil {
 		t.Fatal(err)
@@ -279,7 +294,7 @@ func TestCreateFailsWhenTheBranchHoldsItsOwnCommits(t *testing.T) {
 	home := t.TempDir()
 	ws := workspace.New(home)
 	tk := task.Task{ID: "t11", Repo: repo}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +304,7 @@ func TestCreateFailsWhenTheBranchHoldsItsOwnCommits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = ws.Create(tk)
+	_, err = create(ws, tk)
 
 	var hasWork *workspace.BranchHasWorkError
 	if !errors.As(err, &hasWork) || hasWork.Branch != "sfy/t11" {
@@ -310,7 +325,7 @@ func TestCreateFailsWhenAnotherWorktreeHoldsTheBranch(t *testing.T) {
 	git(t, repo, "worktree", "add", "-b", "sfy/t12", other)
 	ws := workspace.New(t.TempDir())
 
-	_, err := ws.Create(task.Task{ID: "t12", Repo: repo})
+	_, err := create(ws, task.Task{ID: "t12", Repo: repo})
 
 	var busy *workspace.BranchBusyError
 	if !errors.As(err, &busy) || busy.Branch != "sfy/t12" || !strings.HasSuffix(busy.Worktree, "other") {
@@ -322,7 +337,7 @@ func TestCreateLeavesNoFolderOrCloneAfterAFailedClone(t *testing.T) {
 	gitEnv(t)
 	home := t.TempDir()
 
-	_, err := workspace.New(home).Create(task.Task{ID: "t13", Repo: "file://" + filepath.Join(home, "missing")})
+	_, err := create(workspace.New(home), task.Task{ID: "t13", Repo: "file://" + filepath.Join(home, "missing")})
 
 	if err == nil {
 		t.Fatal("want an error")
@@ -338,7 +353,7 @@ func TestCreateLeavesNoFolderOrCloneAfterAFailedClone(t *testing.T) {
 func TestCreateClonesAgainWhenTheClonedFolderIsBroken(t *testing.T) {
 	gitEnv(t)
 	home, url, ws := urlRepo(t)
-	if _, err := ws.Create(task.Task{ID: "t14", Repo: url}); err != nil {
+	if _, err := create(ws, task.Task{ID: "t14", Repo: url}); err != nil {
 		t.Fatal(err)
 	}
 	if err := ws.Remove(task.Task{ID: "t14"}); err != nil {
@@ -349,7 +364,7 @@ func TestCreateClonesAgainWhenTheClonedFolderIsBroken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := ws.Create(task.Task{ID: "t15", Repo: url})
+	dir, err := create(ws, task.Task{ID: "t15", Repo: url})
 
 	if err != nil {
 		t.Fatal(err)
@@ -363,7 +378,7 @@ func TestCreateTreatsARelativeRepoAsAURL(t *testing.T) {
 	gitEnv(t)
 	home := t.TempDir()
 
-	_, err := workspace.New(home).Create(task.Task{ID: "t16", Repo: "no/such/folder"})
+	_, err := create(workspace.New(home), task.Task{ID: "t16", Repo: "no/such/folder"})
 
 	if err == nil {
 		t.Fatal("want a clone error")
@@ -375,7 +390,7 @@ func TestCreateIgnoresAGitDirInTheEnvironment(t *testing.T) {
 	repo := newRepo(t)
 	t.Setenv("GIT_DIR", filepath.Join(t.TempDir(), "bogus"))
 
-	dir, err := workspace.New(t.TempDir()).Create(task.Task{ID: "t17", Repo: repo})
+	dir, err := create(workspace.New(t.TempDir()), task.Task{ID: "t17", Repo: repo})
 
 	if err != nil {
 		t.Fatal(err)
@@ -390,7 +405,7 @@ func TestCreateSucceedsAfterSomeoneDeletedTheTaskFolder(t *testing.T) {
 	repo := newRepo(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t18", Repo: repo}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +413,7 @@ func TestCreateSucceedsAfterSomeoneDeletedTheTaskFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := ws.Create(tk); err != nil {
+	if _, err := create(ws, tk); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -409,7 +424,7 @@ func TestCreateClonesAgainWhenTheClonedFolderLiesInsideAnotherRepo(t *testing.T)
 	ws := workspace.New(home)
 	url := "file://" + newRepo(t)
 	tk := task.Task{ID: "t19", Repo: url}
-	if _, err := ws.Create(tk); err != nil {
+	if _, err := create(ws, tk); err != nil {
 		t.Fatal(err)
 	}
 	if err := ws.Remove(tk); err != nil {
@@ -420,7 +435,7 @@ func TestCreateClonesAgainWhenTheClonedFolderLiesInsideAnotherRepo(t *testing.T)
 		t.Fatal(err)
 	}
 
-	dir, err := ws.Create(task.Task{ID: "t20", Repo: url})
+	dir, err := create(ws, task.Task{ID: "t20", Repo: url})
 
 	if err != nil {
 		t.Fatal(err)
@@ -433,7 +448,7 @@ func TestCreateClonesAgainWhenTheClonedFolderLiesInsideAnotherRepo(t *testing.T)
 func TestCreateKeepsABrokenCloneThatATaskFolderUses(t *testing.T) {
 	gitEnv(t)
 	home, url, ws := urlRepo(t)
-	if _, err := ws.Create(task.Task{ID: "t21", Repo: url}); err != nil {
+	if _, err := create(ws, task.Task{ID: "t21", Repo: url}); err != nil {
 		t.Fatal(err)
 	}
 	clone := filepath.Join(home, "repos", cloneFolders(t, home)[0].Name())
@@ -441,7 +456,7 @@ func TestCreateKeepsABrokenCloneThatATaskFolderUses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := ws.Create(task.Task{ID: "t22", Repo: url})
+	_, err := create(ws, task.Task{ID: "t22", Repo: url})
 
 	var inUse *workspace.CloneInUseError
 	if !errors.As(err, &inUse) || inUse.Clone != clone {
@@ -457,11 +472,12 @@ func newWorktree(t *testing.T, id string) (*workspace.Workspaces, task.Task, str
 	t.Helper()
 	gitEnv(t)
 	ws := workspace.New(t.TempDir())
-	tk := task.Task{ID: id, Repo: newRepo(t)}
-	dir, err := ws.Create(tk)
+	tk := task.Task{ID: id, Repo: newRepo(t), Branch: "sfy/" + id}
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}
+	tk.Dir = dir
 	return ws, tk, dir
 }
 
@@ -490,7 +506,7 @@ func TestHasRemoteIsTrueForAURLRepo(t *testing.T) {
 	gitEnv(t)
 	_, url, ws := urlRepo(t)
 	tk := task.Task{ID: "t1", Repo: url}
-	if _, err := ws.Create(tk); err != nil {
+	if _, err := create(ws, tk); err != nil {
 		t.Fatal(err)
 	}
 
@@ -532,7 +548,7 @@ func TestHoldsWorkIsFalseForAnEmptyPlainFolder(t *testing.T) {
 	gitEnv(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t8"}
-	if _, err := ws.Create(tk); err != nil {
+	if _, err := create(ws, tk); err != nil {
 		t.Fatal(err)
 	}
 	if held, err := ws.HoldsWork(tk); err != nil || held {
@@ -544,7 +560,7 @@ func TestHoldsWorkIsTrueForAPlainFolderWithAFile(t *testing.T) {
 	gitEnv(t)
 	ws := workspace.New(t.TempDir())
 	tk := task.Task{ID: "t8"}
-	dir, err := ws.Create(tk)
+	dir, err := create(ws, tk)
 	if err != nil {
 		t.Fatal(err)
 	}

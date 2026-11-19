@@ -79,7 +79,7 @@ func TestRemoteBranchRefusesARepoWithoutOrigin(t *testing.T) {
 func TestCreateChecksOutTheExistingBranchTrackingOrigin(t *testing.T) {
 	repo, remote := remoteRepo(t)
 
-	dir, err := workspace.New(t.TempDir()).Create(existingTask(repo, "chore/pr"))
+	dir, err := create(workspace.New(t.TempDir()), existingTask(repo, "chore/pr"))
 
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestCreateMovesALeftoverLocalBranchToTheRemoteOne(t *testing.T) {
 	repo, remote := remoteRepo(t)
 	git(t, repo, "branch", "chore/pr", "HEAD")
 
-	dir, err := workspace.New(t.TempDir()).Create(existingTask(repo, "chore/pr"))
+	dir, err := create(workspace.New(t.TempDir()), existingTask(repo, "chore/pr"))
 
 	if err != nil {
 		t.Fatal(err)

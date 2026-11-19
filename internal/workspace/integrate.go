@@ -28,7 +28,7 @@ func (e *IntegrateError) Unwrap() error { return e.Reason }
 // The repo folder must have the default branch checked out.
 func (w *Workspaces) Integrate(t task.Task) error {
 	repo := w.RepoFolder(t.Repo)
-	branch := w.branchOf(t)
+	branch := w.BranchOf(t)
 	remote, err := git(repo, "remote")
 	if err != nil {
 		return &IntegrateError{Step: "git remote", Reason: err}
