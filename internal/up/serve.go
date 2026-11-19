@@ -16,6 +16,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
@@ -263,6 +264,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 		mux: p.mux, launcher: p.launcher, warn: stderr, spawn: spawnDetached, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
+		call:    func(req protocol.Request) (protocol.Answer, error) { return server.Call(sock, req) },
 		wait:    10 * time.Second, poll: 100 * time.Millisecond, out: stdout,
 	}, nil
 }

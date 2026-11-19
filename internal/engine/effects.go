@@ -133,6 +133,11 @@ func (e *Engine) note(name, text string) error {
 	if delivered {
 		return nil
 	}
+	return e.typeNote(name, text)
+}
+
+// typeNote types the text into the pane. A session with stuck text also hears about it.
+func (e *Engine) typeNote(name, text string) error {
 	if err := e.l.Send(name, text); err != nil {
 		return err
 	}
@@ -140,6 +145,48 @@ func (e *Engine) note(name, text string) error {
 		return e.l.Send(name, stuckNote)
 	}
 	return nil
+}
+
+// noteWhenWaiting tells a session a line of text without typing into a busy pane.
+// The provider delivers it when it can. Otherwise sfy types it when the session waits, and holds it until then. held reports the second case.
+func (e *Engine) noteWhenWaiting(name, text string) (held bool, err error) {
+	if !e.reachable(name) {
+		return false, nil
+	}
+	delivered, derr := e.deliver(name, text, "")
+	if derr != nil {
+		e.logf("delivery to %s failed, so sfy types the note: %v", name, derr)
+	}
+	if delivered {
+		return false, nil
+	}
+	s := e.agent(name)
+	if s.waiting {
+		s.waiting, s.hookSince = false, false
+		return false, e.typeNote(name, text)
+	}
+	s.held = append(s.held, text)
+	if s.heldAt.IsZero() {
+		s.heldAt = e.c.Now()
+	}
+	e.logf("note held for %s until it waits", name)
+	return true, nil
+}
+
+// typeHeld types the notes that waited for the session.
+func (e *Engine) typeHeld(name string) error {
+	s := e.agent(name)
+	held := s.held
+	if len(held) == 0 {
+		return nil
+	}
+	s.held, s.heldAt = nil, time.Time{}
+	s.waiting, s.hookSince = false, false
+	var errs []error
+	for _, text := range held {
+		errs = append(errs, e.note(name, text))
+	}
+	return errors.Join(errs...)
 }
 
 // deliver asks the provider to deliver text. A registered main agent has no sfy session folder, so it gets no delivery.

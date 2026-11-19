@@ -13,6 +13,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 )
 
 // fakeMux is one multiplexer for both the sfy process and the agent sessions.
@@ -109,14 +110,6 @@ func (l *fakeLauncher) Deliver(name, text, _ string) (bool, error) {
 	return true, nil
 }
 
-// Note delivers the text when it can, and sends it through the mux otherwise.
-func (l *fakeLauncher) Note(name, text string) error {
-	if ok, _ := l.Deliver(name, text, ""); ok {
-		return nil
-	}
-	return l.Send(name, text)
-}
-
 func (l *fakeLauncher) Start(s engine.SessionSpec) error {
 	_, err := l.StartMain(s)
 	return err
@@ -142,11 +135,15 @@ func (l *fakeLauncher) MainCommand(s engine.SessionSpec) ([]string, bool, error)
 }
 
 type rig struct {
-	m   *fakeMux
-	l   *fakeLauncher
-	o   options
-	out *bytes.Buffer
-	err *bytes.Buffer
+	// calls lists the requests that the options sent to the sfy process. callErr makes the call fail, and callText is the answer text.
+	calls    []protocol.Request
+	callErr  error
+	callText string
+	m        *fakeMux
+	l        *fakeLauncher
+	o        options
+	out      *bytes.Buffer
+	err      *bytes.Buffer
 }
 
 func newRig(t *testing.T) *rig {
@@ -155,12 +152,17 @@ func newRig(t *testing.T) *rig {
 	l := &fakeLauncher{fakeMux: m}
 	out := &bytes.Buffer{}
 	errb := &bytes.Buffer{}
-	return &rig{m: m, l: l, out: out, err: errb, o: options{
+	r := &rig{m: m, l: l, out: out, err: errb, o: options{
 		home: t.TempDir(), config: config.Config{Models: config.Models{Main: "opus"}},
 		bin: "/bin/sfy", environ: []string{"PATH=/usr/bin"},
 		mux: m, launcher: l, answers: m.probe,
 		wait: time.Second, poll: time.Millisecond, out: out, warn: errb,
 	}}
+	r.o.call = func(req protocol.Request) (protocol.Answer, error) {
+		r.calls = append(r.calls, req)
+		return protocol.Answer{OK: r.callErr == nil, Text: r.callText}, r.callErr
+	}
+	return r
 }
 
 func TestUpStartsServeAndMain(t *testing.T) {

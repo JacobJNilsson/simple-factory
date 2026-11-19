@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/JacobJNilsson/simple-factory/internal/registration"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 )
 
@@ -77,15 +77,19 @@ func (o options) noteMain() error {
 	if changed {
 		note += " Your prompt changed. Read the new text in " + mainPromptPath(o.home) + " with the Read tool."
 	}
-	// A registered main agent has no sfy session folder, so its note is typed.
-	send := o.launcher.Note
-	if (registration.Folder{Home: o.home}).Registered() {
-		send = o.launcher.Send
-	}
-	if err := send(mainSession, note); err != nil {
+	// The new sfy process gives the note, so sfy types nothing into a busy pane.
+	ans, err := o.call(protocol.Request{Command: "restarted", Body: note})
+	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(o.out, "Told the main agent.")
+	if !ans.OK {
+		return errors.New(ans.Error)
+	}
+	told := "Told the main agent."
+	if ans.Text != "" {
+		told = ans.Text
+	}
+	_, err = fmt.Fprintln(o.out, told)
 	return err
 }
 

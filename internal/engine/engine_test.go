@@ -1089,7 +1089,7 @@ func TestTheErrorForAForbiddenCommandListsNoHookCommand(t *testing.T) {
 
 	a := v.run("worker-t1", "t1", "task new", taskFile)
 
-	if strings.Contains(a.Error, "hook") {
+	if strings.Contains(a.Error, "hook") || strings.Contains(a.Error, "restarted") {
 		t.Fatalf("got %q", a.Error)
 	}
 }

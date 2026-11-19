@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -51,8 +52,8 @@ func TestRestartKeepsARegisteredAgentAndSendsTheNote(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := [][2]string{{"dev", "sfy restarted."}}; !reflect.DeepEqual(r.m.sends, want) {
-		t.Errorf("sends %v, want the note to the registered address", r.m.sends)
+	if want := []protocol.Request{{Command: "restarted", Body: "sfy restarted."}}; !reflect.DeepEqual(r.calls, want) || len(r.m.sends) != 0 {
+		t.Errorf("requests %v, typed %v, want the note request and nothing typed", r.calls, r.m.sends)
 	}
 	if len(r.l.specs) != 0 {
 		t.Errorf("restart started a main agent: %v", r.l.specs)
