@@ -15,7 +15,6 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
-	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
@@ -128,35 +127,14 @@ var forms = map[string]form{
 // A registered agent has no such variable, so the provider names its session, and the registered id maps it to main.
 // The operator and every other session get an empty name.
 func Agent(env func(string) string) string {
-	if agent := env("SFY_AGENT"); agent != "" {
-		return agent
-	}
-	id := claude.CurrentSession(env)
-	if id == "" {
-		return ""
-	}
-	if record, ok := registration.Read(config.Home(env)); ok && record.ID == id {
-		return "main"
-	}
-	return ""
+	return caller(env).Agent
 }
 
-// token returns the secret that proves the caller's identity to the sfy process.
-// A started agent has it in SFY_TOKEN. A registered agent has no such variable, so it reads the token that sfy register wrote.
-// The operator has none.
-func token(env func(string) string) string {
-	if t := env("SFY_TOKEN"); t != "" {
-		return t
-	}
-	folder := identity.Folder{Home: config.Home(env)}
-	if env("SFY_AGENT") == "" && Agent(env) == "main" {
-		return folder.Token("main")
-	}
-	// A session that started before sessions had tokens has no SFY_TOKEN, and sfy serve left it a legacy token.
-	if agent := env("SFY_AGENT"); agent != "" {
-		return folder.LegacyToken(agent, claude.CurrentSession(env))
-	}
-	return ""
+// caller returns the caller that the environment describes, with the secret token that proves its identity to the sfy process.
+func caller(env func(string) string) protocol.Caller {
+	c := identity.Folder{Home: config.Home(env)}.Resolve(identity.Claim{Agent: env("SFY_AGENT"), Token: env("SFY_TOKEN"), Session: claude.CurrentSession(env)})
+	c.Task = env("SFY_TASK")
+	return c
 }
 
 // Restricted reports whether SFY_AGENT names a worker or a reviewer.
@@ -179,7 +157,7 @@ func WithIdentity(env func(string) string) func(string) string {
 
 // parse builds the request for a command line. It reads a file argument, and reads stdin for "-" and for hooks.
 func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Request, error) {
-	req := protocol.Request{Caller: protocol.Caller{Agent: Agent(env), Task: env("SFY_TASK"), Token: token(env)}}
+	req := protocol.Request{Caller: caller(env)}
 	name, f, ok := lookup(args)
 	if !ok {
 		return req, &usageError{"unknown or incomplete command"}
@@ -470,15 +448,15 @@ func userHookRequest(event string, env func(string) string, stdin io.Reader) (re
 	if env("SFY_AGENT") != "" {
 		return req, false, nil
 	}
-	record, ok := registration.Read(config.Home(env))
-	if !ok {
-		return req, false, nil
-	}
 	body, err := io.ReadAll(stdin)
-	if err != nil || claude.HookSession(body) != record.ID {
+	if err != nil {
 		return req, false, err
 	}
-	return protocol.Request{Caller: protocol.Caller{Agent: "main", Token: identity.Folder{Home: config.Home(env)}.Token("main")}, Command: "hook " + event, Body: claude.HookBody(event, body)}, true, nil
+	c := identity.Folder{Home: config.Home(env)}.Resolve(identity.Claim{Session: claude.HookSession(body)})
+	if c.Agent != "main" {
+		return req, false, nil
+	}
+	return protocol.Request{Caller: c, Command: "hook " + event, Body: claude.HookBody(event, body)}, true, nil
 }
 
 // send calls the sfy process and prints its answer.

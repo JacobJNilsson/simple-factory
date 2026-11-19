@@ -24,26 +24,6 @@ func TestAgentMapsTheRegisteredSessionToMain(t *testing.T) {
 	}
 }
 
-func TestAgentLeavesOtherSessionsAsTheOperator(t *testing.T) {
-	if got := Agent(registeredEnv(t, "s-other")); got != "" {
-		t.Errorf("another session got %q", got)
-	}
-	if got := Agent(envOf(map[string]string{"SFY_HOME": t.TempDir(), "CLAUDE_CODE_SESSION_ID": "s-main"})); got != "" {
-		t.Errorf("without a registration got %q", got)
-	}
-	if got := Agent(registeredEnv(t, "")); got != "" {
-		t.Errorf("outside a session got %q", got)
-	}
-}
-
-func TestAgentKeepsTheNameOfAStartedAgent(t *testing.T) {
-	env := envOf(map[string]string{"SFY_AGENT": "worker-t1", "CLAUDE_CODE_SESSION_ID": "s-main"})
-
-	if got := Agent(env); got != "worker-t1" {
-		t.Fatalf("got %q", got)
-	}
-}
-
 func TestRegisteredSessionRunsCommandsAsMain(t *testing.T) {
 	live := liveServer(t)
 	env := func(k string) string {

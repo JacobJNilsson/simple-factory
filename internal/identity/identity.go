@@ -11,6 +11,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
 var sessionName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -92,9 +95,33 @@ func (f Folder) Token(name string) string {
 	return readFile(f.tokenPath(name))
 }
 
-// LegacyToken returns the legacy token of a session that started before sessions had tokens, or an empty string.
+// Claim is what the CLI side knows about the caller.
+// Agent is SFY_AGENT and Token is SFY_TOKEN. Session is the provider's id of the conversation that runs the command, or empty outside one.
+type Claim struct{ Agent, Token, Session string }
+
+// Resolve returns the caller that a claim stands for, with its name and token set.
+// A started agent names itself. A session that matches the registration is main. Every other claim comes from the operator.
+func (f Folder) Resolve(c Claim) protocol.Caller {
+	if c.Agent != "" {
+		if c.Token != "" {
+			return protocol.Caller{Agent: c.Agent, Token: c.Token}
+		}
+		// A session that started before sessions had tokens has no SFY_TOKEN, and sfy serve left it a legacy token.
+		return protocol.Caller{Agent: c.Agent, Token: f.legacyToken(c.Agent, c.Session)}
+	}
+	if record, ok := registration.Read(f.Home); ok && c.Session != "" && record.ID == c.Session {
+		token := c.Token
+		if token == "" {
+			token = f.Token("main")
+		}
+		return protocol.Caller{Agent: "main", Token: token}
+	}
+	return protocol.Caller{Token: c.Token}
+}
+
+// legacyToken returns the legacy token of a session that started before sessions had tokens, or an empty string.
 // The main agent must also name its own conversation id, so a worker that sets SFY_AGENT=main gets no token.
-func (f Folder) LegacyToken(name, sessionID string) string {
+func (f Folder) legacyToken(name, sessionID string) string {
 	if !sessionName.MatchString(name) {
 		return ""
 	}
