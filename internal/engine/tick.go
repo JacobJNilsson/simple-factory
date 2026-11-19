@@ -111,16 +111,7 @@ func (e *Engine) startWorker(t task.Task) error {
 	if err := e.save(t); err != nil {
 		return errors.Join(err, e.discard(t))
 	}
-	name := "worker-" + t.ID
-	taskFile, err := e.taskFile(t.ID)
-	if err == nil {
-		err = e.l.Start(SessionSpec{
-			Name: name, Kind: "worker", Task: t.ID, Dir: dir, TaskFile: taskFile,
-			Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
-			Branch: t.Branch, Lease: t.Lease, NoPush: t.HoldsPush(),
-		})
-	}
-	if err != nil {
+	if err := e.sess.start(t, worker, prompt); err != nil {
 		rmErr := e.discard(t)
 		t.State, t.Pending = task.Queued, pending
 		if rmErr == nil && !t.Reopened {
@@ -130,7 +121,6 @@ func (e *Engine) startWorker(t task.Task) error {
 	}
 	delete(e.startFails, t.ID)
 	delete(e.checking, t.ID)
-	e.forget(name)
 	return nil
 }
 
@@ -189,7 +179,7 @@ func (e *Engine) resendNotes() error {
 	names := []string{"main"}
 	for _, t := range tasks {
 		if active(t) {
-			names = append(names, "worker-"+t.ID)
+			names = append(names, workerOf(t))
 		}
 		if t.State == task.Review {
 			names = append(names, reviewerOf(t))
@@ -231,57 +221,4 @@ func (e *Engine) retryOne(t task.Task) error {
 		e.cleanupWait[t.ID] = cleanupBackoff
 	}
 	return err
-}
-
-// aliveErrTicks is how many ticks in a row an alive check may fail before sfy tells main.
-const aliveErrTicks = 3
-
-// probe runs the alive check of a session and counts its failures. It logs the first failure of a run.
-// known is false when the check failed, so the caller cannot tell whether the session runs.
-func (e *Engine) probe(name string) (alive, known bool) {
-	s := e.agent(name)
-	alive, err := e.l.Alive(name)
-	if err == nil {
-		s.aliveErrs, s.aliveErr, s.aliveTold = 0, nil, false
-		return alive, true
-	}
-	s.aliveErrs++
-	s.aliveErr = err
-	if s.aliveErrs == 1 {
-		e.logf("alive check of %s failed: %v", name, err)
-	}
-	return false, false
-}
-
-// checkWorkers tells main once when a worker session is gone, and again only after the worker runs again.
-// sfy does not restart a worker that died. The main agent decides what to do.
-func (e *Engine) checkWorkers() error {
-	tasks, err := e.st.Tasks()
-	if err != nil {
-		return err
-	}
-	var errs []error
-	for _, t := range tasks {
-		if !active(t) {
-			continue
-		}
-		name := "worker-" + t.ID
-		alive, known := e.probe(name)
-		s := e.agent(name)
-		if !known {
-			if s.aliveErrs >= aliveErrTicks && !s.aliveTold {
-				s.aliveTold = true
-				errs = append(errs, e.message("main", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, s.aliveErr)))
-			}
-			continue
-		}
-		switch {
-		case alive:
-			s.gone = false
-		case !s.gone:
-			s.gone = true
-			errs = append(errs, e.message("main", "sfy", fmt.Sprintf("The worker of task %s is gone. Its session no longer runs.", t.ID)))
-		}
-	}
-	return errors.Join(errs...)
 }

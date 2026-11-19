@@ -234,7 +234,7 @@ func (e *Engine) noteReviewer(t task.Task) error {
 }
 
 func (e *Engine) noteTaskFile(t task.Task, name string) error {
-	path, err := e.taskFile(t.ID)
+	path, err := e.st.TaskFile(t.ID)
 	if err != nil {
 		return err
 	}
@@ -374,9 +374,7 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		if err := e.save(t); err != nil {
 			return "", err
 		}
-		err := e.stop(reviewer)
-		e.forget(reviewer)
-		return "", errors.Join(err, e.message(to, from, note))
+		return "", errors.Join(e.sess.end(reviewer), e.message(to, from, note))
 	case task.Held, task.Approved, task.Done, task.Cancelled:
 		t.State, t.Archived, t.Reopened, t.Pushing, t.Released = task.Queued, false, true, false, false
 	}
@@ -472,7 +470,7 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 // refuseGone fails when the session of an agent no longer runs, because nobody would read a message for it.
 // The error suggests the commands that start a new worker or end the task.
 func (e *Engine) refuseGone(agent string) error {
-	if alive, err := e.l.Alive(agent); err != nil || alive {
+	if !e.sess.isGone(agent) {
 		return nil
 	}
 	id := strings.TrimPrefix(agent, "worker-")
@@ -558,21 +556,13 @@ func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 		}
 	}
 	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", report)
-	taskFile, err := e.taskFile(t.ID)
-	if err == nil {
-		err = e.l.Start(SessionSpec{
-			Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir, TaskFile: taskFile,
-			Model: t.ReviewerModelOr(e.cfg.Models.Reviewer), Prompt: prompt, Protected: t.Protected,
-		})
-	}
-	if err != nil {
+	if err := e.sess.start(t, reviewer, prompt); err != nil {
 		// The worker can retry only if the task is back in its old state.
 		if rerr := e.save(before); rerr != nil {
 			return errors.Join(err, rerr)
 		}
 		return err
 	}
-	e.forget(reviewerOf(t))
 	return nil
 }
 
@@ -605,7 +595,9 @@ func (e *Engine) reportProgress(req protocol.Request) (string, error) {
 	return "", e.save(t)
 }
 
-func reviewerOf(t task.Task) string { return fmt.Sprintf("review-%s-%d", t.ID, t.Round) }
+func reviewerOf(t task.Task) string { return reviewerOfRound(t.ID, t.Round) }
+
+func reviewerOfRound(id string, round int) string { return fmt.Sprintf("review-%s-%d", id, round) }
 
 // reviewing returns the task in review that the calling reviewer judges.
 func (e *Engine) reviewing(req protocol.Request) (task.Task, error) {
@@ -656,7 +648,7 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 		if cfg, err := e.configFor(t); err == nil && cfg.DraftPR {
 			note += " Any PR you open must be a draft. Use gh pr create --draft."
 		}
-		return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(req.Caller.Agent))
+		return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.sess.end(req.Caller.Agent))
 	}
 	return "", e.approve(t, req.Caller.Agent, false)
 }
@@ -749,20 +741,10 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	name := "worker-" + t.ID
 	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\n%s\n", t.ID, t.Markdown(), pushNow(t))
-	taskFile, err := e.taskFile(t.ID)
-	if err == nil {
-		err = e.l.Start(SessionSpec{
-			Name: name, Kind: "worker", Task: t.ID, Dir: t.Dir, TaskFile: taskFile,
-			Model: t.WorkerModel(e.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: true,
-			Branch: e.w.BranchOf(t), Lease: t.Lease,
-		})
-	}
-	if err != nil {
+	if err := e.sess.start(t, worker, prompt); err != nil {
 		return "", errors.Join(err, e.save(before))
 	}
-	e.forget(name)
 	return "", nil
 }
 
@@ -790,12 +772,12 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	if t.Round >= e.cfg.ReviewRounds {
 		msgErr := e.message("worker-"+t.ID, req.Caller.Agent, note)
 		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round), true)
-		return "", errors.Join(msgErr, err, e.stop(reviewer))
+		return "", errors.Join(msgErr, err, e.sess.end(reviewer))
 	}
 	if err := e.save(t); err != nil {
 		return "", err
 	}
-	return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.stop(reviewer))
+	return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.sess.end(reviewer))
 }
 
 func (e *Engine) inbox(req protocol.Request) (string, error) {
@@ -851,7 +833,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	var errs []error
 	reminder := ""
 	if e.runs(name) {
-		s := e.agent(name)
+		s := e.sess.agent(name)
 		if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
 			var err error
 			reminder, err = e.reminder(name, s)

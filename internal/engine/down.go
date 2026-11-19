@@ -2,7 +2,6 @@ package engine
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
@@ -23,21 +22,21 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 		if t.Dir == "" {
 			continue
 		}
-		names = append(names, "worker-"+t.ID)
+		names = append(names, workerOf(t))
 		for r := 1; r <= t.Round; r++ {
-			names = append(names, fmt.Sprintf("review-%s-%d", t.ID, r))
+			names = append(names, reviewerOfRound(t.ID, r))
 		}
 	}
 	var stopped []string
 	var errs []error
 	left := false
 	for _, name := range names {
-		alive, err := e.l.Alive(name)
-		if err != nil {
+		l, err := e.sess.alive(name)
+		if l == sessionUnknown {
 			errs = append(errs, err)
 			continue
 		}
-		if !alive {
+		if l == sessionGone {
 			continue
 		}
 		// sfy did not start a registered agent, so it ends only the registration.
@@ -49,7 +48,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 			left = true
 			continue
 		}
-		if err := e.stop(name); err != nil {
+		if err := e.sess.stop(name); err != nil {
 			errs = append(errs, err)
 			continue
 		}
