@@ -1,0 +1,67 @@
+# The default task process. A factory that sets no agents, lists or start key runs it.
+start = "build"
+
+[agents.worker]
+harness = "claude"
+prompt = "worker"
+repo_prompt = "worker-repo"
+session = "task"
+ends = "done"
+feedback = "message"
+permissions = { push = true }
+
+[agents.check]
+harness = "shell"
+run = ["{task_check}"]
+show = "{from} (check runs)"
+feedback = "message"
+
+[agents.reviewer]
+harness = "claude"
+prompt = "reviewer"
+session = "round"
+session_name = "review"
+ends = "verdict"
+count_round = true
+receives = "all"
+feedback = "build"
+permissions = { edit = false }
+
+# The worker's own session, asked to push after a pass.
+[agents.push]
+like = "worker"
+ends = "pushed"
+show = "review"
+feedback = "build"
+
+[agents.release]
+harness = "operator"
+ends = "release"
+feedback = "reopen"
+
+[agents.integrate]
+harness = "lead"
+ends = "integrate"
+show = "approved"
+feedback = "reopen"
+
+[lists.build]
+agents = ["worker", "check", "reviewer"]
+
+[lists.build.then]
+fail.check = { list = "build", round = true }
+fail.reviewer = "build"
+pass = [
+  { if = ["remote", "hold"], list = "held" },
+  { if = "remote", list = "ship" },
+  { list = "land" },
+]
+
+[lists.land]
+agents = ["integrate"]
+
+[lists.ship]
+agents = ["push", "land"]
+
+[lists.held]
+agents = ["release", "ship"]
