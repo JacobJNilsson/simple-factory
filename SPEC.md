@@ -130,7 +130,7 @@ A task moves through these states:
 
   | Names | Owner | sfy reads them for behavior |
   |---|---|---|
-  | `config.toml`, `prompts/` | the factory, through a factory repo or by hand | yes, they are the definition |
+  | `config.d/`, `config.toml`, `prompts/` | the factory, through a factory repo or by hand | yes, they are the definition |
   | `folder` | `sfy up`, or a factory repo's install script | yes, to find the working folder |
   | `tasks/`, `work/`, `repos/`, `sessions/`, `inbox/`, `next-id`, `status.md`, `main-prompt.md`, `sfy.log`, `sfy.sock`, `sfy.lock`, `sfy.pid` | sfy | no, they are state |
   | `notes.md` | the main agent | no, the main agent reads it |
@@ -230,7 +230,7 @@ A command that an agent kind may not run fails with an error that names the comm
 
 ## Configuration
 
-sfy builds a factory's settings from three places, lowest first: the defaults in the table below, the machine layer `~/.sfy/config.toml`, and the `config.toml` of the factory folder. The files merge key by key at every depth, as the section Factory definition describes:
+sfy builds a factory's settings from three places, lowest first: the defaults in the table below, the machine layer `~/.sfy`, and the factory folder. In each folder, sfy reads the `.toml` files of `config.d/` in name order, then `config.toml`. The files merge key by key at every depth, as the section Factory definition describes:
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -255,9 +255,10 @@ sfy builds a factory's settings from three places, lowest first: the defaults in
 
 ### Factory definition
 
-A factory's definition is the `config.toml` and the `prompts/` folder of its factory folder. The machine layer, `~/.sfy/config.toml` and `~/.sfy/prompts/`, applies to every factory. The operator owns the machine layer. For the default factory, the machine layer and the factory folder are one folder, and sfy reads each file once. A missing file or folder adds nothing. sfy reads no `.sfy/` folder in the working folder for the factory.
+A factory's definition is the `config.d/` folder, the `config.toml` and the `prompts/` folder of its factory folder. The machine layer, `~/.sfy/config.d/`, `~/.sfy/config.toml` and `~/.sfy/prompts/`, applies to every factory. The operator owns the machine layer. For the default factory, the machine layer and the factory folder are one folder, and sfy reads each file once. A missing file or folder adds nothing. sfy reads no `.sfy/` folder in the working folder for the factory.
 
-- **Settings.** sfy parses each `config.toml` into a table and merges the tables key by key at every depth. The factory's value replaces the machine's value. A list replaces the earlier list as a whole. So a factory that sets `session_rules.worker.allow` keeps the machine file's `session_rules.worker.excluded_commands`. sfy then decodes the merged table once and checks the values once. An unknown key in either file is an error. A value of the wrong type is an error that names its file.
+- **Settings.** sfy reads the config files in this order: the machine's `config.d/*.toml` in name order, the machine's `config.toml`, the factory's `config.d/*.toml` in name order, and the factory's `config.toml`. It parses each file into a table and merges the tables key by key at every depth. A later file's value replaces an earlier file's value. A list replaces the earlier list as a whole. So a factory that sets `session_rules.worker.allow` keeps the machine file's `session_rules.worker.excluded_commands`. sfy then decodes the merged table once and checks the values once. An unknown key in any file is an error. A value of the wrong type is an error that names its file.
+- **`config.d/`.** The folder lets a factory take shared settings through links, such as `config.d/50-shared.toml`, and keep its own `config.toml` on top. sfy follows a link. A missing folder adds nothing. A file whose name does not end in `.toml` is skipped. A file that cannot be read or parsed is an error that names the file. The per-repo files have no `config.d/`.
 - **Prompts.** The base `<kind>.md` comes from the last place that has one. Without one, the embedded default is the base. sfy collects the `.md` files of `prompts/<kind>.d/` from both places by file name. A factory file replaces the machine file of the same name. A file that holds only white space removes the file of that name from the prompt. sfy appends the rest in name order, each after a blank line. A missing folder adds nothing, a file without `.md` is skipped, and a file that cannot be read is an error.
 - **When a change applies.** Settings apply at the next `sfy restart`. The merge guard reads them at its next run. A prompt file applies at the next start of a session of that kind. The restart note names `main-prompt.md` when the main prompt changed.
 - **`sfy config`** prints the flat result in three parts, after a header that names the factory and the two places. The settings come as TOML lines with dotted keys, and each line ends with a comment that names the file that set it last, or `default`. The prompts part names the base file of each kind and each addition in append order. A removed addition names the file that removed it. The factory files part lists each name in the factory folder that is neither state nor definition, as the State section describes. The output prints the values of `session_settings.<kind>.env` as `<set>`, because such a value may hold a token. A factory repo that others can read must hold no token. Name the variables in `pass_env` and keep the values in the operator's environment.
@@ -288,7 +289,7 @@ A per-repo file holds the settings of one repo. A `.sfy.toml` file can also cove
 - **Which folder counts.** For a task whose `## Repo` is a local path, the folder is that path. For a task whose `## Repo` is a URL, the folder is the clone that sfy keeps in `repos/` of the factory folder, which exists after the first task of that URL starts. So a `.sfy.toml` in `repos/` or in the factory folder covers URL repos. sfy never reads the task's worktree or branch, so a worker's commit cannot change settings before the operator merges it.
 - **The `.sfy/` folder.** sfy reads `.sfy/config.toml` in that folder only, with no parent walk. The operator may keep `.sfy/` out of git with `core.excludesFile`, or commit it. In a URL clone, a committed `.sfy/` arrives with each fetch of the default branch, and the operator can also put an untracked one there by hand.
 - **Lookup.** sfy reads `.sfy.toml` in that folder and in each parent folder up to `$HOME`. It stops at `$HOME`. A folder outside `$HOME` counts alone, with no parent. sfy reads the files again on each use, so an edit applies at once.
-- **Precedence.** Key by key, the first file that sets the key wins. The order is `.sfy/config.toml` in the repo folder, then each `.sfy.toml` from the nearest to the farthest, then the factory's merged settings from its `config.toml` and `~/.sfy/config.toml`.
+- **Precedence.** Key by key, the first file that sets the key wins. The order is `.sfy/config.toml` in the repo folder, then each `.sfy.toml` from the nearest to the farthest, then the factory's merged settings from its config files and those of `~/.sfy`.
 - **Refusals.** A key that sfy does not know is an error. So is a global-only key, such as `multiplexer`, `max_workers` or `multiplexers`. The error names the file and the key. A file that does not parse is also an error. While a file has an error, `sfy task integrate` refuses for the repos below it, and the push note adds no draft rule.
 
 For example, this file at `~/Developer/work/.sfy.toml` makes the operator the only one who merges in every work repo below it:

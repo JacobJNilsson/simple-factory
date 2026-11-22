@@ -63,8 +63,12 @@ func mergeTables(lower, upper rawTable) rawTable {
 // A key path names a value that is not a table, such as models.worker or session_settings.worker.env.TOKEN.
 // A setting that no file sets keeps its default and has no entry.
 func Sources(home, userHome string) (map[string]string, error) {
+	paths, err := configFiles(home, userHome)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string]string{}
-	for _, path := range configFiles(home, userHome) {
+	for _, path := range paths {
 		raw, err := readTable(path)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue

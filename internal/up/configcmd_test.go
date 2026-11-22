@@ -62,6 +62,18 @@ func TestShowConfigNamesTheSourceOfEachKeyAndListsTheFactoryFiles(t *testing.T) 
 	}
 }
 
+func TestShowConfigNamesTheConfigDFileBehindAKey(t *testing.T) {
+	env, _, home := configFactory(t)
+	part := filepath.Join(home, "config.d", "50-shared.toml")
+	writeTestFile(t, part, "max_workers = 4\n")
+
+	got := showConfig(t, env)
+
+	if !strings.Contains(got, "max_workers = 4 # "+part+"\n") || strings.Contains(got, "# config.d\n") {
+		t.Errorf("output does not name the config.d file, or lists config.d as a factory file:\n%s", got)
+	}
+}
+
 func TestShowConfigPrintsValidTOML(t *testing.T) {
 	env, _, home := configFactory(t)
 	writeTestFile(t, filepath.Join(home, "config.toml"), "[session_settings.worker]\nlist = [1.5, \"a\\\"b\"]\nnested = { x = [{ y = 2 }] }\n")

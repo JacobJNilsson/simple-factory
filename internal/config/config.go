@@ -1,4 +1,4 @@
-// Package config loads config.toml from the machine layer and the factory folder.
+// Package config loads config.d/*.toml and config.toml from the machine layer and the factory folder.
 package config
 
 import (
@@ -182,19 +182,54 @@ func Layers(home, userHome string) []string {
 	return []string{machine, home}
 }
 
-// configFiles returns the config.toml of each layer, lowest first.
-func configFiles(home, userHome string) []string {
+// configFiles returns the config files of each layer, lowest first: the .toml files of config.d in name order, then config.toml.
+func configFiles(home, userHome string) ([]string, error) {
 	var paths []string
 	for _, dir := range Layers(home, userHome) {
-		paths = append(paths, filepath.Join(dir, "config.toml"))
+		parts, err := configParts(filepath.Join(dir, "config.d"))
+		if err != nil {
+			return nil, err
+		}
+		paths = append(append(paths, parts...), filepath.Join(dir, "config.toml"))
 	}
-	return paths
+	return paths, nil
 }
 
-// LoadFactory merges the config.toml of each folder from Layers onto the defaults.
-// Either file may be missing. A setting that the factory's file leaves out keeps the value of the machine file.
+// configParts returns the .toml files of the folder dir in name order, with links followed.
+// A missing folder gives none, and a file without .toml or a folder is skipped.
+func configParts(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("config: %w", err)
+	}
+	var paths []string
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) != ".toml" {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, &FileError{Path: path, Err: err}
+		}
+		if !info.IsDir() {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
+
+// LoadFactory merges the config files of each folder from Layers onto the defaults, as configFiles orders them.
+// Any file may be missing. A setting that a later file leaves out keeps the value of an earlier file.
 func LoadFactory(home, userHome string) (Config, error) {
-	return load(getconfTempDir, configFiles(home, userHome)...)
+	paths, err := configFiles(home, userHome)
+	if err != nil {
+		return Config{}, err
+	}
+	return load(getconfTempDir, paths...)
 }
 
 // load merges the files with mergeTables, decodes the result onto the defaults once, and then checks the values once.

@@ -21,7 +21,7 @@ var StateNames = []string{
 }
 
 // definitionNames are the names in a factory folder that say how sfy behaves.
-var definitionNames = []string{"config.toml", "prompts"}
+var definitionNames = []string{"config.toml", "config.d", "prompts"}
 
 // FactoryFiles lists the names in the factory folder home that are neither state nor definition, such as a checks folder that a factory repo installed.
 // It leaves out the folder file, the main agent's notes.md, and the factories folder of the default factory.

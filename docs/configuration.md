@@ -68,7 +68,15 @@ Each command picks its factory folder in this order:
 
 So `sfy status` in `~/Developer/acme/web/src` shows `acme`, and `sfy up` in `~/Developer/acme/web` joins `acme` without a new factory. In the home folder or in an unrelated folder, a command uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
 
-Every factory reads `~/.sfy/config.toml`. A `config.toml` in the factory folder is optional. The two files merge key by key at every depth, so the factory file can change one key of a table and keep the others. A list in the factory file replaces the machine file's list. Run `sfy config` to see the merged result:
+Every factory reads `~/.sfy/config.toml`. A `config.toml` in the factory folder is optional. The two files merge key by key at every depth, so the factory file can change one key of a table and keep the others. A list in the factory file replaces the machine file's list.
+
+Each of the two places can also hold a `config.d/` folder. sfy reads its `.toml` files in name order before the `config.toml` of the same place, and they merge the same way. A link in `config.d/` lets several factories share one file and keep their own `config.toml` on top:
+
+```
+ln -s ~/shared/factory.toml ~/.sfy/factories/acme/config.d/50-shared.toml
+```
+
+sfy skips a file whose name does not end in `.toml`. A file that does not parse is an error that names the file. Run `sfy config` to see the merged result:
 
 ```
 $ sfy config
