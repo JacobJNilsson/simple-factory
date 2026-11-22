@@ -59,8 +59,8 @@ type Config struct {
 	SessionSettings map[string]SessionValues `toml:"session_settings"`
 	// SessionRules holds extra permission rules for each session kind.
 	SessionRules map[string]SessionRule `toml:"session_rules"`
-	// AgentModels holds the models keys that name a claude agent other than the worker and the reviewer. It is nil when there are none.
-	AgentModels map[string]string `toml:"-"`
+	// agentModels holds the models keys that name a claude agent other than the worker and the reviewer. It is nil when there are none.
+	agentModels map[string]string
 }
 
 // SessionRule holds the extra rules of one session kind.
@@ -330,7 +330,7 @@ func loadWithProcess(userTempDir func() (string, error), paths ...string) (Confi
 			return Config{}, none, &SettingError{Setting: "models." + name, Unknown: true}
 		}
 	}
-	c.AgentModels = agentModels
+	c.agentModels = agentModels
 	return c, p, nil
 }
 
@@ -363,8 +363,8 @@ func splitAgentModels(merged rawTable) (rawTable, map[string]string) {
 // A verdict agent falls back to the reviewer's model, and every other agent to the worker's model.
 func (c Config) ModelOf(agent string, verdict bool) string {
 	switch {
-	case c.AgentModels[agent] != "":
-		return c.AgentModels[agent]
+	case c.agentModels[agent] != "":
+		return c.agentModels[agent]
 	case agent == "reviewer" || (verdict && agent != "worker"):
 		return c.Models.Reviewer
 	}
