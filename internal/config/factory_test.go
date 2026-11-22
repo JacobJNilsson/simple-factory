@@ -220,6 +220,25 @@ func TestLoadFactoryOfTheDefaultFolderReadsOneFile(t *testing.T) {
 	}
 }
 
+func TestFactoryFilesOfTheDefaultFactoryLeaveOutStateDefinitionAndFactories(t *testing.T) {
+	home := userHome(t)
+	def := mkdir(t, home, ".sfy")
+	for _, name := range []string{"tasks", "prompts", "factories", "checks"} {
+		mkdir(t, def, name)
+	}
+	for _, name := range []string{"config.toml", "notes.md", "sfy.log", "knowledge.md"} {
+		if err := os.WriteFile(filepath.Join(def, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := config.FactoryFiles(def, home)
+
+	if err != nil || !equal(got, []string{"checks", "knowledge.md"}) {
+		t.Fatalf("got %v, %v, want checks and knowledge.md", got, err)
+	}
+}
+
 func TestHeaderNamesTheFactoryAndItsFolder(t *testing.T) {
 	home := userHome(t)
 	dir := mkdir(t, home, "work")

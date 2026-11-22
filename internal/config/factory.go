@@ -6,12 +6,47 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
 
-// folderFile is the file in a factory's state folder that records the absolute path of its folder.
+// folderFile is the file in a factory folder that records the absolute path of its working folder.
 const folderFile = "folder"
+
+// StateNames are the names that sfy owns in a factory folder. A factory repo's install must not write them.
+var StateNames = []string{
+	"tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "main-prompt.md",
+	"sfy.log", "sfy.sock", "sfy.lock", "sfy.pid",
+}
+
+// DefinitionNames are the names in a factory folder that say how sfy behaves.
+var DefinitionNames = []string{"config.toml", "prompts"}
+
+// FactoryFiles lists the names in the factory folder home that are neither state nor definition, such as a checks folder that a factory repo installed.
+// It leaves out the folder file, the main agent's notes.md, and the factories folder of the default factory.
+func FactoryFiles(home, userHome string) ([]string, error) {
+	entries, err := os.ReadDir(home)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	isDefault := filepath.Clean(home) == DefaultHome(userHome)
+	var out []string
+	for _, e := range entries {
+		name := e.Name()
+		if slices.Contains(StateNames, name) || slices.Contains(DefinitionNames, name) || name == folderFile || name == "notes.md" {
+			continue
+		}
+		if isDefault && filepath.Join(home, name) == FactoriesDir(userHome) {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out, nil
+}
 
 // maxNameLength keeps the socket path of a factory within the system limit.
 const maxNameLength = 32

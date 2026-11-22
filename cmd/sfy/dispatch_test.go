@@ -30,6 +30,8 @@ func TestDispatch(t *testing.T) {
 		{"reviewer sfy run is refused", []string{"run", "env", "--", "id"}, "review-t1-1", 1, false, "", "may not run"},
 		{"worker sfy serve is refused", []string{"serve"}, "worker-t1", 1, false, "", "may not run"},
 		{"reviewer sfy restart is refused", []string{"restart"}, "review-t1-1", 1, false, "", "may not run"},
+		{"worker sfy config is refused", []string{"config"}, "worker-t1", 1, false, "", "may not run"},
+		{"config takes no arguments", []string{"config", "x"}, "", 2, false, "", "usage:"},
 		{"worker sfy hook with a free event is refused", []string{"hook", "x"}, "worker-t1", 1, false, "", "may not run"},
 		{"register takes no arguments", []string{"register", "x"}, "", 2, false, "", "usage:"},
 		{"agent sfy hooks install prints usage", []string{"hooks", "install"}, "main", 1, false, "", "usage:"},

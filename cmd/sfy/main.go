@@ -47,13 +47,13 @@ func (a app) run(args []string) int {
 	}
 	// The environment can be faked, so the allow rules of the settings are the real barrier. This check backs them up.
 	switch args[0] {
-	case "run", "serve", "register", "restart":
+	case "run", "serve", "register", "restart", "config":
 		if cli.Restricted(a.getenv) {
 			return a.report(cli.ErrRestricted)
 		}
 	}
 	switch args[0] {
-	case "--version", "help", "--help", "serve":
+	case "--version", "help", "--help", "serve", "config":
 		if len(args) > 1 {
 			return cli.Misuse(a.stderr, fmt.Sprintf("%s takes no arguments", args[0]))
 		}
@@ -74,6 +74,8 @@ func (a app) run(args []string) int {
 			stop()
 		}()
 		return a.report(up.Serve(ctx, a.getenv, a.stderr))
+	case "config":
+		return a.report(up.ShowConfig(a.getenv, a.stdout))
 	case "run":
 		// On success the process becomes the command, so run returns only on an error.
 		return a.report(envrun.Run(args[1:]))
