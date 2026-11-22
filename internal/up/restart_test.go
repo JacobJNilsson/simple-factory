@@ -14,7 +14,7 @@ import (
 )
 
 // runningRig returns a rig whose sfy process, main agent and one worker already run.
-// The main agent started with the prompt that the state folder holds now.
+// The main agent started with the prompt that the factory folder holds now.
 func runningRig(t *testing.T) *rig {
 	t.Helper()
 	r := newRig(t)

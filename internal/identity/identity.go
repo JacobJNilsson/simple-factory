@@ -18,7 +18,7 @@ import (
 
 var sessionName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// Folder is the identity data of one state folder.
+// Folder is the identity data of one factory folder.
 type Folder struct{ Home string }
 
 func (f Folder) tokenPath(name string) string {

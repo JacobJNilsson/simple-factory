@@ -36,7 +36,7 @@ func envOf(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
 
-// runWith runs the hook command that args name, with a sender that calls the socket of the state folder and prints the reply.
+// runWith runs the hook command that args name, with a sender that calls the socket of the factory folder and prints the reply.
 func runWith(env func(string) string, args []string, stdin string) (code int, out, errb string) {
 	var o, e bytes.Buffer
 	caller := func() protocol.Caller { return protocol.Caller{Agent: env("SFY_AGENT")} }
@@ -83,7 +83,7 @@ func TestNoteHookPrintsTheNotesToStderrAndExitsWithTwo(t *testing.T) {
 	}
 }
 
-// storeMessage puts an unread message for worker-t1 into the state folder that the hook env names.
+// storeMessage puts an unread message for worker-t1 into the factory folder that the hook env names.
 func storeMessage(t *testing.T, env func(string) string, id, body string) store.Store {
 	t.Helper()
 	st := store.Files(env("SFY_HOME"))
@@ -216,7 +216,7 @@ func TestTurnEndedHookDeliversAQueuedNoteAndKeepsTheTurnGoing(t *testing.T) {
 	}
 }
 
-// socketEnv returns the env of worker-t1 and a short state folder, because a socket path has a length limit.
+// socketEnv returns the env of worker-t1 and a short factory folder, because a socket path has a length limit.
 func socketEnv(t *testing.T) (func(string) string, string) {
 	t.Helper()
 	home, err := os.MkdirTemp("", "fc")

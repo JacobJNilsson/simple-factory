@@ -20,7 +20,7 @@ import (
 
 const gitTimeout = 5 * time.Minute
 
-// Workspaces creates and removes task folders under one state folder.
+// Workspaces creates and removes task folders under one factory folder.
 type Workspaces struct {
 	home   string
 	prefix string

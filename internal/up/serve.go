@@ -31,7 +31,7 @@ const (
 	tickEvery = 2 * time.Second
 	// probeTimeout limits how long up waits for one answer from the socket.
 	probeTimeout = 2 * time.Second
-	// logName is the log file of the sfy process, inside the sfy home.
+	// logName is the log file of the sfy process, inside the factory folder.
 	logName = "sfy.log"
 )
 
@@ -98,7 +98,7 @@ func (l logAppender) Write(p []byte) (int, error) {
 	return n, errors.Join(err, f.Close())
 }
 
-// Serve runs the sfy process until ctx ends. It logs to stderr and to sfy.log in the sfy home.
+// Serve runs the sfy process until ctx ends. It logs to stderr and to sfy.log in the factory folder.
 // A fatal error also goes to sfy.log, because the multiplexer pane may close before anyone reads stderr.
 func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error {
 	home := config.Home(env)
@@ -188,7 +188,7 @@ func checkSocketPath(path string) error {
 	return nil
 }
 
-// Command runs a plain sfy for the sfy home that env names.
+// Command runs a plain sfy for the factory folder that env names.
 func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
 	env, err := factoryEnv(env, os.Getwd)
 	if err != nil {
@@ -231,7 +231,7 @@ func factoryEnv(env func(string) string, getwd func() (string, error)) (func(str
 	}, nil
 }
 
-// Restart runs sfy restart for the sfy home that env names. The operator and the main agent may run it.
+// Restart runs sfy restart for the factory folder that env names. The operator and the main agent may run it.
 // With update set, it upgrades through brew or from the newest GitHub release before it reads the config, and restarts only when that succeeds.
 // version is the running sfy version, which the release update compares with the newest tag.
 // The upgraded binary then reads the config, because a config written for the new version can fail the old one.
@@ -263,7 +263,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 		return options{}, err
 	}
 	return options{
-		home: p.home, layers: p.layers, dir: config.FactoryFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
+		home: p.home, layers: p.layers, dir: config.WorkFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
 		mux: p.mux, launcher: p.launcher, warn: stderr, spawn: spawnDetached, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },

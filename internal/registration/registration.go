@@ -49,7 +49,7 @@ func Write(home string, r Record) error {
 	return os.WriteFile(Path(home), append(b, '\n'), 0o600)
 }
 
-// Folder is the registration of one state folder.
+// Folder is the registration of one factory folder.
 type Folder struct{ Home string }
 
 // Registered reports whether a session registered as the main agent.

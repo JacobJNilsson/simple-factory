@@ -203,7 +203,7 @@ func secureDir(dir string) error {
 // pidName is the file next to the lock that holds the pid of the running sfy process.
 const pidName = "sfy.pid"
 
-// HolderPid returns the pid of the sfy process that runs for the state folder dir.
+// HolderPid returns the pid of the sfy process that runs for the factory folder dir.
 // The lock decides. A pid file that no lock backs is stale, so a reused pid is never returned.
 func HolderPid(dir string) (int, bool) {
 	lock, err := takeLock(filepath.Join(dir, "sfy.lock"))

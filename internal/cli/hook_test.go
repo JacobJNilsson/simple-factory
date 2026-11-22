@@ -15,7 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 )
 
-// answerOnSocket listens on the socket of a short state folder and answers each request with text.
+// answerOnSocket listens on the socket of a short factory folder and answers each request with text.
 // It returns the env of worker-t1 for that folder and a count of the requests that arrived.
 func answerOnSocket(t *testing.T, text string) (func(string) string, func() int) {
 	t.Helper()

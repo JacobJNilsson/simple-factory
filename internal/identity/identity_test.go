@@ -12,7 +12,7 @@ import (
 
 const mainConversation = "11111111-2222-4333-8444-555555555555"
 
-// preTokenHome returns a state folder with the session folders that an sfy without tokens left behind.
+// preTokenHome returns a factory folder with the session folders that an sfy without tokens left behind.
 func preTokenHome(t *testing.T) Folder {
 	t.Helper()
 	home := t.TempDir()

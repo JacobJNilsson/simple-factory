@@ -361,7 +361,7 @@ func TestServeEnvNeverPassesAnEmptyPath(t *testing.T) {
 	}
 }
 
-// serveRun holds what startedServe observed: the parsed command, its raw arguments, and the sfy home.
+// serveRun holds what startedServe observed: the parsed command, its raw arguments, and the factory folder.
 type serveRun struct {
 	parsed  envruntest.Command
 	command []string
@@ -432,7 +432,7 @@ func TestUpWarnsWhenHomeIsNotTrusted(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(r.l.trustAsked) != 1 || r.l.trustAsked[0] != r.o.home {
-		t.Errorf("asked %v, want the sfy home", r.l.trustAsked)
+		t.Errorf("asked %v, want the factory folder", r.l.trustAsked)
 	}
 	if !strings.Contains(r.err.String(), "some warning") {
 		t.Errorf("stderr: %q", r.err.String())

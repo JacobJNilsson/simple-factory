@@ -150,7 +150,7 @@ func (e *Engine) SetRegistration(r Registration) {
 	e.reg = r
 }
 
-// Authenticator decides who calls from the session tokens that the server's state folder holds.
+// Authenticator decides who calls from the session tokens that the server's factory folder holds.
 // It returns the session name that the request's caller proves, or an error that refuses the request.
 type Authenticator interface {
 	Authenticate(protocol.Caller) (agent string, err error)

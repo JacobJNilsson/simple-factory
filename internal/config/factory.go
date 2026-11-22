@@ -51,12 +51,12 @@ func FactoryFiles(home, userHome string) ([]string, error) {
 // maxNameLength keeps the socket path of a factory within the system limit.
 const maxNameLength = 32
 
-// FactoriesDir returns the folder that holds the state folders of the factories that sfy created.
+// FactoriesDir returns the folder that holds the factory folders of the factories that sfy created.
 func FactoriesDir(userHome string) string {
 	return filepath.Join(userHome, ".sfy", "factories")
 }
 
-// DefaultHome returns the state folder of the default factory.
+// DefaultHome returns the factory folder of the default factory, which is also the machine layer.
 func DefaultHome(userHome string) string { return filepath.Join(userHome, ".sfy") }
 
 // FactoryName returns the name that a folder gets: its base name in lower case, with each character outside a-z0-9- replaced by -.
@@ -86,8 +86,8 @@ func CanonicalPath(dir string) string {
 	return dir
 }
 
-// FactoryFolder returns the folder that a state folder records, or an empty string when it records none.
-func FactoryFolder(home string) string {
+// WorkFolder returns the working folder that a factory folder records, or an empty string when it records none.
+func WorkFolder(home string) string {
 	b, err := os.ReadFile(filepath.Join(home, folderFile))
 	if err != nil {
 		return ""
@@ -95,7 +95,7 @@ func FactoryFolder(home string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// registered maps each recorded folder to its state folder.
+// registered maps each recorded working folder to its factory folder.
 func registered(userHome string) map[string]string {
 	out := map[string]string{}
 	entries, err := os.ReadDir(FactoriesDir(userHome))
@@ -104,15 +104,15 @@ func registered(userHome string) map[string]string {
 	}
 	for _, e := range entries {
 		state := filepath.Join(FactoriesDir(userHome), e.Name())
-		if folder := FactoryFolder(state); folder != "" {
+		if folder := WorkFolder(state); folder != "" {
 			out[CanonicalPath(folder)] = state
 		}
 	}
 	return out
 }
 
-// FindFactory returns the state folder of the nearest factory folder at or above dir.
-// The user's home folder is never a factory folder.
+// FindFactory returns the factory folder of the nearest working folder at or above dir.
+// The user's home folder is never a working folder.
 func FindFactory(userHome, dir string) (string, bool) {
 	known := registered(userHome)
 	if len(known) == 0 {
@@ -129,7 +129,7 @@ func FindFactory(userHome, dir string) (string, bool) {
 	}
 }
 
-// CreateFactory makes the state folder of a new factory for dir and records dir in it.
+// CreateFactory makes the factory folder of a new factory for the working folder dir and records dir in it.
 // Two folders with one base name get the names web and web-2.
 func CreateFactory(userHome, dir string) (string, error) {
 	dir = CanonicalPath(dir)
@@ -157,10 +157,10 @@ func CreateFactory(userHome, dir string) (string, error) {
 	}
 }
 
-// Describe returns the name of the factory with the state folder home, and the folder it works in.
-// The default factory has the name default and no folder, so its folder is the state folder.
+// Describe returns the name of the factory with the factory folder home, and its working folder.
+// The default factory has the name default and records no working folder, so its working folder is its factory folder.
 func Describe(home string, env func(string) string) (name, folder string) {
-	if folder = FactoryFolder(home); folder != "" {
+	if folder = WorkFolder(home); folder != "" {
 		return filepath.Base(filepath.Clean(home)), folder
 	}
 	if filepath.Clean(home) == DefaultHome(env("HOME")) {

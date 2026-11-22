@@ -38,7 +38,7 @@ func (a adapter) Resumes(spec engine.SessionSpec) bool {
 }
 
 // mainConversation returns the flags that continue the recorded conversation, or start and record a new one.
-// A resumed conversation must run in the same folder, and the main agent always starts in the state folder.
+// A resumed conversation must run in the same folder, and the main agent always starts in its working folder.
 func (a adapter) mainConversation(spec engine.SessionSpec) (flags []string, resumed bool, err error) {
 	if a.Resumes(spec) {
 		id, _ := a.recordedConversation()

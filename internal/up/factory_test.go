@@ -69,7 +69,7 @@ func TestFactoryEnvKeepsSFYHOMEAndUsesTheDefaultInTheHomeFolder(t *testing.T) {
 	}
 }
 
-func TestMainAgentWorksInTheFactoryFolder(t *testing.T) {
+func TestMainAgentWorksInTheWorkingFolder(t *testing.T) {
 	if got := (options{home: "/s", dir: "/w"}).mainDir(); got != "/w" {
 		t.Errorf("factory: %q, want /w", got)
 	}

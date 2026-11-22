@@ -8,7 +8,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
-// registeredEnv registers session s-main in a new state folder and returns the environment of session id.
+// registeredEnv registers session s-main in a new factory folder and returns the environment of session id.
 func registeredEnv(t *testing.T, id string) func(string) string {
 	t.Helper()
 	home := t.TempDir()

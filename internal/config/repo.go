@@ -57,13 +57,13 @@ var globalOnly = []string{
 type RepoFileError struct {
 	File    string
 	Setting string
-	// GlobalOnly is true when the setting is valid, but only in ~/.sfy/config.toml.
+	// GlobalOnly is true when the setting is valid, but only in the config.toml of ~/.sfy or of the factory folder.
 	GlobalOnly bool
 }
 
 func (e *RepoFileError) Error() string {
 	if e.GlobalOnly {
-		return fmt.Sprintf("config: %s: %s is a global setting, so set it in config.toml in the sfy home folder", e.File, e.Setting)
+		return fmt.Sprintf("config: %s: %s is a global setting, so set it in config.toml in ~/.sfy or in the factory folder", e.File, e.Setting)
 	}
 	return fmt.Sprintf("config: %s: unknown setting %s", e.File, e.Setting)
 }

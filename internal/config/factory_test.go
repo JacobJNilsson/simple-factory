@@ -52,13 +52,13 @@ func TestCreateFactoryRecordsTheFolderAndWritesNothingThere(t *testing.T) {
 		t.Fatal(err)
 	}
 	if want := filepath.Join(home, ".sfy", "factories", "acme"); state != want {
-		t.Errorf("state folder %q, want %q", state, want)
+		t.Errorf("factory folder %q, want %q", state, want)
 	}
-	if got := config.FactoryFolder(state); got != dir {
+	if got := config.WorkFolder(state); got != dir {
 		t.Errorf("recorded folder %q, want %q", got, dir)
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
-		t.Errorf("the factory folder holds %d entries, want none", len(entries))
+		t.Errorf("the working folder holds %d entries, want none", len(entries))
 	}
 }
 
@@ -156,7 +156,7 @@ func TestHomeOrdersSFYHOMEThenFactoryThenDefault(t *testing.T) {
 	}
 	cases := []struct{ name, cwd, sfyHome, want string }{
 		{"override", dir, "/custom", "/custom"},
-		{"in the factory folder", dir, "", state},
+		{"in the working folder", dir, "", state},
 		{"in a subfolder", mkdir(t, dir, "sub"), "", state},
 		{"in the home folder", home, "", filepath.Join(home, ".sfy")},
 		{"in an unrelated folder", other, "", filepath.Join(home, ".sfy")},

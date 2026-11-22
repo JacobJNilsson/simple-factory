@@ -95,7 +95,7 @@ func (e *commandError) Unwrap() error { return e.err }
 // CONTRACT: callers hold a Mux, so the engine can use a fake in tests.
 func Runner(t Templates) Mux { return RunnerFor(t, "") }
 
-// RunnerFor works as Runner and gives each template the state folder home as {home} and as SFY_HOME.
+// RunnerFor works as Runner and gives each template the factory folder home as {home} and as SFY_HOME.
 // An empty home sets neither.
 // CONTRACT: callers hold a Mux, as for Runner, so RunnerFor returns the interface.
 func RunnerFor(t Templates, home string) Mux {

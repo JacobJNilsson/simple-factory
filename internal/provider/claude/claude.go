@@ -404,7 +404,7 @@ func sfyRules(kind string) []string {
 	return nil
 }
 
-// mainReads lets the main agent read the sfy home without a prompt and list folders. It gets no cat rule, because a rule matches the command text and cannot limit a path.
+// mainReads lets the main agent read the factory folder without a prompt and list folders. It gets no cat rule, because a rule matches the command text and cannot limit a path.
 func (a adapter) mainReads() []string {
 	return []string{"Read(" + rulePath(a.home) + "/**)", "Bash(ls *)"}
 }

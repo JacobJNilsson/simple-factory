@@ -24,7 +24,7 @@ import (
 var ErrNotAnswering = errors.New("the sfy process did not answer on its socket in time")
 
 // ErrServeExited reports that the sfy process's session ended while up waited for it.
-var ErrServeExited = errors.New("the sfy process exited, see sfy.log in the sfy home")
+var ErrServeExited = errors.New("the sfy process exited, see sfy.log in the factory folder")
 
 // mainFailedError reports a main agent that failed to start after the sfy process started.
 type mainFailedError struct{ err error }
@@ -40,7 +40,7 @@ const serveSession = "sfy"
 
 // mainPrompt names the folder, so the main agent needs no command to find it.
 func mainPrompt(home string) string {
-	return "Your state folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
+	return "Your factory folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
 }
 
 // resumePrompt is the first message of a resumed main agent. Its conversation already holds the full prompt.

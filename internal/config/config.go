@@ -1,4 +1,4 @@
-// Package config loads config.toml from the sfy home folder.
+// Package config loads config.toml from the machine layer and the factory folder.
 package config
 
 import (
@@ -260,9 +260,9 @@ func firstUnknown(md toml.MetaData) (string, bool) {
 	return "", false
 }
 
-// Home returns the state folder.
-// SFY_HOME wins. Otherwise the nearest registered factory folder at or above the current folder wins.
-// Without either, the default factory, .sfy in the user's home folder, is the state folder.
+// Home returns the factory folder.
+// SFY_HOME wins. Otherwise the factory of the nearest registered working folder at or above the current folder wins.
+// Without either, the default factory folder, .sfy in the user's home folder, wins.
 func Home(env func(string) string) string {
 	if h := env("SFY_HOME"); h != "" {
 		return h
@@ -275,7 +275,7 @@ func Home(env func(string) string) string {
 	return DefaultHome(env("HOME"))
 }
 
-// Prefix returns the text that goes in front of every terminal session name and worker branch of a state folder.
+// Prefix returns the text that goes in front of every terminal session name and worker branch of a factory folder.
 // The default folder, .sfy in the user's home folder, has an empty prefix.
 // Any other folder gets its base name without a leading dot, in lower case, with each character outside a-z0-9- replaced by -, and a final -.
 func Prefix(home string, env func(string) string) string {
