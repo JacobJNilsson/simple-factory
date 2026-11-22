@@ -1,6 +1,8 @@
 package up
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -117,6 +119,46 @@ func TestRestartWarnsAndGoesOnWhenTheDefinitionFileIsBroken(t *testing.T) {
 
 	if !strings.Contains(r.err.String(), "no definition report") || !strings.HasPrefix(r.out.String(), "Stopped the sfy process.\n") {
 		t.Errorf("warnings %q, output %q", r.err.String(), r.out.String())
+	}
+}
+
+func TestTheStartOfTheSfyProcessWritesTheDefinition(t *testing.T) {
+	// A short folder keeps the socket path within the system limit.
+	home, err := os.MkdirTemp("", "fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	userHome := t.TempDir()
+	writeTestFile(t, filepath.Join(home, "config.toml"), "max_workers = 3\n")
+	writeTestFile(t, filepath.Join(home, "prompts", "worker.d", "writing.md"), "Write short sentences.\n")
+	env := func(k string) string { return map[string]string{"HOME": userHome, "SFY_HOME": home}[k] }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, env, io.Discard) }()
+	waitAnswering(t, socket(home))
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(filepath.Join(home, definitionName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, want 0600", info.Mode().Perm())
+	}
+	cfg, err := config.LoadFactory(home, userHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := definitionReport(home, cfg, config.Layers(home, userHome))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{noChange}; !reflect.DeepEqual(got, want) {
+		t.Errorf("report %q, want %q", got, want)
 	}
 }
 
