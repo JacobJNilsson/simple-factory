@@ -110,10 +110,8 @@ func (t Then) pass(facts Facts, output string) Target {
 	case b.Target != nil:
 		return *b.Target
 	case b.Shell != nil:
-		lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-		name := strings.TrimSpace(lines[len(lines)-1])
-		if slices.Contains(b.Shell.To, name) {
-			return Target{List: name}
+		if target, ok := b.Shell.Pick(output); ok {
+			return target
 		}
 		return t.fail(b.Shell.Agent)
 	}
@@ -124,6 +122,19 @@ func (t Then) pass(facts Facts, output string) Target {
 	}
 	return Target{List: Escalated}
 }
+
+// Pick reads the output of the branch's shell agent. It returns the target that the last line names, or false when that line names no target in To.
+func (b ShellBranch) Pick(output string) (Target, bool) {
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	name := strings.TrimSpace(lines[len(lines)-1])
+	if slices.Contains(b.To, name) {
+		return Target{List: name}, true
+	}
+	return Target{}, false
+}
+
+// FailTarget returns the target of a list that failed at agent.
+func (t Then) FailTarget(agent string) Target { return t.fail(agent) }
 
 // fail picks the target of a list that failed at agent.
 func (t Then) fail(agent string) Target {
