@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -29,6 +31,9 @@ type Runner struct {
 	Ctx     context.Context
 	Timeout time.Duration
 	Sandbox Sandbox
+	// Hidden lists the paths that every sandboxed command is denied, also one whose agent has its own deny_read list.
+	// Sandbox.DenyRead holds them too.
+	Hidden []string
 }
 
 // Start runs command in dir on a new goroutine and calls done with the result.
@@ -37,6 +42,58 @@ func (r Runner) Start(dir, command string, done func(engine.CheckResult)) {
 		return r.Sandbox.Wrap(runtime.GOOS, dir, tmp, argv)
 	}
 	go func() { done(Run(r.Ctx, dir, command, r.Timeout, wrap)) }()
+}
+
+// StartShell runs a shell agent's command with the agent's own lists, on a new goroutine, and calls done with the result.
+// An agent with sandbox set to false runs with no wrapper. The result holds the files of the drop folder, which StartShell creates.
+func (r Runner) StartShell(spec engine.ShellSpec, done func(engine.CheckResult)) {
+	box := r.Sandbox
+	if spec.DenyRead != nil {
+		box.DenyRead = append(slices.Clone(r.Hidden), *spec.DenyRead...)
+	}
+	if spec.AllowWrite != nil {
+		box.AllowWrite = slices.Clone(*spec.AllowWrite)
+	}
+	var mkErr error
+	if spec.Drop != "" {
+		mkErr = os.MkdirAll(spec.Drop, 0o700)
+		box.AllowWrite = append(box.AllowWrite, spec.Drop)
+	}
+	wrap := func(dir, tmp string, argv []string) ([]string, error) {
+		if mkErr != nil {
+			return nil, mkErr
+		}
+		if !spec.Sandbox {
+			return argv, nil
+		}
+		return box.Wrap(runtime.GOOS, dir, tmp, argv)
+	}
+	go func() {
+		res := Run(r.Ctx, spec.Dir, spec.Command, r.Timeout, wrap)
+		res.Drops = readDrops(spec.Drop)
+		done(res)
+	}()
+}
+
+// readDrops returns the .md files of a drop folder in name order. A folder that cannot be read gives none.
+func readDrops(dir string) [][]byte {
+	if dir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out [][]byte
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if b, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // Run runs `sh -c command` in dir and waits for it. The command gets its own session, no stdin and the environment from checkEnv.

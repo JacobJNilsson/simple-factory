@@ -2,6 +2,7 @@ package up
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 )
 
@@ -28,7 +30,7 @@ const hiddenValue = "<set>"
 // Each old name also gets a warning line on stderr.
 func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	home, userHome := config.Home(env), env("HOME")
-	cfg, err := config.LoadFactory(home, userHome)
+	cfg, proc, err := loadDefinition(home, userHome)
 	if err != nil {
 		return err
 	}
@@ -42,6 +44,7 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	if err := writeSettings(&out, cfg, sources); err != nil {
 		return err
 	}
+	writeProcess(&out, proc, sources)
 	out.WriteString("\n# Prompts\n")
 	for _, kind := range promptKinds {
 		if err := writePrompts(&out, kind, layers); err != nil {
@@ -82,6 +85,68 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// writeProcess writes the task process: the start list, each list with its joined agents and branches, and each agent.
+// Each list names the file that set its agents last, because a later file replaces a list's agents as a whole.
+// An agent that runs outside the sandbox or with its own path lists is marked wide.
+func writeProcess(out *strings.Builder, p process.Process, sources map[string]string) {
+	source := func(key string) string { return cmp.Or(sources[key], "default") }
+	fmt.Fprintf(out, "\n# Process\n# start = %s # %s\n", p.Start, source("start"))
+	for _, name := range slices.Sorted(maps.Keys(p.Lists)) {
+		l := p.Lists[name]
+		agents, _ := p.Flatten(name)
+		fmt.Fprintf(out, "# list %s = %s # %s\n", name, strings.Join(agents, ", "), source("lists."+name+".agents"))
+		fmt.Fprintf(out, "#   pass: %s\n", passText(l.Then.Pass))
+		var fails []string
+		for _, agent := range slices.Sorted(maps.Keys(l.Then.FailBy)) {
+			fails = append(fails, fmt.Sprintf("at %s %s", agent, targetText(l.Then.FailBy[agent])))
+		}
+		fails = append(fails, "otherwise "+targetText(l.Then.Fail))
+		fmt.Fprintf(out, "#   fail: %s\n", strings.Join(fails, ", "))
+	}
+	for _, name := range slices.Sorted(maps.Keys(p.Agents)) {
+		a := p.Agents[name]
+		line := fmt.Sprintf("# agent %s: harness %s, ends %s", name, a.Harness, a.Ends)
+		if a.Harness == process.Shell {
+			line += ", run " + strings.Join(a.Run, " && ")
+		}
+		if a.Like != "" {
+			line += ", like " + a.Like
+		}
+		if a.Harness == process.Shell && a.Permissions.Wide() {
+			line += ", wide"
+			if !a.Permissions.Sandbox {
+				line += ": no sandbox"
+			}
+		}
+		out.WriteString(line + "\n")
+	}
+}
+
+func targetText(t process.Target) string {
+	if t.Round {
+		return t.List + " with a new round"
+	}
+	return t.List
+}
+
+func passText(b process.Branch) string {
+	switch {
+	case b.Target != nil:
+		return targetText(*b.Target)
+	case b.Shell != nil:
+		return fmt.Sprintf("the last line of %s, one of %s", b.Shell.Agent, strings.Join(b.Shell.To, ", "))
+	}
+	var parts []string
+	for _, c := range b.Cases {
+		if len(c.If) == 0 {
+			parts = append(parts, "otherwise "+targetText(c.Target))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("if %s %s", strings.Join(c.If, " and "), targetText(c.Target)))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // writeSettings writes each setting of cfg as a TOML line with a dotted key, followed by the file that set it last or default.

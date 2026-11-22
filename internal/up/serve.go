@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"syscall"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
@@ -48,6 +51,7 @@ type parts struct {
 	// layers are the folders of the factory's definition, lowest first, as config.Layers returns them.
 	layers   []string
 	cfg      config.Config
+	proc     process.Process
 	bin      string
 	mux      mux.Mux
 	whoami   func() (string, error)
@@ -68,7 +72,7 @@ func execInPlace(dir string, argv []string) error {
 
 func newParts(env func(string) string) (parts, error) {
 	home := config.Home(env)
-	cfg, err := config.LoadFactory(home, env("HOME"))
+	cfg, proc, err := loadDefinition(home, env("HOME"))
 	if err != nil {
 		return parts{}, err
 	}
@@ -88,7 +92,51 @@ func newParts(env func(string) string) (parts, error) {
 	who, _ := m.(mux.Whoamier)
 	layers := config.Layers(home, env("HOME"))
 	agent := claude.New(cfg, home, bin, layers)
-	return parts{home: home, layers: layers, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, agent: agent, move: move, launcher: launcher.New(m, agent, logAppender{path: filepath.Join(home, logName)})}, nil
+	adapters := map[string]provider.Provider{"claude": agent}
+	if err := checkHarnesses(cfg, proc, adapters); err != nil {
+		return parts{}, err
+	}
+	l := launcher.WithAdapters(m, adapters, cfg.Provider, logAppender{path: filepath.Join(home, logName)})
+	return parts{home: home, layers: layers, cfg: cfg, proc: proc, bin: bin, mux: m, whoami: who.Whoami, agent: agent, move: move, launcher: l}, nil
+}
+
+// loadDefinition loads the settings and the task process, and refuses a process that the engine cannot run.
+// It also refuses a process that removes the position of an open task, so sfy restart keeps the old process running.
+func loadDefinition(home, userHome string) (config.Config, process.Process, error) {
+	cfg, proc, err := config.LoadProcess(home, userHome)
+	if err != nil {
+		return cfg, proc, err
+	}
+	if err := engine.Runnable(proc); err != nil {
+		return cfg, proc, err
+	}
+	tasks, err := store.Files(home).Tasks()
+	if err != nil {
+		return cfg, proc, err
+	}
+	open := map[string]process.Position{}
+	for _, t := range tasks {
+		if t.Open() {
+			open[t.ID] = t.Position()
+		}
+	}
+	return cfg, proc, proc.Validate(open)
+}
+
+// checkHarnesses refuses a provider key or a claude agent whose session harness has no adapter.
+func checkHarnesses(cfg config.Config, proc process.Process, adapters map[string]provider.Provider) error {
+	if _, ok := adapters[cfg.Provider]; !ok {
+		return fmt.Errorf("config: provider %q has no adapter. sfy has an adapter for claude", cfg.Provider)
+	}
+	for _, name := range slices.Sorted(maps.Keys(proc.Agents)) {
+		a := proc.Agents[name]
+		if a.Harness == process.Claude {
+			if _, ok := adapters[a.Harness]; !ok {
+				return fmt.Errorf("process: agents.%s names the harness %q, which has no adapter", name, a.Harness)
+			}
+		}
+	}
+	return nil
 }
 
 // logAppender appends to sfy.log on each write, so a plain sfy and sfy serve both log without holding the file open.
@@ -162,6 +210,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng.SetLog(log)
 	eng.SetRepoConfig(repoConfig(p.cfg, env))
 	eng.SetChecker(checker(ctx, p, env("HOME")))
+	eng.SetProcess(p.proc)
 	eng.SetRegistration(registration.Folder{Home: p.home})
 	eng.SetAuth(identity.Folder{Home: p.home})
 	eng.SetFactories(machine{home: p.home, env: env})
@@ -196,10 +245,12 @@ func checker(ctx context.Context, p parts, userHome string) taskcheck.Runner {
 			deny = append(deny, f)
 		}
 	}
+	hidden := slices.Clone(deny)
 	deny = append(deny, p.cfg.DenyRead...)
 	return taskcheck.Runner{
 		Ctx: ctx, Timeout: p.cfg.CheckTimeout,
 		Sandbox: taskcheck.Sandbox{DenyRead: deny, AllowWrite: p.cfg.AllowWrite},
+		Hidden:  hidden,
 	}
 }
 
