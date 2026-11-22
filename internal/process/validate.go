@@ -12,6 +12,14 @@ import (
 // validName limits agent and list names, so a name fits a session name and a file name.
 var validName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
+// reserved lists the names that no agent, list or session prefix may take, because they name the lead and its old name.
+var reserved = []string{"lead", "main"}
+
+// ValidName reports whether name may name an agent, a list or a session prefix.
+func ValidName(name string) bool {
+	return validName.MatchString(name) && !slices.Contains(reserved, name)
+}
+
 // Harnesses lists the four harness kinds.
 var Harnesses = []string{Claude, Shell, Lead, Operator}
 
@@ -48,14 +56,15 @@ func (p Process) Validate(open map[string]Position) error {
 		if _, both := p.Lists[name]; both {
 			add("%s names both an agent and a list", name)
 		}
-		if !validName.MatchString(name) {
-			add("the agent name %q must match [a-z][a-z0-9-]*", name)
+		if !ValidName(name) {
+			errs = append(errs, &KeyError{Key: "agents." + name, Msg: "an agent name must match [a-z][a-z0-9-]* and may not be lead or main"})
 		}
 		errs = append(errs, p.validateAgent(p.Agents[name])...)
 	}
+	errs = append(errs, p.validatePrefixes()...)
 	for _, name := range slices.Sorted(maps.Keys(p.Lists)) {
-		if !validName.MatchString(name) || name == Done || name == Escalated {
-			add("the list name %q must match [a-z][a-z0-9-]* and may not be done or escalated", name)
+		if !ValidName(name) || name == Done || name == Escalated {
+			errs = append(errs, &KeyError{Key: "lists." + name, Msg: "a list name must match [a-z][a-z0-9-]* and may not be lead, main, done or escalated"})
 		}
 		if _, err := p.Flatten(name); err != nil {
 			errs = append(errs, err)
@@ -76,6 +85,23 @@ func (p Process) Validate(open map[string]Position) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// KeyError reports a key of the process that breaks a rule. Key is the path of the key, such as agents.gate.
+type KeyError struct {
+	Key, Msg string
+}
+
+func (e *KeyError) Error() string { return "process: " + e.Key + ": " + e.Msg }
+
+// PrefixError reports claude agents that share a session prefix without like, so their session names would collide.
+type PrefixError struct {
+	Prefix string
+	Agents []string
+}
+
+func (e *PrefixError) Error() string {
+	return fmt.Sprintf("process: the agents %s share the session prefix %q. Give each its own session_name, or use like to share a session", strings.Join(e.Agents, ", "), e.Prefix)
 }
 
 // GoneError reports an open task whose position the process no longer has.
@@ -127,6 +153,35 @@ func (p Process) validateAgent(a Agent) []error {
 	}
 	if a.Harness == Shell && len(a.Run) == 0 {
 		add("a shell agent needs a run list")
+	}
+	return errs
+}
+
+// validatePrefixes refuses a session prefix that is no valid name, and a prefix that two claude agents share.
+// An agent with like runs in the session of the agent it copies, so it shares that prefix and sets none of its own.
+func (p Process) validatePrefixes() []error {
+	var errs []error
+	owners := map[string][]string{}
+	for _, name := range slices.Sorted(maps.Keys(p.Agents)) {
+		a := p.Agents[name]
+		if a.Harness != Claude {
+			continue
+		}
+		if a.Like != "" {
+			if a.has("session_name") {
+				errs = append(errs, &KeyError{Key: "agents." + name + ".session_name", Msg: "an agent with like shares the session of " + a.Like + ", so it sets no session_name"})
+			}
+			continue
+		}
+		if !ValidName(a.SessionName) {
+			errs = append(errs, &KeyError{Key: "agents." + name + ".session_name", Msg: "a session prefix must match [a-z][a-z0-9-]* and may not be lead or main"})
+		}
+		owners[a.SessionName] = append(owners[a.SessionName], name)
+	}
+	for _, prefix := range slices.Sorted(maps.Keys(owners)) {
+		if names := owners[prefix]; len(names) > 1 {
+			errs = append(errs, &PrefixError{Prefix: prefix, Agents: names})
+		}
 	}
 	return errs
 }

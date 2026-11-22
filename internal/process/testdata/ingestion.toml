@@ -1,0 +1,76 @@
+# The ingestion process of the factory plan. A task loads one source into one destination.
+start = "load"
+
+[agents.loader]
+harness = "claude"
+prompt = "loader"
+repo_prompt = "worker-repo"
+model = "sonnet"
+session = "task"
+ends = "done"
+feedback = "message"
+permissions = { push = true }
+
+# Hard checks on the staged data, by repo and by source.
+[agents.profile]
+harness = "shell"
+run = ["{task_check}", "sh {factory}/checks/ingest.sh profile {task_file}"]
+show = "load (checks run)"
+
+[agents.auditor]
+harness = "claude"
+prompt = "auditor"
+model = "opus"
+session = "round"
+ends = "verdict"
+count_round = true
+feedback = "load"
+permissions = { edit = false }
+
+# Prints production or other from the task's destination.
+[agents.route]
+harness = "shell"
+run = ["sh {factory}/checks/ingest.sh route {task_file}"]
+
+[agents.publish]
+like = "loader"
+ends = "pushed"
+feedback = "load"
+
+[agents.release]
+harness = "operator"
+ends = "release"
+feedback = "reopen"
+
+# Writes the destination, so it runs outside the sandbox with the operator's credentials.
+[agents.promote]
+harness = "shell"
+run = ["sh {factory}/checks/ingest.sh promote {task_file}"]
+permissions = { sandbox = false }
+
+# The last hard check runs on the destination with a read-only token.
+[agents.verify]
+harness = "shell"
+run = [
+  "sh {factory}/checks/ingest.sh reconcile {task_file}",
+  "sh {factory}/checks/ingest.sh verify {task_file}",
+]
+permissions = { deny_read = ["~/.ssh", "~/.aws", "~/.gnupg", "~/.netrc", "~/.docker", "~/.kube", "~/.claude.json"], pass_env = ["WAREHOUSE_READ_TOKEN"] }
+
+[lists.load]
+agents = ["loader", "profile", "auditor"]
+max_rounds = 4
+
+[lists.load.then]
+fail.profile = { list = "load", round = true }
+fail.auditor = "load"
+pass = { agent = "route", to = ["production", "other"] }
+
+[lists.deliver]
+agents = ["publish", "promote", "verify"]
+
+[lists.production]
+agents = ["release", "deliver"]
+
+[lists.other]
+agents = ["deliver"]
