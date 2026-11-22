@@ -25,7 +25,7 @@ func recordDefinition(t *testing.T, r *rig) {
 	}
 }
 
-func TestRestartReportsAChangedKeyAndTellsTheMainAgent(t *testing.T) {
+func TestRestartReportsAChangedKeyAndTellsTheLead(t *testing.T) {
 	r := runningRig(t)
 	recordDefinition(t, r)
 	r.o.config.Models.Worker = "opus"
@@ -88,7 +88,7 @@ func TestRestartSaysSoInOneLineWhenNothingChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := noChange + "\nStopped the sfy process.\nStarted the sfy process.\nTold the main agent.\n"
+	want := noChange + "\nStopped the sfy process.\nStarted the sfy process.\nTold the lead.\n"
 	if r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
@@ -104,7 +104,7 @@ func TestRestartReportsNothingOnAFirstStart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := "Stopped the sfy process.\nStarted the sfy process.\nTold the main agent.\n"; r.out.String() != want {
+	if want := "Stopped the sfy process.\nStarted the sfy process.\nTold the lead.\n"; r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }

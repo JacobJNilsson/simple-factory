@@ -29,7 +29,7 @@ type app struct {
 	getenv         func(string) string
 	stdin          io.Reader
 	stdout, stderr io.Writer
-	// start starts the sfy process and the main agent.
+	// start starts the sfy process and the lead.
 	start func() error
 }
 

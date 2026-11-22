@@ -1,4 +1,4 @@
-// Package registration records a running agent session that registered itself as the main agent.
+// Package registration records a running agent session that registered itself as the lead.
 package registration
 
 import (
@@ -17,14 +17,14 @@ type Record struct {
 	Dir string `json:"dir"`
 }
 
-func mainFolder(home string) string { return filepath.Join(home, "sessions", protocol.Lead) }
+func leadFolder(home string) string { return filepath.Join(home, "sessions", protocol.Lead) }
 
 // Path is the file that holds the record.
-func Path(home string) string { return filepath.Join(mainFolder(home), "registered.json") }
+func Path(home string) string { return filepath.Join(leadFolder(home), "registered.json") }
 
-// AddressPath is the file that holds the terminal address of the main agent.
-// A main agent that sfy runs in the operator's terminal has one too, and it has no record.
-func AddressPath(home string) string { return filepath.Join(mainFolder(home), "address") }
+// AddressPath is the file that holds the terminal address of the lead.
+// A lead that sfy runs in the operator's terminal has one too, and it has no record.
+func AddressPath(home string) string { return filepath.Join(leadFolder(home), "address") }
 
 // Read returns the record. It reports false when the file is missing or holds no id.
 func Read(home string) (Record, bool) {
@@ -45,7 +45,7 @@ func Write(home string, r Record) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(mainFolder(home), 0o700); err != nil {
+	if err := os.MkdirAll(leadFolder(home), 0o700); err != nil {
 		return err
 	}
 	return os.WriteFile(Path(home), append(b, '\n'), 0o600)
@@ -54,7 +54,7 @@ func Write(home string, r Record) error {
 // Folder is the registration of one factory folder.
 type Folder struct{ Home string }
 
-// Registered reports whether a session registered as the main agent.
+// Registered reports whether a session registered as the lead.
 func (f Folder) Registered() bool {
 	_, ok := Read(f.Home)
 	return ok

@@ -48,7 +48,7 @@ func TestAMessageToAWaitingWorkerGoesThroughTheProviderWithItsSenderAndText(t *t
 	}
 }
 
-func TestAMessageFromTheOperatorToMainIsStoredAndDeliveredWithTheOperatorAsSender(t *testing.T) {
+func TestAMessageFromTheOperatorToLeadIsStoredAndDeliveredWithTheOperatorAsSender(t *testing.T) {
 	v := newEnv(t)
 	v.ch.canDeliver = true
 	mustOK(t, v.run("lead", "", "hook idle", ""))
@@ -97,7 +97,7 @@ func TestALeadWithTheOldNameRunsTheCommandsOfTheLead(t *testing.T) {
 	}
 }
 
-func TestAMessageFromTheOperatorToABusyMainIsNotTyped(t *testing.T) {
+func TestAMessageFromTheOperatorToABusyLeadIsNotTyped(t *testing.T) {
 	v := newEnv(t)
 	mustOK(t, v.run("lead", "", "hook busy", ""))
 
@@ -108,7 +108,7 @@ func TestAMessageFromTheOperatorToABusyMainIsNotTyped(t *testing.T) {
 	}
 }
 
-func TestTheOperatorMaySendOnlyToMain(t *testing.T) {
+func TestTheOperatorMaySendOnlyToLead(t *testing.T) {
 	v := newEnv(t)
 	waitingWorker(v, t)
 

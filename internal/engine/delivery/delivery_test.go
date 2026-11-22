@@ -543,7 +543,7 @@ func TestABurstOfMessagesToABusySessionIsDeliveredOnceEach(t *testing.T) {
 	}
 }
 
-func TestARegisteredMainAgentKeepsTheTypedNote(t *testing.T) {
+func TestARegisteredLeadKeepsTheTypedNote(t *testing.T) {
 	r := newRig(t)
 	r.ch.canDeliver = true
 	r.regist = true
@@ -620,7 +620,7 @@ func TestAFreshDeliveryResendsAnUnreadNoteAfterResend(t *testing.T) {
 	}
 }
 
-func TestTickDoesNotResendToMainWhenItsSessionIsGone(t *testing.T) {
+func TestTickDoesNotResendToLeadWhenItsSessionIsGone(t *testing.T) {
 	r := newRig(t)
 	r.store("lead", "one")
 	r.panes.dead = map[string]bool{"lead": true}
@@ -820,7 +820,7 @@ func TestANoteGoesThroughTheChannelWhenItCan(t *testing.T) {
 	r.wantNothingTyped()
 }
 
-func TestANoteToARegisteredBusyMainWaitsEvenWhenTheChannelCanDeliver(t *testing.T) {
+func TestANoteToARegisteredBusyLeadWaitsEvenWhenTheChannelCanDeliver(t *testing.T) {
 	r := newRig(t)
 	r.ch.canDeliver = true
 	r.regist = true

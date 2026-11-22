@@ -14,10 +14,10 @@ func conversationFile(home string) string {
 	return filepath.Join(home, "sessions", "lead", "conversation-id")
 }
 
-func TestFirstMainStartCreatesAndRecordsTheConversationID(t *testing.T) {
+func TestFirstLeadStartCreatesAndRecordsTheConversationID(t *testing.T) {
 	p, home := setup(t, bin)
 
-	argv := command(t, p, mainSpec())
+	argv := command(t, p, leadSpec())
 
 	id := flagValue(t, argv, "--session-id")
 	if slices.Contains(argv, "--resume") {
@@ -35,7 +35,7 @@ func TestFirstMainStartCreatesAndRecordsTheConversationID(t *testing.T) {
 	}
 }
 
-func TestMainStartResumesTheRecordedConversation(t *testing.T) {
+func TestLeadStartResumesTheRecordedConversation(t *testing.T) {
 	p, home := setup(t, bin)
 	if err := os.MkdirAll(filepath.Dir(conversationFile(home)), 0o700); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestMainStartResumesTheRecordedConversation(t *testing.T) {
 	if err := os.WriteFile(conversationFile(home), []byte(recordedID+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	spec := mainSpec()
+	spec := leadSpec()
 	spec.ResumePrompt = "sfy started again."
 
 	if !p.Resumes(spec) {
@@ -65,7 +65,7 @@ func TestMainStartResumesTheRecordedConversation(t *testing.T) {
 	}
 }
 
-func TestMainStartIsFreshWhenTheIDFileIsMissingOrInvalid(t *testing.T) {
+func TestLeadStartIsFreshWhenTheIDFileIsMissingOrInvalid(t *testing.T) {
 	for name, content := range map[string]*string{"missing": nil, "invalid": ptr("not-a-uuid\n"), "empty": ptr("")} {
 		t.Run(name, func(t *testing.T) {
 			p, home := setup(t, bin)
@@ -77,7 +77,7 @@ func TestMainStartIsFreshWhenTheIDFileIsMissingOrInvalid(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			spec := mainSpec()
+			spec := leadSpec()
 			spec.ResumePrompt = "sfy started again."
 
 			if p.Resumes(spec) {
@@ -104,7 +104,7 @@ func TestFreshSpecReplacesTheRecordedConversation(t *testing.T) {
 	if err := os.WriteFile(conversationFile(home), []byte(recordedID+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	spec := mainSpec()
+	spec := leadSpec()
 	spec.Fresh = true
 
 	if p.Resumes(spec) {

@@ -123,7 +123,7 @@ func TestAPassedReviewOfAnExistingBranchTellsTheWorkerTheLeaseCommand(t *testing
 	}
 }
 
-func TestPushedToAnExistingBranchTellsMainToCompleteAndRefreshesTheLease(t *testing.T) {
+func TestPushedToAnExistingBranchTellsLeadToCompleteAndRefreshesTheLease(t *testing.T) {
 	v := newEnv(t)
 	v.seedExisting(t, false)
 	v.tick(t)
@@ -135,7 +135,7 @@ func TestPushedToAnExistingBranchTellsMainToCompleteAndRefreshesTheLease(t *test
 
 	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "existing branch chore/pr-branch") || !strings.Contains(got[0].Body, "sfy task complete t1") || strings.Contains(got[0].Body, "sfy task integrate") {
-		t.Fatalf("main got %v", got)
+		t.Fatalf("the lead got %v", got)
 	}
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Lease != "pushed1" {
 		t.Fatalf("got %+v", tk)

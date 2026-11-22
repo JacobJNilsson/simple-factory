@@ -59,7 +59,7 @@ type Task struct {
 	Round  int
 	// Archived hides a done or cancelled task from the default views. The task keeps its state.
 	Archived bool
-	// Source is "main" for the main agent, otherwise the creator's name.
+	// Source is "lead" for the lead, otherwise the creator's name.
 	Source string
 	// Progress is the worker's latest progress report.
 	Progress string

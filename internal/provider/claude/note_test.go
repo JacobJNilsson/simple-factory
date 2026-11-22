@@ -422,9 +422,9 @@ func TestSessionSettingsWatchTheNoteFileAndWakeOnAChange(t *testing.T) {
 	}
 }
 
-func TestMainSettingsHaveTheNoteHooksToo(t *testing.T) {
+func TestLeadSettingsHaveTheNoteHooksToo(t *testing.T) {
 	p, home := setup(t, bin)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 
 	s := readSettings(t, home, "lead")
 

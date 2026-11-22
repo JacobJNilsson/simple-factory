@@ -13,8 +13,8 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
-// runningRig returns a rig whose sfy process, main agent and one worker already run.
-// The main agent started with the prompt that the factory folder holds now.
+// runningRig returns a rig whose sfy process, lead and one worker already run.
+// The lead started with the prompt that the factory folder holds now.
 func runningRig(t *testing.T) *rig {
 	t.Helper()
 	r := newRig(t)
@@ -22,14 +22,14 @@ func runningRig(t *testing.T) *rig {
 	r.m.alive["sfy"] = true
 	r.m.alive["lead"] = true
 	r.m.alive["worker-t1"] = true
-	if _, err := recordMainPrompt(r.o.home, r.o.layers); err != nil {
+	if _, err := recordLeadPrompt(r.o.home, r.o.layers); err != nil {
 		t.Fatal(err)
 	}
 	return r
 }
 
-// overrideMainPrompt makes the next build's main prompt differ from the one the running main agent has.
-func overrideMainPrompt(t *testing.T, home string) {
+// overrideLeadPrompt makes the next build's main prompt differ from the one the running lead has.
+func overrideLeadPrompt(t *testing.T, home string) {
 	t.Helper()
 	dir := filepath.Join(home, "prompts")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -40,7 +40,7 @@ func overrideMainPrompt(t *testing.T, home string) {
 	}
 }
 
-// noteRequest returns the request that restart sends to give the main agent a note.
+// noteRequest returns the request that restart sends to give the lead a note.
 func noteRequest(body string) protocol.Request {
 	return protocol.Request{Command: "restarted", Body: body}
 }
@@ -57,12 +57,12 @@ func TestRestartStopsAndStartsOnlyServe(t *testing.T) {
 		t.Errorf("serve starts: %v", r.m.starts)
 	}
 	if len(r.l.specs) != 0 {
-		t.Errorf("restart started the main agent: %v", r.l.specs)
+		t.Errorf("restart started the lead: %v", r.l.specs)
 	}
 	if !r.m.alive["lead"] {
-		t.Error("the main agent no longer runs")
+		t.Error("the lead no longer runs")
 	}
-	want := "Stopped the sfy process.\nStarted the sfy process.\nTold the main agent.\n"
+	want := "Stopped the sfy process.\nStarted the sfy process.\nTold the lead.\n"
 	if r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
@@ -94,8 +94,8 @@ func TestRestartNotesThatSfyRestarted(t *testing.T) {
 	}
 }
 
-// The main agent often runs sfy restart itself, so its turn is busy and the pane takes no typed note.
-func TestRestartTypesNothingIntoARegisteredMainPane(t *testing.T) {
+// The lead often runs sfy restart itself, so its turn is busy and the pane takes no typed note.
+func TestRestartTypesNothingIntoARegisteredLeadPane(t *testing.T) {
 	r := runningRig(t)
 	if err := registration.Write(r.o.home, registration.Record{ID: "s-main"}); err != nil {
 		t.Fatal(err)
@@ -123,27 +123,27 @@ func TestRestartFailsWhenTheNoteRequestFails(t *testing.T) {
 	if !errors.Is(err, closed) {
 		t.Fatalf("err = %v", err)
 	}
-	if strings.Contains(r.out.String(), "Told the main agent.") {
+	if strings.Contains(r.out.String(), "Told the lead.") {
 		t.Errorf("output %q", r.out.String())
 	}
 }
 
 func TestRestartPrintsWhatTheEngineSaysWhenItHoldsTheNote(t *testing.T) {
 	r := runningRig(t)
-	r.callText = "The main agent gets the note when it waits."
+	r.callText = "The lead gets the note when it waits."
 
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
 
-	if want := "Stopped the sfy process.\nStarted the sfy process.\nThe main agent gets the note when it waits.\n"; r.out.String() != want {
+	if want := "Stopped the sfy process.\nStarted the sfy process.\nThe lead gets the note when it waits.\n"; r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }
 
 func TestRestartNotesAChangedPrompt(t *testing.T) {
 	r := runningRig(t)
-	overrideMainPrompt(t, r.o.home)
+	overrideLeadPrompt(t, r.o.home)
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestRestartNotesAChangedPromptAddition(t *testing.T) {
 
 func TestRestartNotesAChangedPromptOnce(t *testing.T) {
 	r := runningRig(t)
-	overrideMainPrompt(t, r.o.home)
+	overrideLeadPrompt(t, r.o.home)
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
@@ -208,14 +208,14 @@ func TestRestartWithNothingRunningActsLikeUp(t *testing.T) {
 		t.Errorf("starts: %v %v", r.m.starts, r.l.specs)
 	}
 	if len(r.m.sends) != 0 || len(r.calls) != 0 {
-		t.Errorf("sends = %q, requests %q, want none for a new main agent", r.m.sends, r.calls)
+		t.Errorf("sends = %q, requests %q, want none for a new lead", r.m.sends, r.calls)
 	}
-	if r.out.String() != "Started the sfy process and the main agent (new conversation).\n" {
+	if r.out.String() != "Started the sfy process and the lead (new conversation).\n" {
 		t.Errorf("output %q", r.out.String())
 	}
 }
 
-func TestRestartWithDeadMainStartsMain(t *testing.T) {
+func TestRestartWithDeadLeadStartsLead(t *testing.T) {
 	r := runningRig(t)
 	r.m.alive["lead"] = false
 	if err := restart(r.o); err != nil {
@@ -259,7 +259,7 @@ func TestRestartRefusesWorkersAndReviewers(t *testing.T) {
 	}
 }
 
-func TestMainAgentMayRestart(t *testing.T) {
+func TestLeadMayRestart(t *testing.T) {
 	for agent, want := range map[string]bool{"": true, "lead": true, "main": true, "worker-t1": false, "review-t1-1": false} {
 		if got := mayRestart(agent); got != want {
 			t.Errorf("mayRestart(%q) = %v, want %v", agent, got, want)

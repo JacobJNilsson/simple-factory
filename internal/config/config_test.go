@@ -46,7 +46,7 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		CheckTimeout:      20 * time.Minute,
 		Provider:          "claude",
 		Multiplexer:       "tmux",
-		Models:            config.Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
+		Models:            config.Models{Lead: "opus", Worker: "sonnet", Reviewer: "sonnet"},
 		Allow:             []string{"git", "make", "go", "gofmt"},
 		DenyRead: []string{
 			"~/.ssh", "~/.aws", "~/.gnupg",
@@ -82,7 +82,7 @@ func TestLoadReadsModelsAndMultiplexerSets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Models.Worker != "haiku" || got.Models.Main != "opus" {
+	if got.Models.Worker != "haiku" || got.Models.Lead != "opus" {
 		t.Fatalf("models: %+v", got.Models)
 	}
 	if got.Multiplexers["tmux"]["start"] != "tmux new -d" {

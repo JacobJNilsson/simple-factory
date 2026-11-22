@@ -141,7 +141,7 @@ func TestAFailedCheckCountsTowardTheReviewRounds(t *testing.T) {
 		t.Fatalf("got %s before %s round %d", tk.State, tk.Before, tk.Round)
 	}
 	if msgs := v.inbox(t, "lead"); len(msgs) != 1 || !strings.Contains(msgs[0].Body, "failed its check") {
-		t.Errorf("main inbox: %+v", msgs)
+		t.Errorf("lead inbox: %+v", msgs)
 	}
 	if !strings.Contains(workerBody(t, v), "no review started") {
 		t.Error("the worker got no message")

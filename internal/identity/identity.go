@@ -100,7 +100,7 @@ func (f Folder) Token(name string) string {
 type Claim struct{ Agent, Token, Session string }
 
 // Resolve returns the caller that a claim stands for, with its name and token set.
-// A started agent names itself. A session that matches the registration is main. Every other claim comes from the operator.
+// A started agent names itself. A session that matches the registration is the lead. Every other claim comes from the operator.
 func (f Folder) Resolve(c Claim) protocol.Caller {
 	if c.Agent != "" {
 		if c.Token != "" {
@@ -120,7 +120,7 @@ func (f Folder) Resolve(c Claim) protocol.Caller {
 }
 
 // legacyToken returns the legacy token of a session that started before sessions had tokens, or an empty string.
-// The main agent must also name its own conversation id, so a worker that sets SFY_AGENT=main gets no token.
+// The lead must also name its own conversation id, so a worker that sets SFY_AGENT=lead or SFY_AGENT=main gets no token.
 func (f Folder) legacyToken(name, sessionID string) string {
 	name = protocol.AgentName(name)
 	if !sessionName.MatchString(name) {

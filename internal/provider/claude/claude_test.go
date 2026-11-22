@@ -107,7 +107,7 @@ func worker() engine.SessionSpec {
 	}
 }
 
-func mainSpec() engine.SessionSpec {
+func leadSpec() engine.SessionSpec {
 	return engine.SessionSpec{Name: "lead", Kind: "lead", Dir: "/state", Model: "opus", Prompt: "Start."}
 }
 
@@ -224,9 +224,9 @@ func TestHookQuotesABinaryPathWithASpace(t *testing.T) {
 	}
 }
 
-func TestMainSettingsAllowTheConfiguredCommandsAndSfy(t *testing.T) {
+func TestLeadSettingsAllowTheConfiguredCommandsAndSfy(t *testing.T) {
 	p, home := setup(t, bin)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 
 	s := readSettings(t, home, "lead")
 
@@ -252,9 +252,9 @@ func TestReviewerSettingsDenyEveryEdit(t *testing.T) {
 	}
 }
 
-func TestMainSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
+func TestLeadSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
 	p, home := setup(t, bin)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 
 	s := readSettings(t, home, "lead")
 
@@ -270,11 +270,11 @@ func TestMainSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
 	}
 }
 
-func TestMainSessionRulesAllowAddsMergeRules(t *testing.T) {
+func TestLeadSessionRulesAllowAddsMergeRules(t *testing.T) {
 	home := t.TempDir()
 	cfg := config.Config{SessionRules: map[string]config.SessionRule{"lead": {Allow: []string{"Bash(gh pr merge *)"}}}}
 	p := claude.New(cfg, home, bin, []string{home})
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 
 	s := readSettings(t, home, "lead")
 
@@ -288,7 +288,7 @@ func TestWorkersGetNoMergeGuardHook(t *testing.T) {
 	command(t, p, worker())
 
 	if _, ok := readSettings(t, home, "worker-t1").Hooks["PreToolUse"]; ok {
-		t.Error("a worker has the main agent's merge guard hook")
+		t.Error("a worker has the lead's merge guard hook")
 	}
 }
 
@@ -304,10 +304,10 @@ func TestWorkerAndReviewerArgvUseTheCleanFlag(t *testing.T) {
 	}
 }
 
-func TestMainArgvKeepsTheInheritedEnvironment(t *testing.T) {
+func TestLeadArgvKeepsTheInheritedEnvironment(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	c := envruntest.Parse(t, command(t, p, mainSpec()))
+	c := envruntest.Parse(t, command(t, p, leadSpec()))
 
 	if c.Bin != bin || c.Clean {
 		t.Errorf("bin %q, clean %v", c.Bin, c.Clean)
@@ -540,10 +540,10 @@ func TestArgvEndsWithThePrompt(t *testing.T) {
 	}
 }
 
-func TestMainEnvOmitsTheTask(t *testing.T) {
+func TestLeadEnvOmitsTheTask(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	c := envruntest.Parse(t, command(t, p, mainSpec()))
+	c := envruntest.Parse(t, command(t, p, leadSpec()))
 
 	for _, a := range c.Env {
 		if strings.HasPrefix(a, "SFY_TASK=") {
@@ -582,9 +582,9 @@ func TestCommandRejectsAPathInTheName(t *testing.T) {
 	}
 }
 
-func TestMainSettingsAllowRules(t *testing.T) {
+func TestLeadSettingsAllowRules(t *testing.T) {
 	p, home := setup(t, bin)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 	s := readSettings(t, home, "lead")
 
 	for _, want := range []string{"Bash(sfy *)", "Read(/" + home + "/**)", "Bash(ls *)"} {
@@ -596,9 +596,9 @@ func TestMainSettingsAllowRules(t *testing.T) {
 	}
 }
 
-func TestMainBashRulesAreTheConfigSfyAndLsRules(t *testing.T) {
+func TestLeadBashRulesAreTheConfigSfyAndLsRules(t *testing.T) {
 	p, home := setup(t, bin)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 
 	s := readSettings(t, home, "lead")
 
@@ -614,10 +614,10 @@ func TestMainBashRulesAreTheConfigSfyAndLsRules(t *testing.T) {
 	}
 }
 
-func TestMainHasNoPermissionModeFlag(t *testing.T) {
+func TestLeadHasNoPermissionModeFlag(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	argv := command(t, p, mainSpec())
+	argv := command(t, p, leadSpec())
 
 	if slices.Contains(argv, "--permission-mode") {
 		t.Errorf("main argv has --permission-mode: %v", argv)
@@ -698,7 +698,7 @@ func TestCommandRefusesAWorkerOrReviewerWithoutATaskFile(t *testing.T) {
 		}
 	}
 	p, _ := setup(t, bin)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 }
 
 // sandboxed returns the settings of a worker and a reviewer, keyed by session name.
@@ -780,9 +780,9 @@ func TestSandboxAllowsUnixSocketsInItsTempFolderOnMacOnly(t *testing.T) {
 	}
 }
 
-func TestMainSettingsHaveNoSandbox(t *testing.T) {
+func TestLeadSettingsHaveNoSandbox(t *testing.T) {
 	p, home := setupSandbox(t)
-	command(t, p, mainSpec())
+	command(t, p, leadSpec())
 
 	s := readSettings(t, home, "lead")
 
@@ -929,7 +929,7 @@ func extraSettings(t *testing.T, kind string, cfg config.Config) config.SessionV
 	t.Helper()
 	home := t.TempDir()
 	p := claude.New(cfg, home, bin, []string{home})
-	spec := map[string]engine.SessionSpec{"lead": mainSpec(), "worker": worker(), "reviewer": reviewerSpec()}[kind]
+	spec := map[string]engine.SessionSpec{"lead": leadSpec(), "worker": worker(), "reviewer": reviewerSpec()}[kind]
 	command(t, p, spec)
 	b, err := os.ReadFile(settingsPath(home, spec.Name))
 	if err != nil {
@@ -997,10 +997,10 @@ func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
 	}
 }
 
-func TestMainSettingsKeepTheFieldOrderAndNoSuggestionKey(t *testing.T) {
+func TestLeadSettingsKeepTheFieldOrderAndNoSuggestionKey(t *testing.T) {
 	home := t.TempDir()
-	command(t, claude.New(config.Config{}, home, bin, []string{home}), mainSpec())
-	b, err := os.ReadFile(settingsPath(home, mainSpec().Name))
+	command(t, claude.New(config.Config{}, home, bin, []string{home}), leadSpec())
+	b, err := os.ReadFile(settingsPath(home, leadSpec().Name))
 	if err != nil {
 		t.Fatal(err)
 	}

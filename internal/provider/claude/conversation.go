@@ -11,14 +11,14 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 )
 
-// conversationIDPath is the file that records the id of the main agent's conversation.
+// conversationIDPath is the file that records the id of the lead's conversation.
 func (a adapter) conversationIDPath() string {
 	return filepath.Join(a.home, "sessions", "lead", "conversation-id")
 }
 
 var conversationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// recordedConversation returns the recorded id of the main conversation, or false when the file is missing or holds no id.
+// recordedConversation returns the recorded id of the lead's conversation, or false when the file is missing or holds no id.
 func (a adapter) recordedConversation() (string, bool) {
 	b, err := os.ReadFile(a.conversationIDPath())
 	if err != nil {
@@ -28,7 +28,7 @@ func (a adapter) recordedConversation() (string, bool) {
 	return id, conversationID.MatchString(id)
 }
 
-// Resumes reports whether Command resumes the recorded conversation of the main agent.
+// Resumes reports whether Command resumes the recorded conversation of the lead.
 func (a adapter) Resumes(spec engine.SessionSpec) bool {
 	if spec.Kind != "lead" || spec.Fresh {
 		return false
@@ -37,9 +37,9 @@ func (a adapter) Resumes(spec engine.SessionSpec) bool {
 	return ok
 }
 
-// mainConversation returns the flags that continue the recorded conversation, or start and record a new one.
-// A resumed conversation must run in the same folder, and the main agent always starts in its working folder.
-func (a adapter) mainConversation(spec engine.SessionSpec) (flags []string, resumed bool, err error) {
+// leadConversation returns the flags that continue the recorded conversation, or start and record a new one.
+// A resumed conversation must run in the same folder, and the lead always starts in its working folder.
+func (a adapter) leadConversation(spec engine.SessionSpec) (flags []string, resumed bool, err error) {
 	if a.Resumes(spec) {
 		id, _ := a.recordedConversation()
 		return []string{"--resume", id}, true, nil

@@ -14,7 +14,7 @@ import (
 
 // Templates holds one shell command line for each multiplexer action.
 type Templates struct {
-	Start, Send, Alive, Stop, Notify, Show, ShowMain string
+	Start, Send, Alive, Stop, Notify, Show, ShowLead string
 	// Whoami prints the address of the terminal it runs in, as a value that the other templates accept as {name}.
 	Whoami string
 }
@@ -27,14 +27,14 @@ type Mux interface {
 	Stop(name string) error
 	Notify(name, text string) error
 	Show(name string) error
-	ShowMain(name string) error
+	ShowLead(name string) error
 }
 
 // FromMap builds a template set from a config table and rejects unknown keys.
 func FromMap(m map[string]string) (Templates, error) {
 	var t Templates
 	fields := map[string]*string{
-		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_lead": &t.ShowMain, "whoami": &t.Whoami,
+		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_lead": &t.ShowLead, "whoami": &t.Whoami,
 	}
 	for key, value := range m {
 		field, ok := fields[key]
@@ -144,13 +144,13 @@ func (r runner) Show(name string) error {
 	return err
 }
 
-// ShowMain makes the main agent's session visible to the operator.
-// A set without a show_main template uses the show template.
-func (r runner) ShowMain(name string) error {
-	if r.t.ShowMain == "" {
+// ShowLead makes the lead's session visible to the operator.
+// A set without a show_lead template uses the show template.
+func (r runner) ShowLead(name string) error {
+	if r.t.ShowLead == "" {
 		return r.Show(name)
 	}
-	_, err := r.run(r.t.ShowMain, "show_lead", name, "", "", "")
+	_, err := r.run(r.t.ShowLead, "show_lead", name, "", "", "")
 	return err
 }
 
@@ -244,7 +244,7 @@ func (p prefixed) Alive(name string) (bool, error) { return p.m.Alive(p.prefix +
 func (p prefixed) Stop(name string) error          { return p.m.Stop(p.prefix + name) }
 func (p prefixed) Notify(name, text string) error  { return p.m.Notify(p.prefix+name, text) }
 func (p prefixed) Show(name string) error          { return p.m.Show(p.prefix + name) }
-func (p prefixed) ShowMain(name string) error      { return p.m.ShowMain(p.prefix + name) }
+func (p prefixed) ShowLead(name string) error      { return p.m.ShowLead(p.prefix + name) }
 
 // Whoamier is a Mux that can tell the address of the terminal that sfy runs in.
 type Whoamier interface {
@@ -307,9 +307,9 @@ func (r registered) Show(name string) error {
 	target, _ := r.target(name)
 	return r.m.Show(target)
 }
-func (r registered) ShowMain(name string) error {
+func (r registered) ShowLead(name string) error {
 	target, _ := r.target(name)
-	return r.m.ShowMain(target)
+	return r.m.ShowLead(target)
 }
 func (r registered) Alive(name string) (bool, error) {
 	target, recorded := r.target(name)

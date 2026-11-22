@@ -33,11 +33,11 @@ type fakeMux struct {
 	// stops lists the sessions that Stop ended. stubborn makes the socket answer after the sfy session stops.
 	stops    []string
 	stubborn bool
-	// shownMain lists the sessions that ShowMain showed.
-	shownMain []string
-	// onShowMain runs inside ShowMain, and showMainErr is what ShowMain returns.
-	onShowMain  func()
-	showMainErr error
+	// shownLead lists the sessions that ShowLead showed.
+	shownLead []string
+	// onShowLead runs inside ShowLead, and showLeadErr is what ShowLead returns.
+	onShowLead  func()
+	showLeadErr error
 }
 
 func (m *fakeMux) probe() bool {
@@ -68,15 +68,15 @@ func (m *fakeMux) Stop(name string) error {
 }
 func (m *fakeMux) Notify(string, string) error { return nil }
 func (m *fakeMux) Show(string) error           { return nil }
-func (m *fakeMux) ShowMain(name string) error {
-	m.shownMain = append(m.shownMain, name)
-	if m.onShowMain != nil {
-		m.onShowMain()
+func (m *fakeMux) ShowLead(name string) error {
+	m.shownLead = append(m.shownLead, name)
+	if m.onShowLead != nil {
+		m.onShowLead()
 	}
-	return m.showMainErr
+	return m.showLeadErr
 }
 
-// fakeLauncher records the main agent's spec and marks its session alive.
+// fakeLauncher records the lead's spec and marks its session alive.
 type fakeLauncher struct {
 	*fakeMux
 	specs []engine.SessionSpec
@@ -84,9 +84,9 @@ type fakeLauncher struct {
 	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
 	warning    string
 	trustAsked []string
-	// resumes is what StartMain reports.
+	// resumes is what StartLead reports.
 	resumes bool
-	// commands lists the specs that MainCommand received.
+	// commands lists the specs that LeadCommand received.
 	commands []engine.SessionSpec
 }
 
@@ -96,12 +96,12 @@ func (l *fakeLauncher) TrustWarning(dir string) string {
 }
 
 func (l *fakeLauncher) Start(s engine.SessionSpec) error {
-	_, err := l.StartMain(s)
+	_, err := l.StartLead(s)
 	return err
 }
 
-// StartMain records the spec and reports l.resumes as the outcome.
-func (l *fakeLauncher) StartMain(s engine.SessionSpec) (bool, error) {
+// StartLead records the spec and reports l.resumes as the outcome.
+func (l *fakeLauncher) StartLead(s engine.SessionSpec) (bool, error) {
 	if l.err != nil {
 		return false, l.err
 	}
@@ -110,8 +110,8 @@ func (l *fakeLauncher) StartMain(s engine.SessionSpec) (bool, error) {
 	return l.resumes, nil
 }
 
-// MainCommand records the spec and returns a fixed argv.
-func (l *fakeLauncher) MainCommand(s engine.SessionSpec) ([]string, bool, error) {
+// LeadCommand records the spec and returns a fixed argv.
+func (l *fakeLauncher) LeadCommand(s engine.SessionSpec) ([]string, bool, error) {
 	if l.err != nil {
 		return nil, false, l.err
 	}
@@ -139,7 +139,7 @@ func newRig(t *testing.T) *rig {
 	errb := &bytes.Buffer{}
 	home := t.TempDir()
 	r := &rig{m: m, l: l, out: out, err: errb, o: options{
-		home: home, layers: []string{home}, config: config.Config{Models: config.Models{Main: "opus"}},
+		home: home, layers: []string{home}, config: config.Config{Models: config.Models{Lead: "opus"}},
 		bin: "/bin/sfy", environ: []string{"PATH=/usr/bin"},
 		mux: m, launcher: l, answers: m.probe,
 		wait: time.Second, poll: time.Millisecond, out: out, warn: errb,
@@ -151,7 +151,7 @@ func newRig(t *testing.T) *rig {
 	return r
 }
 
-func TestUpStartsServeAndMain(t *testing.T) {
+func TestUpStartsServeAndLead(t *testing.T) {
 	r := newRig(t)
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
@@ -163,13 +163,13 @@ func TestUpStartsServeAndMain(t *testing.T) {
 		t.Errorf("serve command: %q", got)
 	}
 	if len(r.l.specs) != 1 {
-		t.Fatalf("main starts: %v", r.l.specs)
+		t.Fatalf("lead starts: %v", r.l.specs)
 	}
 	m := r.l.specs[0]
 	if m.Name != "lead" || m.Kind != "lead" || m.Dir != r.o.home || m.Model != "opus" ||
 		!strings.Contains(m.Prompt, "notes.md") || !strings.Contains(m.Prompt, "status.md") ||
 		!strings.Contains(m.Prompt, r.o.home) {
-		t.Errorf("main spec: %+v", m)
+		t.Errorf("lead spec: %+v", m)
 	}
 	info, err := os.Stat(filepath.Join(r.o.home, "notes.md"))
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -185,7 +185,7 @@ func TestUpReportsANewConversationAndGivesTheResumeNote(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	if want := "Started the sfy process and the main agent (new conversation).\n"; r.out.String() != want {
+	if want := "Started the sfy process and the lead (new conversation).\n"; r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 	note := r.l.specs[0].ResumePrompt
@@ -203,7 +203,7 @@ func TestUpReportsAResumedConversation(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	if want := "Started the main agent (resumed conversation).\n"; r.out.String() != want {
+	if want := "Started the lead (resumed conversation).\n"; r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }
@@ -220,33 +220,33 @@ func TestSecondUpStartsNothing(t *testing.T) {
 	if len(r.m.starts) != 1 || len(r.l.specs) != 1 {
 		t.Errorf("second run started more: %v %v", r.m.starts, r.l.specs)
 	}
-	if r.out.String() != "The main agent already runs and was shown.\n" {
+	if r.out.String() != "The lead already runs and was shown.\n" {
 		t.Errorf("output: %q", r.out.String())
 	}
-	if !reflect.DeepEqual(r.m.shownMain, []string{"lead"}) {
-		t.Errorf("shown %v, want the main agent once", r.m.shownMain)
+	if !reflect.DeepEqual(r.m.shownLead, []string{"lead"}) {
+		t.Errorf("shown %v, want the lead once", r.m.shownLead)
 	}
 }
 
-func TestUpWithServeStartedAndMainRunningNamesBoth(t *testing.T) {
+func TestUpWithServeStartedAndLeadRunningNamesBoth(t *testing.T) {
 	r := newRig(t)
 	r.m.alive["lead"] = true
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	want := "Started the sfy process.\nThe main agent already runs and was shown.\n"
+	want := "Started the sfy process.\nThe lead already runs and was shown.\n"
 	if r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }
 
-func TestUpDoesNotShowANewMainAgentTwice(t *testing.T) {
+func TestUpDoesNotShowANewLeadTwice(t *testing.T) {
 	r := newRig(t)
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.m.shownMain) != 0 {
-		t.Errorf("up showed a main agent that the launcher already showed: %v", r.m.shownMain)
+	if len(r.m.shownLead) != 0 {
+		t.Errorf("up showed a lead that the launcher already showed: %v", r.m.shownLead)
 	}
 }
 
@@ -275,7 +275,7 @@ func TestUpKeepsExistingNotes(t *testing.T) {
 	}
 }
 
-func TestUpRestartsOnlyDeadMain(t *testing.T) {
+func TestUpRestartsOnlyDeadLead(t *testing.T) {
 	r := newRig(t)
 	r.m.answering = true
 	if err := run(r.o); err != nil {
@@ -306,7 +306,7 @@ func TestUpFailsWhenSocketNeverAnswers(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	if len(r.l.specs) != 0 {
-		t.Error("main started without a sfy process")
+		t.Error("the lead started without a sfy process")
 	}
 }
 
@@ -324,12 +324,12 @@ func TestUpFailsAtOnceWhenServeExits(t *testing.T) {
 	}
 }
 
-func TestUpNamesTheStartedServeWhenMainFails(t *testing.T) {
+func TestUpNamesTheStartedServeWhenLeadFails(t *testing.T) {
 	r := newRig(t)
 	cause := errors.New("no pane")
 	r.l.err = cause
 	err := run(r.o)
-	var mf *mainFailedError
+	var mf *leadFailedError
 	if !errors.As(err, &mf) || !errors.Is(err, cause) {
 		t.Fatalf("err = %v", err)
 	}
@@ -438,7 +438,7 @@ func TestUpWarnsWhenHomeIsNotTrusted(t *testing.T) {
 		t.Errorf("stderr: %q", r.err.String())
 	}
 	if len(r.l.specs) != 1 || r.out.Len() == 0 {
-		t.Errorf("up must still start the main agent: %v, stdout %q", r.l.specs, r.out.String())
+		t.Errorf("up must still start the lead: %v, stdout %q", r.l.specs, r.out.String())
 	}
 }
 
@@ -452,7 +452,7 @@ func TestUpSaysNothingWhenHomeIsTrusted(t *testing.T) {
 	}
 }
 
-func TestUpDoesNotWarnWhenMainAlreadyRuns(t *testing.T) {
+func TestUpDoesNotWarnWhenLeadAlreadyRuns(t *testing.T) {
 	r := newRig(t)
 	r.l.warning = "some warning"
 	r.m.alive["lead"] = true

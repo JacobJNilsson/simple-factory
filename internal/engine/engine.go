@@ -19,10 +19,10 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-// SessionSpec describes an agent session to start. Kind is "main", "worker" or "reviewer".
+// SessionSpec describes an agent session to start. Kind is "lead", "worker" or "reviewer".
 type SessionSpec struct {
 	Name, Kind, Task, Dir, Model, Prompt string
-	// Protected lists the paths that a worker or reviewer must not edit. It is empty for the main agent.
+	// Protected lists the paths that a worker or reviewer must not edit. It is empty for the lead.
 	Protected []string
 	// HasRepo reports that the task names a repo, so a worker gets the repo part of its prompt.
 	HasRepo bool
@@ -33,11 +33,11 @@ type SessionSpec struct {
 	Lease string
 	// NoPush is true while the operator holds the push of the task. The session gets no push permission.
 	NoPush bool
-	// ResumePrompt is the first message when the provider resumes the main agent's last conversation.
+	// ResumePrompt is the first message when the provider resumes the lead's last conversation.
 	ResumePrompt string
 	// Fresh makes the provider start a new conversation, even when it recorded one.
 	Fresh bool
-	// TaskFile is the absolute path of the task's task.md. It is set for workers and reviewers and empty for the main agent.
+	// TaskFile is the absolute path of the task's task.md. It is set for workers and reviewers and empty for the lead.
 	TaskFile string
 }
 
@@ -52,7 +52,7 @@ type Launcher interface {
 	TrustWarning(dir string) string
 }
 
-// Registration tells whether an agent session registered itself as the main agent, which sfy did not start.
+// Registration tells whether an agent session registered itself as the lead, which sfy did not start.
 type Registration interface {
 	Registered() bool
 	// Clear forgets the registration and the recorded address.
@@ -109,7 +109,7 @@ type Engine struct {
 	startFails map[string]int
 	// cleanupWait holds, for each task whose cleanup could not tell whether a session runs, the number of retries to skip.
 	cleanupWait map[string]int
-	// depNoted holds the "task>dependency" pairs for which sfy told main that the dependency is cancelled.
+	// depNoted holds the "task>dependency" pairs for which sfy told the lead that the dependency is cancelled.
 	depNoted map[string]bool
 	// ck runs the check commands of tasks. Without it, a task with a check goes to review at once.
 	ck Checker
@@ -143,7 +143,7 @@ func (e *Engine) configFor(t task.Task) (config.Config, error) {
 	return e.repoConfig(e.w.RepoFolder(t.Repo))
 }
 
-// SetRegistration tells the engine where to find the registration of the main agent. Without it, no agent counts as registered.
+// SetRegistration tells the engine where to find the registration of the lead. Without it, no agent counts as registered.
 func (e *Engine) SetRegistration(r Registration) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -177,8 +177,8 @@ func (e *Engine) authenticate(req protocol.Request) (protocol.Request, error) {
 	return req, nil
 }
 
-// registeredMain reports whether the main agent is a session that registered itself.
-func (e *Engine) registeredMain() bool { return e.reg != nil && e.reg.Registered() }
+// registeredLead reports whether the lead is a session that registered itself.
+func (e *Engine) registeredLead() bool { return e.reg != nil && e.reg.Registered() }
 
 // logf writes one timestamped line to the log, when one is set.
 func (e *Engine) logf(format string, args ...any) {
@@ -205,7 +205,7 @@ func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg conf
 	e.notes = delivery.New(delivery.Deps{
 		Panes: l, Channel: ch, Mailbox: st, Now: func() time.Time { return c.Now() },
 		Logf:       e.logf,
-		Registered: e.registeredMain, Runs: e.runs, Gone: e.sess.isGone, Probe: e.sess.probeGone,
+		Registered: e.registeredLead, Runs: e.runs, Gone: e.sess.isGone, Probe: e.sess.probeGone,
 		Resend: time.Duration(cfg.ResendMinutes) * time.Minute, Grace: grace,
 	})
 	return e
@@ -215,7 +215,7 @@ type kind string
 
 const (
 	operator kind = ""
-	main     kind = protocol.Lead
+	lead     kind = protocol.Lead
 	worker   kind = "worker"
 	reviewer kind = "reviewer"
 )
@@ -238,7 +238,7 @@ func kindOf(agent string) (kind, bool) {
 	case agent == "":
 		return operator, true
 	case protocol.AgentName(agent) == protocol.Lead:
-		return main, true
+		return lead, true
 	case workerName.MatchString(agent):
 		return worker, true
 	case reviewerName.MatchString(agent):
@@ -254,25 +254,25 @@ type command struct {
 	kind []kind
 }
 
-var anyone = []kind{operator, main, worker, reviewer}
-var agents = []kind{main, worker, reviewer}
+var anyone = []kind{operator, lead, worker, reviewer}
+var agents = []kind{lead, worker, reviewer}
 
 // commands lists each command with the kinds that may run it.
 var commands = map[string]command{
-	"task new":        {(*Engine).taskNew, []kind{operator, main}},
+	"task new":        {(*Engine).taskNew, []kind{operator, lead}},
 	"task list":       {(*Engine).taskList, anyone},
 	"task show":       {(*Engine).taskShow, anyone},
-	"task edit":       {(*Engine).taskEdit, []kind{main}},
-	"task queue":      {(*Engine).taskQueue, []kind{main}},
-	"task cancel":     {(*Engine).taskCancel, []kind{operator, main}},
-	"task resume":     {(*Engine).resume, []kind{operator, main}},
-	"task feedback":   {(*Engine).taskFeedback, []kind{operator, main}},
-	"task complete":   {(*Engine).taskComplete, []kind{operator, main}},
-	"task integrate":  {(*Engine).taskIntegrate, []kind{operator, main}},
-	"task push":       {(*Engine).taskPush, []kind{operator, main}},
-	"task archive":    {(*Engine).taskArchive, []kind{operator, main}},
+	"task edit":       {(*Engine).taskEdit, []kind{lead}},
+	"task queue":      {(*Engine).taskQueue, []kind{lead}},
+	"task cancel":     {(*Engine).taskCancel, []kind{operator, lead}},
+	"task resume":     {(*Engine).resume, []kind{operator, lead}},
+	"task feedback":   {(*Engine).taskFeedback, []kind{operator, lead}},
+	"task complete":   {(*Engine).taskComplete, []kind{operator, lead}},
+	"task integrate":  {(*Engine).taskIntegrate, []kind{operator, lead}},
+	"task push":       {(*Engine).taskPush, []kind{operator, lead}},
+	"task archive":    {(*Engine).taskArchive, []kind{operator, lead}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
-	"send":            {(*Engine).send, []kind{operator, main}},
+	"send":            {(*Engine).send, []kind{operator, lead}},
 	"report done":     {(*Engine).reportDone, []kind{worker}},
 	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},
 	"report progress": {(*Engine).reportProgress, []kind{worker}},
@@ -280,13 +280,13 @@ var commands = map[string]command{
 	"verdict pass":    {(*Engine).verdictPass, []kind{reviewer}},
 	"verdict fail":    {(*Engine).verdictFail, []kind{reviewer}},
 	"inbox":           {(*Engine).inbox, agents},
-	"escalate":        {(*Engine).escalate, []kind{main}},
+	"escalate":        {(*Engine).escalate, []kind{lead}},
 	"status":          {(*Engine).status, anyone},
 	"hook turn-ended": {(*Engine).hookTurnEnded, agents},
 	"hook permission": {(*Engine).hookPermission, agents},
 	"hook idle":       {(*Engine).hookIdle, agents},
 	"hook busy":       {(*Engine).hookBusy, agents},
-	"restarted":       {(*Engine).restarted, []kind{operator, main}},
+	"restarted":       {(*Engine).restarted, []kind{operator, lead}},
 }
 
 // Handle runs one command and returns its answer.

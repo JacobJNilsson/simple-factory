@@ -29,7 +29,7 @@ const (
 const usage = `usage:
   sfy                  start sfy (operator only)
   sfy up               same as sfy (operator only)
-  sfy register         make the running agent session the main agent (not for started agents)
+  sfy register         make the running agent session the lead (not for started agents)
   sfy hooks install    add sfy's hooks to the user's Claude Code settings (operator only)
   sfy config           print the factory's merged settings and prompt files, with the file behind each
   sfy help
@@ -56,7 +56,7 @@ const usage = `usage:
   sfy hook <event>
   sfy hook note        print the delivered notes to stderr and exit 2 (a hook of the session's settings)
   sfy hook note-watch  print the SessionStart output that names the note file (a hook of the session's settings)
-  sfy hook merge-guard block a hand push, merge or rebase in a no-merge repo (a hook of the main session's settings)
+  sfy hook merge-guard block a hand push, merge or rebase in a no-merge repo (a hook of the lead's settings)
   sfy hook --user <event>
 `
 
@@ -119,7 +119,7 @@ var forms = map[string]form{
 }
 
 // Agent returns the session name of the caller. A started agent has it in SFY_AGENT.
-// A registered agent has no such variable, so the provider names its session, and the registered id maps it to main.
+// A registered agent has no such variable, so the provider names its session, and the registered id maps it to the lead.
 // The operator and every other session get an empty name.
 func Agent(env func(string) string) string {
 	return caller(env).Agent
@@ -232,7 +232,7 @@ func readFile(path string, stdin io.Reader) (string, error) {
 	return string(b), err
 }
 
-// ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the main agent run.
+// ErrRestricted reports that a worker or a reviewer ran a command that only the operator and the lead run.
 var ErrRestricted = errors.New("a worker or a reviewer may not run this command")
 
 // Run executes one sfy command and returns the exit code.

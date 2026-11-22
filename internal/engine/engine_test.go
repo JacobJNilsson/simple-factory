@@ -294,7 +294,7 @@ func (v env) inbox(t *testing.T, agent string) []store.Message {
 	return m
 }
 
-func TestTaskNewFromTheOperatorStartsNewAndMessagesMain(t *testing.T) {
+func TestTaskNewFromTheOperatorStartsNewAndMessagesLead(t *testing.T) {
 	v := newEnv(t)
 
 	a := v.run("", "", "task new", taskFile)
@@ -306,7 +306,7 @@ func TestTaskNewFromTheOperatorStartsNewAndMessagesMain(t *testing.T) {
 	}
 	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, a.Text) {
-		t.Fatalf("main inbox: %+v", msgs)
+		t.Fatalf("lead inbox: %+v", msgs)
 	}
 	v.statusShows(t, a.Text, "new")
 }
@@ -327,7 +327,7 @@ func TestTaskNewWarnsInReplyAndNoteWhenRepoIsUntrusted(t *testing.T) {
 	}
 	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "untrusted") {
-		t.Fatalf("main inbox: %+v", msgs)
+		t.Fatalf("lead inbox: %+v", msgs)
 	}
 }
 
@@ -347,7 +347,7 @@ func TestTaskNewIsQuietWhenRepoIsTrustedOrAbsent(t *testing.T) {
 	}
 }
 
-func TestTaskNewFromMainStartsQueued(t *testing.T) {
+func TestTaskNewFromLeadStartsQueued(t *testing.T) {
 	v := newEnv(t)
 
 	a := v.run("lead", "", "task new", taskFile)
@@ -670,7 +670,7 @@ func TestReportDoneFromAnotherWorkersTaskFails(t *testing.T) {
 	}
 }
 
-func TestReportBlockedMessagesMainAndKeepsTheState(t *testing.T) {
+func TestReportBlockedMessagesLeadAndKeepsTheState(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
@@ -696,14 +696,14 @@ func TestReportProgressRecordsTheText(t *testing.T) {
 	}
 }
 
-// pass records a passing verdict and has main complete the task.
+// pass records a passing verdict and has the lead complete the task.
 func (v env) pass(t *testing.T) {
 	t.Helper()
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
 	mustOK(t, v.run("lead", "", "task complete", "", "t1"))
 }
 
-func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
+func TestVerdictPassMovesToApprovedAndTellsLead(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
 
@@ -712,7 +712,7 @@ func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
 	v.statusShows(t, "t1", "approved")
 	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no repo") {
-		t.Fatalf("main got %+v", msgs)
+		t.Fatalf("the lead got %+v", msgs)
 	}
 	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || len(v.ws.removed) != 0 {
 		t.Fatalf("stopped %v removed %v", v.l.stopped, v.ws.removed)
@@ -741,7 +741,7 @@ func TestVerdictFailBelowTheLimitMovesToFeedbackAndMessagesTheWorker(t *testing.
 	}
 }
 
-func TestVerdictFailInTheLastRoundEscalatesAndNotifiesMain(t *testing.T) {
+func TestVerdictFailInTheLastRoundEscalatesAndNotifiesLead(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 3)
 
@@ -752,11 +752,11 @@ func TestVerdictFailInTheLastRoundEscalatesAndNotifiesMain(t *testing.T) {
 		t.Fatalf("notified %v", v.l.notified)
 	}
 	if len(v.inbox(t, "lead")) != 1 {
-		t.Fatal("main got no message")
+		t.Fatal("the lead got no message")
 	}
 }
 
-func TestEscalateMovesTheTaskAndNotifiesMain(t *testing.T) {
+func TestEscalateMovesTheTaskAndNotifiesLead(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
@@ -801,7 +801,7 @@ func TestACommandOfAnotherKindFailsAndNamesTheCommandsThatKindMayRun(t *testing.
 }
 
 func TestACallerWithAnUnknownNameFailsEveryCommand(t *testing.T) {
-	for _, name := range []string{"Main", "reviewer-t1", "worker-", "review-t1"} {
+	for _, name := range []string{"Lead", "reviewer-t1", "worker-", "review-t1"} {
 		v := newEnv(t)
 
 		a := v.run(name, "t1", "status", "")
@@ -1004,7 +1004,7 @@ func TestTurnEndedTypesTheNoteForUnreadMessages(t *testing.T) {
 	}
 }
 
-func TestTheReminderStopsAfterTwoAndMainGetsOneMessage(t *testing.T) {
+func TestTheReminderStopsAfterTwoAndLeadGetsOneMessage(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
@@ -1059,7 +1059,7 @@ func TestTheErrorForAForbiddenCommandListsNoHookCommand(t *testing.T) {
 	}
 }
 
-func TestPermissionFromAWorkerWritesNothingToMainsInboxAndLogsTheCall(t *testing.T) {
+func TestPermissionFromAWorkerWritesNothingToLeadsInboxAndLogsTheCall(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 	var log bytes.Buffer
@@ -1068,7 +1068,7 @@ func TestPermissionFromAWorkerWritesNothingToMainsInboxAndLogsTheCall(t *testing
 	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Tool: Bash. Command: rm -rf build"))
 
 	if msgs := v.inbox(t, "lead"); len(msgs) != 0 {
-		t.Fatalf("main got %+v", msgs)
+		t.Fatalf("the lead got %+v", msgs)
 	}
 	if len(v.l.sent) != 0 {
 		t.Fatalf("typed notes %v", v.l.sent)
@@ -1097,7 +1097,7 @@ func TestPermissionHookDeniesAWorkerAndAReviewerWithAReason(t *testing.T) {
 	}
 }
 
-func TestReviewerReportBlockedTellsMain(t *testing.T) {
+func TestReviewerReportBlockedTellsLead(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
 
@@ -1141,14 +1141,14 @@ func TestPermissionFromAStaleWorkerIsDeniedAndNotLogged(t *testing.T) {
 	}
 }
 
-func TestPermissionFromMainNotifiesTheOperator(t *testing.T) {
+func TestPermissionFromLeadNotifiesTheOperator(t *testing.T) {
 	v := newEnv(t)
 
 	a := v.run("lead", "", "hook permission", "Run make?")
 
 	mustOK(t, a)
 	if a.Text != "" {
-		t.Fatalf("main got reply %q", a.Text)
+		t.Fatalf("the lead got reply %q", a.Text)
 	}
 
 	if len(v.l.notified) != 1 || !strings.Contains(v.l.notified[0], "Run make?") {
@@ -1247,7 +1247,7 @@ func TestTickRetriesRemoveForACancelledTaskAndClearsDir(t *testing.T) {
 	}
 }
 
-func TestTickTellsMainOnceWhenAWorkerIsGone(t *testing.T) {
+func TestTickTellsLeadOnceWhenAWorkerIsGone(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 	v.l.dead = map[string]bool{"worker-t1": true}
@@ -1261,7 +1261,7 @@ func TestTickTellsMainOnceWhenAWorkerIsGone(t *testing.T) {
 	}
 }
 
-func TestTickTellsMainAgainWhenAWorkerDiesAfterRunningAgain(t *testing.T) {
+func TestTickTellsLeadAgainWhenAWorkerDiesAfterRunningAgain(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 	v.l.dead = map[string]bool{"worker-t1": true}
@@ -1498,7 +1498,7 @@ func TestPassKeepsAWorkspaceThatHoldsWork(t *testing.T) {
 	}
 }
 
-func TestPassTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
+func TestPassTellsLeadThatTheWorkspaceHoldsWork(t *testing.T) {
 	v := newEnv(t)
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
@@ -1511,7 +1511,7 @@ func TestPassTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
 		found = found || m.Body == want
 	}
 	if !found {
-		t.Fatalf("main got no %q", want)
+		t.Fatalf("the lead got no %q", want)
 	}
 }
 
@@ -1527,7 +1527,7 @@ func TestCancelKeepsAWorkspaceThatHoldsWork(t *testing.T) {
 	}
 }
 
-func TestCancelTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
+func TestCancelTellsLeadThatTheWorkspaceHoldsWork(t *testing.T) {
 	v := newEnv(t)
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Working, 0)
@@ -1536,7 +1536,7 @@ func TestCancelTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
 
 	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || msgs[0].Body != "Task t1 is cancelled, but its workspace /work/t1 still holds work, so sfy kept it." {
-		t.Fatalf("main got %+v", msgs)
+		t.Fatalf("the lead got %+v", msgs)
 	}
 }
 
@@ -1566,7 +1566,7 @@ func TestPassKeepsAPlainFolderThatHoldsAFile(t *testing.T) {
 	}
 }
 
-func TestTickAfterAFailedSaveTellsMainOnceThatTheWorkspaceWasKept(t *testing.T) {
+func TestTickAfterAFailedSaveTellsLeadOnceThatTheWorkspaceWasKept(t *testing.T) {
 	v := newEnv(t)
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
@@ -1593,11 +1593,11 @@ func TestTickAfterAFailedSaveTellsMainOnceThatTheWorkspaceWasKept(t *testing.T) 
 		}
 	}
 	if kept != 1 {
-		t.Fatalf("main heard %d times", kept)
+		t.Fatalf("the lead heard %d times", kept)
 	}
 }
 
-func TestTickAfterAKeptWorktreeSendsMainNothing(t *testing.T) {
+func TestTickAfterAKeptWorktreeSendsLeadNothing(t *testing.T) {
 	v := newEnv(t)
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
@@ -1609,7 +1609,7 @@ func TestTickAfterAKeptWorktreeSendsMainNothing(t *testing.T) {
 	}
 
 	if after := len(v.inbox(t, "lead")); after != before {
-		t.Fatalf("main got %d messages before and %d after the tick", before, after)
+		t.Fatalf("the lead got %d messages before and %d after the tick", before, after)
 	}
 }
 
@@ -1694,7 +1694,7 @@ func TestResumeOfAWorkerWhoseAliveCheckFailsResumesTheTask(t *testing.T) {
 	}
 }
 
-func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
+func TestLeadHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer
 	v.e.SetLog(&log)
@@ -1714,20 +1714,20 @@ func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
 	}
 	want := []string{"sfy cannot tell whether worker-t1 runs: exit status 2"}
 	if !slices.Equal(want, told) {
-		t.Fatalf("messages to main %q, want %q", told, want)
+		t.Fatalf("messages to the lead %q, want %q", told, want)
 	}
 	for range 3 {
 		v.tick(t)
 	}
 	if got := len(v.inbox(t, "lead")); got != 1 {
-		t.Fatalf("main got %d messages after more ticks", got)
+		t.Fatalf("the lead got %d messages after more ticks", got)
 	}
 	if got := strings.Count(log.String(), "alive check of worker-t1 failed"); got != 1 {
 		t.Fatalf("log %q", log.String())
 	}
 }
 
-func TestMainHearsNothingWhenTheAliveErrorsAreNotInARow(t *testing.T) {
+func TestLeadHearsNothingWhenTheAliveErrorsAreNotInARow(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 	for range 4 {
@@ -1739,7 +1739,7 @@ func TestMainHearsNothingWhenTheAliveErrorsAreNotInARow(t *testing.T) {
 	}
 
 	if msgs := v.inbox(t, "lead"); len(msgs) != 0 {
-		t.Fatalf("main got %+v", msgs)
+		t.Fatalf("the lead got %+v", msgs)
 	}
 }
 
@@ -1799,7 +1799,7 @@ func TestCancelOfAnEscalatedTaskClearsTheStateBefore(t *testing.T) {
 	}
 }
 
-func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
+func TestLeadEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
@@ -1813,7 +1813,7 @@ func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
 	}
 }
 
-func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.T) {
+func TestARestartedEngineTypesTheNoteForAnIdleLeadAfterResendMinutes(t *testing.T) {
 	v := newEnv(t)
 	fresh := engine.New(v.st, v.l, v.ch, v.ws, config.Config{ResendMinutes: 5, MaxWorkers: 2}, v.clock)
 	answer := fresh.Handle(protocol.Request{Caller: protocol.Caller{}, Command: "task new", Body: taskFile})
@@ -1829,7 +1829,7 @@ func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.
 	}
 }
 
-func TestEngineLogsOnceWhenATickSkipsAnUnreadMainThatIsNotAlive(t *testing.T) {
+func TestEngineLogsOnceWhenATickSkipsAnUnreadLeadThatIsNotAlive(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer
 	v.e.SetLog(&log)
@@ -1845,7 +1845,7 @@ func TestEngineLogsOnceWhenATickSkipsAnUnreadMainThatIsNotAlive(t *testing.T) {
 	}
 }
 
-func TestEngineLogsAgainForASecondPeriodInWhichMainIsNotAlive(t *testing.T) {
+func TestEngineLogsAgainForASecondPeriodInWhichLeadIsNotAlive(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer
 	v.e.SetLog(&log)
@@ -1864,7 +1864,7 @@ func TestEngineLogsAgainForASecondPeriodInWhichMainIsNotAlive(t *testing.T) {
 	}
 }
 
-func TestEngineLogsOnceWhenTheAliveCheckOfMainFails(t *testing.T) {
+func TestEngineLogsOnceWhenTheAliveCheckOfLeadFails(t *testing.T) {
 	v := newEnv(t)
 	var log bytes.Buffer
 	v.e.SetLog(&log)
@@ -1941,7 +1941,7 @@ func TestTickSendsNoNoticeAndNoResendForAnApprovedTask(t *testing.T) {
 	v.tick(t)
 
 	if len(v.inbox(t, "lead")) != 0 || len(v.l.sent) != 0 {
-		t.Fatalf("main got %+v, sent %v", v.inbox(t, "lead"), v.l.sent)
+		t.Fatalf("the lead got %+v, sent %v", v.inbox(t, "lead"), v.l.sent)
 	}
 }
 

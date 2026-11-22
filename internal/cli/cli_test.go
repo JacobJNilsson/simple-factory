@@ -97,7 +97,7 @@ func TestParseRefusesAFilePathFromAWorkerOrReviewer(t *testing.T) {
 	}
 }
 
-func TestParseReadsStdinForAWorkerAndAFileForMain(t *testing.T) {
+func TestParseReadsStdinForAWorkerAndAFileForTheLead(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "t.md")
 	if err := os.WriteFile(file, []byte("FILE"), 0o600); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestParseReadsStdinForAWorkerAndAFileForMain(t *testing.T) {
 	}
 	m, err := parse([]string{"task", "new", file}, envOf(map[string]string{"SFY_AGENT": "lead"}), strings.NewReader(""))
 	if err != nil || m.Body != "FILE" {
-		t.Fatalf("main: %+v, %v", m, err)
+		t.Fatalf("lead: %+v, %v", m, err)
 	}
 }
 

@@ -44,7 +44,7 @@ func TestARefusalOfTheAuthenticatorBecomesAnErrorAnswer(t *testing.T) {
 func TestTheTokenDecidesWhoCalls(t *testing.T) {
 	v := authEnv(t)
 
-	// task new is for main and the operator only, so a worker token that names no one still gets the worker's limits.
+	// task new is for the lead and the operator only, so a worker token that names no one still gets the worker's limits.
 	ans := v.e.Handle(protocol.Request{Caller: protocol.Caller{Token: "worker-secret"}, Command: "task new", Body: "x"})
 
 	if ans.OK {

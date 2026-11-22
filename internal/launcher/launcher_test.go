@@ -21,7 +21,7 @@ type fakeMux struct {
 	stopped       string
 	notified      string
 	shown         []string
-	shownMain     []string
+	shownLead     []string
 	showErr       error
 }
 
@@ -50,8 +50,8 @@ func (f *fakeMux) Show(name string) error {
 	f.shown = append(f.shown, name)
 	return f.showErr
 }
-func (f *fakeMux) ShowMain(name string) error {
-	f.shownMain = append(f.shownMain, name)
+func (f *fakeMux) ShowLead(name string) error {
+	f.shownLead = append(f.shownLead, name)
 	return f.showErr
 }
 
@@ -105,10 +105,10 @@ func TestAFailedPreflightStartsNoSession(t *testing.T) {
 	}
 }
 
-func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {
+func TestStartLeadStartsFreshWhenNothingResumes(t *testing.T) {
 	resumeGrace = 0
 	m, p := &fakeMux{}, &fakeProvider{}
-	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "lead", Kind: "lead"})
+	resumed, err := New(m, p, nil).StartLead(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -117,22 +117,22 @@ func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {
 	}
 }
 
-func TestStartMainResumesWhenTheSessionStaysAlive(t *testing.T) {
+func TestStartLeadResumesWhenTheSessionStaysAlive(t *testing.T) {
 	resumeGrace = 0
 	m, p := &fakeMux{endAfterStart: map[string]bool{}}, &fakeProvider{resumable: true}
-	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "lead", Kind: "lead"})
+	resumed, err := New(m, p, nil).StartLead(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || !resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
-	if len(m.starts) != 1 || len(m.shownMain) != 1 {
-		t.Errorf("starts %v, shown %v", m.starts, m.shownMain)
+	if len(m.starts) != 1 || len(m.shownLead) != 1 {
+		t.Errorf("starts %v, shown %v", m.starts, m.shownLead)
 	}
 }
 
-func TestStartMainStartsFreshWhenTheResumedSessionEndsAtOnce(t *testing.T) {
+func TestStartLeadStartsFreshWhenTheResumedSessionEndsAtOnce(t *testing.T) {
 	resumeGrace = 0
 	m, p := &fakeMux{endAfterStart: map[string]bool{"lead": true}}, &fakeProvider{resumable: true}
-	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "lead", Kind: "lead"})
+	resumed, err := New(m, p, nil).StartLead(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -218,34 +218,34 @@ func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
 	}
 }
 
-func TestStartShowsTheMainAgentWithShowMain(t *testing.T) {
+func TestStartShowsTheLeadWithShowLead(t *testing.T) {
 	m := &fakeMux{}
 	l := New(m, &fakeProvider{}, nil)
 	if err := l.Start(engine.SessionSpec{Name: "lead", Kind: "lead"}); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(m.shownMain, []string{"lead"}) || len(m.shown) != 0 {
-		t.Errorf("shownMain %v, shown %v", m.shownMain, m.shown)
+	if !reflect.DeepEqual(m.shownLead, []string{"lead"}) || len(m.shown) != 0 {
+		t.Errorf("shownLead %v, shown %v", m.shownLead, m.shown)
 	}
 }
 
-func TestMainCommandReturnsTheArgvAndStartsNoSession(t *testing.T) {
+func TestLeadCommandReturnsTheArgvAndStartsNoSession(t *testing.T) {
 	m, p := &fakeMux{}, &fakeProvider{resumable: true}
-	argv, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "lead", Kind: "lead"})
+	argv, resumed, err := New(m, p, nil).LeadCommand(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || !resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
 	if !reflect.DeepEqual(argv, []string{"agent", "--flag"}) {
 		t.Errorf("argv %v", argv)
 	}
-	if len(m.starts) != 0 || len(m.shownMain) != 0 {
-		t.Errorf("starts %v, shown %v, want none", m.starts, m.shownMain)
+	if len(m.starts) != 0 || len(m.shownLead) != 0 {
+		t.Errorf("starts %v, shown %v, want none", m.starts, m.shownLead)
 	}
 }
 
-func TestMainCommandOfAFreshSpecDoesNotResume(t *testing.T) {
+func TestLeadCommandOfAFreshSpecDoesNotResume(t *testing.T) {
 	m, p := &fakeMux{}, &fakeProvider{resumable: true}
-	_, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "lead", Kind: "lead", Fresh: true})
+	_, resumed, err := New(m, p, nil).LeadCommand(engine.SessionSpec{Name: "lead", Kind: "lead", Fresh: true})
 	if err != nil || resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -259,7 +259,7 @@ func TestStartShowsWorkersAndReviewersWithShow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !reflect.DeepEqual(m.shown, []string{"worker-t1", "reviewer-t1"}) || len(m.shownMain) != 0 {
-		t.Errorf("shown %v, shownMain %v", m.shown, m.shownMain)
+	if !reflect.DeepEqual(m.shown, []string{"worker-t1", "reviewer-t1"}) || len(m.shownLead) != 0 {
+		t.Errorf("shown %v, shownLead %v", m.shown, m.shownLead)
 	}
 }

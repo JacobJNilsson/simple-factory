@@ -131,14 +131,14 @@ func TestRunDeletesTheEnvFile(t *testing.T) {
 
 func TestRunOverlayAddsToTheCurrentEnvironment(t *testing.T) {
 	dir := t.TempDir()
-	argv := wrap(t, dir, []string{"PATH=/usr/bin:/bin", "SFY_AGENT=main"}, false, "env")
+	argv := wrap(t, dir, []string{"PATH=/usr/bin:/bin", "SFY_AGENT=lead"}, false, "env")
 
 	out, err := runAsSfy(t, argv[1:]...)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 
-	for _, want := range []string{"OUTER=kept", "SFY_AGENT=main"} {
+	for _, want := range []string{"OUTER=kept", "SFY_AGENT=lead"} {
 		if !strings.Contains(out, want+"\n") {
 			t.Errorf("missing %s in %q", want, out)
 		}

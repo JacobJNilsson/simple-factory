@@ -50,7 +50,7 @@ func Skills(home string) ([]string, error) {
 }
 
 // FactoryFiles lists the names in the factory folder home that are neither state nor definition, such as a checks folder that a factory repo installed.
-// It leaves out the folder file, the main agent's notes.md, and the factories folder of the default factory.
+// It leaves out the folder file, the lead's notes.md, and the factories folder of the default factory.
 func FactoryFiles(home, userHome string) ([]string, error) {
 	entries, err := os.ReadDir(home)
 	if errors.Is(err, fs.ErrNotExist) {

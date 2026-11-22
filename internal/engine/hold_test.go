@@ -20,7 +20,7 @@ func (v env) heldReview(t *testing.T) {
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
 }
 
-func TestAPassedReviewOfAHeldTaskAsksForNoPushAndTellsMain(t *testing.T) {
+func TestAPassedReviewOfAHeldTaskAsksForNoPushAndTellsLead(t *testing.T) {
 	v := newEnv(t)
 	v.heldReview(t)
 
@@ -32,7 +32,7 @@ func TestAPassedReviewOfAHeldTaskAsksForNoPushAndTellsMain(t *testing.T) {
 	}
 	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "waits for the operator") || !strings.Contains(got[0].Body, "sfy task push t1") {
-		t.Fatalf("main got %v", got)
+		t.Fatalf("the lead got %v", got)
 	}
 }
 

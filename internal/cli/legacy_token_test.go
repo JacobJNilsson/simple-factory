@@ -12,7 +12,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
-const mainConversation = "11111111-2222-4333-8444-555555555555"
+const leadConversation = "11111111-2222-4333-8444-555555555555"
 
 // preTokenHome returns a factory folder with the session folders that an sfy without tokens left behind, with the folder of the lead moved to its new name.
 func preTokenHome(t *testing.T) string {
@@ -24,7 +24,7 @@ func preTokenHome(t *testing.T) string {
 		}
 	}
 	id := filepath.Join(home, "sessions", "lead", "conversation-id")
-	if err := os.WriteFile(id, []byte(mainConversation+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(id, []byte(leadConversation+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return home
@@ -47,7 +47,7 @@ func answer(t *testing.T, home string, env map[string]string, args ...string) (o
 func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 	home := preTokenHome(t)
 	sessions := map[string]map[string]string{
-		"lead under its old name": {"SFY_AGENT": "main", "CLAUDE_CODE_SESSION_ID": mainConversation},
+		"lead under its old name": {"SFY_AGENT": "main", "CLAUDE_CODE_SESSION_ID": leadConversation},
 		"worker-t1":               {"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"},
 	}
 

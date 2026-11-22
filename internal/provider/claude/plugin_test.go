@@ -31,7 +31,7 @@ func pluginDir(home, name string) string {
 }
 
 func TestEachSessionKindLoadsTheFactorySkillsAsAPlugin(t *testing.T) {
-	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec(), mainSpec()} {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec(), leadSpec()} {
 		t.Run(spec.Kind, func(t *testing.T) {
 			p, home := setup(t, bin)
 			withSkills(t, home)

@@ -1,4 +1,4 @@
-// Package up starts the sfy process and the main agent, and runs the sfy process.
+// Package up starts the sfy process and the lead, and runs the sfy process.
 package up
 
 import (
@@ -26,39 +26,39 @@ var ErrNotAnswering = errors.New("the sfy process did not answer on its socket i
 // ErrServeExited reports that the sfy process's session ended while up waited for it.
 var ErrServeExited = errors.New("the sfy process exited, see sfy.log in the factory folder")
 
-// mainFailedError reports a main agent that failed to start after the sfy process started.
-type mainFailedError struct{ err error }
+// leadFailedError reports a lead that failed to start after the sfy process started.
+type leadFailedError struct{ err error }
 
-func (e *mainFailedError) Error() string {
-	return "sfy process started, main agent failed: " + e.err.Error()
+func (e *leadFailedError) Error() string {
+	return "sfy process started, lead failed: " + e.err.Error()
 }
 
-func (e *mainFailedError) Unwrap() error { return e.err }
+func (e *leadFailedError) Unwrap() error { return e.err }
 
 // serveSession is the multiplexer session that runs the sfy process.
 const serveSession = "sfy"
 
-// mainPrompt names the folder, so the main agent needs no command to find it.
-func mainPrompt(home string) string {
+// leadPrompt names the folder, so the lead needs no command to find it.
+func leadPrompt(home string) string {
 	return "Your factory folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
 }
 
-// resumePrompt is the first message of a resumed main agent. Its conversation already holds the full prompt.
+// resumePrompt is the first message of a resumed lead. Its conversation already holds the full prompt.
 func resumePrompt(home string) string {
 	return "sfy started again. Read notes.md and status.md in " + home + " with the Read tool."
 }
 
-// mainPromptPath is the file that holds the prompt of the running main agent.
-func mainPromptPath(home string) string { return filepath.Join(home, "lead-prompt.md") }
+// leadPromptPath is the file that holds the prompt of the running lead.
+func leadPromptPath(home string) string { return filepath.Join(home, "lead-prompt.md") }
 
-// recordMainPrompt saves the main prompt that a build uses now, and reports whether it differs from the saved one.
-// A missing file counts as a change, because the main agent may predate the file.
-func recordMainPrompt(home string, layers []string) (changed bool, err error) {
+// recordLeadPrompt saves the lead's prompt that a build uses now, and reports whether it differs from the saved one.
+// A missing file counts as a change, because the lead may predate the file.
+func recordLeadPrompt(home string, layers []string) (changed bool, err error) {
 	text, err := prompts.For(protocol.Lead, layers)
 	if err != nil {
 		return false, err
 	}
-	path := mainPromptPath(home)
+	path := leadPromptPath(home)
 	old, err := os.ReadFile(path)
 	if err == nil && string(old) == text {
 		return false, nil
@@ -72,16 +72,16 @@ func recordMainPrompt(home string, layers []string) (changed bool, err error) {
 // options holds what run needs, so tests can replace each part.
 type options struct {
 	home string
-	// layers are the folders that the main prompt comes from, lowest first.
+	// layers are the folders that the lead's prompt comes from, lowest first.
 	layers []string
-	// dir is the working folder, where the main agent works. It is empty for the default factory, whose main agent works in home.
+	// dir is the working folder, where the lead works. It is empty for the default factory, whose lead works in home.
 	dir    string
 	config config.Config
 	// bin is the absolute path of the sfy binary.
 	bin string
 	// environ is the environment of the host, as KEY=VALUE entries. The sfy process gets part of it.
 	environ []string
-	// mux runs the sfy process, and launcher starts the main agent.
+	// mux runs the sfy process, and launcher starts the lead.
 	mux      mux.Mux
 	launcher launcher.Launcher
 	// answers reports whether a sfy process answers on its socket.
@@ -116,26 +116,26 @@ func (o options) moveToLead() error {
 	return o.move()
 }
 
-// mainDir returns the working directory of the main agent.
-func (o options) mainDir() string {
+// leadDir returns the working directory of the lead.
+func (o options) leadDir() string {
 	if o.dir != "" {
 		return o.dir
 	}
 	return o.home
 }
 
-// mainAddressPath is the file that records the address of a main agent that runs in the operator's terminal.
-func mainAddressPath(home string) string { return registration.AddressPath(home) }
+// leadAddressPath is the file that records the address of a lead that runs in the operator's terminal.
+func leadAddressPath(home string) string { return registration.AddressPath(home) }
 
-// run starts what is missing: notes.md, the sfy process and the main agent.
-// A main agent that is missing runs in this terminal when the set can name it.
-// When the main agent already runs, run shows it again, so the operator gets it where they started sfy.
+// run starts what is missing: notes.md, the sfy process and the lead.
+// A lead that is missing runs in this terminal when the set can name it.
+// When the lead already runs, run shows it again, so the operator gets it where they started sfy.
 func run(o options) error {
-	started, mainAlive, err := o.ensure(true)
+	started, leadAlive, err := o.ensure(true)
 	if err != nil {
 		return err
 	}
-	if !mainAlive {
+	if !leadAlive {
 		return report(o.out, started)
 	}
 	if len(started) > 0 {
@@ -145,20 +145,20 @@ func run(o options) error {
 	}
 	// The operator already works in the terminal of a registered agent, and showing it would move that terminal.
 	if (registration.Folder{Home: o.home}).Registered() {
-		_, err = fmt.Fprintln(o.out, "The registered main agent already runs.")
+		_, err = fmt.Fprintln(o.out, "The registered lead already runs.")
 		return err
 	}
-	if err := o.launcher.ShowMain(mainSession); err != nil {
+	if err := o.launcher.ShowLead(leadSession); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(o.out, "The main agent already runs and was shown.")
+	_, err = fmt.Fprintln(o.out, "The lead already runs and was shown.")
 	return err
 }
 
-// ensure starts what is missing and returns what it started. It reports whether the main agent ran before.
-// With inPlace set, a missing main agent replaces this process when the set names this terminal.
+// ensure starts what is missing and returns what it started. It reports whether the lead ran before.
+// With inPlace set, a missing lead replaces this process when the set names this terminal.
 // Only the operator's own command may do that, so restart passes false.
-func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err error) {
+func (o options) ensure(inPlace bool) (started []string, leadAlive bool, err error) {
 	if err := os.MkdirAll(o.home, 0o700); err != nil {
 		return nil, false, err
 	}
@@ -176,19 +176,19 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 		serveStarted = true
 		started = append(started, "the sfy process")
 	}
-	alive, err := o.launcher.Alive(mainSession)
+	alive, err := o.launcher.Alive(leadSession)
 	if err != nil {
 		return nil, false, err
 	}
 	if !alive {
-		if w := o.launcher.TrustWarning(o.mainDir()); w != "" {
+		if w := o.launcher.TrustWarning(o.leadDir()); w != "" {
 			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
 		}
-		if _, err := recordMainPrompt(o.home, o.layers); err != nil {
+		if _, err := recordLeadPrompt(o.home, o.layers); err != nil {
 			return nil, false, err
 		}
 		spec := engine.SessionSpec{
-			Name: mainSession, Kind: protocol.Lead, Dir: o.mainDir(), Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
+			Name: leadSession, Kind: protocol.Lead, Dir: o.leadDir(), Model: o.config.Models.Lead, Prompt: leadPrompt(o.home),
 			ResumePrompt: resumePrompt(o.home),
 		}
 		if inPlace {
@@ -197,29 +197,29 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 				return nil, false, err
 			}
 			if placed {
-				return append(started, "the main agent (in this terminal)"), false, nil
+				return append(started, "the lead (in this terminal)"), false, nil
 			}
 		}
-		resumed, err := o.launcher.StartMain(spec)
+		resumed, err := o.launcher.StartLead(spec)
 		if err != nil {
 			if serveStarted {
-				return nil, false, &mainFailedError{err: err}
+				return nil, false, &leadFailedError{err: err}
 			}
 			return nil, false, err
 		}
 		if resumed {
-			started = append(started, "the main agent (resumed conversation)")
+			started = append(started, "the lead (resumed conversation)")
 		} else {
-			started = append(started, "the main agent (new conversation)")
+			started = append(started, "the lead (new conversation)")
 		}
 	}
 	return started, alive, nil
 }
 
-// startInPlace turns this terminal into the main agent. It reports false when it did not, so the caller starts the main agent through the set.
+// startInPlace turns this terminal into the lead. It reports false when it did not, so the caller starts the lead through the set.
 // It does not when the set has no whoami template, when whoami fails or prints nothing, or when the replacement fails.
 // A failed whoami goes to warn. The address is recorded before the replacement, and removed when the replacement fails.
-// After it records the address, startInPlace runs show_main. A failure of show_main goes to warn and does not stop the start.
+// After it records the address, startInPlace runs show_lead. A failure of show_lead goes to warn and does not stop the start.
 // A real replacement never returns. A test replacement returns nil, and startInPlace then reports true.
 func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, error) {
 	if o.whoami == nil || o.exec == nil {
@@ -227,17 +227,17 @@ func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, 
 	}
 	address, err := o.whoami()
 	if err != nil {
-		_, _ = fmt.Fprintln(o.warn, "sfy: warning: whoami failed, so the main agent starts through the set: "+err.Error())
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: whoami failed, so the lead starts through the set: "+err.Error())
 		return false, nil
 	}
 	if address == "" {
 		return false, nil
 	}
-	argv, _, err := o.launcher.MainCommand(spec)
+	argv, _, err := o.launcher.LeadCommand(spec)
 	if err != nil {
 		return false, err
 	}
-	path := mainAddressPath(o.home)
+	path := leadAddressPath(o.home)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false, err
 	}
@@ -249,13 +249,13 @@ func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, 
 			return false, err
 		}
 	}
-	// The recorded address is now the main agent's {name}, so show_main can arrange the terminal around it.
-	if err := o.launcher.ShowMain(mainSession); err != nil {
-		_, _ = fmt.Fprintln(o.warn, "sfy: warning: show_main failed, the main agent still starts in this terminal: "+err.Error())
+	// The recorded address is now the lead's {name}, so show_lead can arrange the terminal around it.
+	if err := o.launcher.ShowLead(leadSession); err != nil {
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: show_lead failed, the lead still starts in this terminal: "+err.Error())
 	}
-	_, _ = fmt.Fprintln(o.out, "Starting the main agent in this terminal.")
+	_, _ = fmt.Fprintln(o.out, "Starting the lead in this terminal.")
 	if err := o.exec(spec.Dir, argv); err != nil {
-		_, _ = fmt.Fprintln(o.warn, "sfy: warning: could not start the main agent in this terminal, so it starts through the set: "+err.Error())
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: could not start the lead in this terminal, so it starts through the set: "+err.Error())
 		return false, os.Remove(path)
 	}
 	return true, nil

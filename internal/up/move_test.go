@@ -168,7 +168,7 @@ func TestRestartKeepsALeadThatRunsUnderTheOldName(t *testing.T) {
 	r.m.answering = true
 	r.m.alive["sfy"] = true
 	r.m.alive["main"] = true
-	m := mux.Registered(r.m, "lead", mainAddressPath(home), registration.Path(home))
+	m := mux.Registered(r.m, "lead", leadAddressPath(home), registration.Path(home))
 	r.o.mux = m
 	r.o.launcher = registeredLauncher{r.l, m}
 	calls := 0

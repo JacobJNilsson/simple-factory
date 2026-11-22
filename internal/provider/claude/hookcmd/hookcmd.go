@@ -89,7 +89,7 @@ func replyFor(event string) func(string) string {
 }
 
 // userHook reports an event that comes from the user settings.
-// The user settings reach every session of the user, so the hook acts only for the registered main agent.
+// The user settings reach every session of the user, so the hook acts only for the registered lead.
 // It acts for no other session and for no agent that sfy started. It makes no socket call then, and it prints nothing.
 func userHook(event string, env func(string) string, stdin io.Reader, send Sender) (int, error) {
 	if !slices.Contains(userEvents, event) {
@@ -110,7 +110,7 @@ func userHook(event string, env func(string) string, stdin io.Reader, send Sende
 	return send(req, replyFor(event)), nil
 }
 
-// mergeGuardHook is the PreToolUse hook of the main agent. It exits with exitWake, which blocks the tool call, for a hand push, merge or rebase in a no-merge repo.
+// mergeGuardHook is the PreToolUse hook of the lead. It exits with exitWake, which blocks the tool call, for a hand push, merge or rebase in a no-merge repo.
 // It reads the repo config on each call. A config that cannot be read, and a folder that a shell expansion hides, count as no-merge.
 func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) int {
 	raw, _ := io.ReadAll(stdin)
@@ -156,7 +156,7 @@ func agentName(env func(string) string) string { return protocol.AgentName(env("
 
 // noteHook runs the two hooks that deliver notes through the session's note file. It needs no sfy process.
 // note-watch prints the SessionStart or CwdChanged output that names the file. note prints the file's text to stderr and exits with exitWake.
-// A caller with no session name, such as a registered main agent, gets no output and exit code 0.
+// A caller with no session name, such as a registered lead, gets no output and exit code 0.
 func noteHook(event string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
 	path, ok := claude.NotePath(config.Home(env), agentName(env))
 	if !ok {

@@ -10,7 +10,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
-const mainConversation = "11111111-2222-4333-8444-555555555555"
+const leadConversation = "11111111-2222-4333-8444-555555555555"
 
 // preTokenHome returns a factory folder with the session folders that an sfy without tokens left behind.
 func preTokenHome(t *testing.T) Folder {
@@ -22,7 +22,7 @@ func preTokenHome(t *testing.T) Folder {
 		}
 	}
 	id := filepath.Join(home, "sessions", "lead", "conversation-id")
-	if err := os.WriteFile(id, []byte(mainConversation+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(id, []byte(leadConversation+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return Folder{Home: home}
@@ -213,8 +213,8 @@ func TestAuthenticateAcceptsTheOwnerAndTheOperator(t *testing.T) {
 
 func TestResolveAndAuthenticateAgree(t *testing.T) {
 	started := authFolder(t)
-	registeredMain := authFolder(t)
-	registered(t, registeredMain)
+	registeredLead := authFolder(t)
+	registered(t, registeredLead)
 	preToken := preTokenHome(t)
 	if err := preToken.IssueLegacy(); err != nil {
 		t.Fatal(err)
@@ -226,9 +226,9 @@ func TestResolveAndAuthenticateAgree(t *testing.T) {
 		want   string
 	}{
 		"started worker":  {started, Claim{Agent: "worker-t1", Token: started.Token("worker-t1")}, "worker-t1"},
-		"registered lead": {registeredMain, Claim{Session: "s-main"}, "lead"},
-		"pre-token lead":  {preToken, Claim{Agent: "lead", Session: mainConversation}, "lead"},
-		"pre-token main":  {preToken, Claim{Agent: "main", Session: mainConversation}, "lead"},
+		"registered lead": {registeredLead, Claim{Session: "s-main"}, "lead"},
+		"pre-token lead":  {preToken, Claim{Agent: "lead", Session: leadConversation}, "lead"},
+		"pre-token main":  {preToken, Claim{Agent: "main", Session: leadConversation}, "lead"},
 		"pre-token agent": {preToken, Claim{Agent: "worker-t2"}, "worker-t2"},
 		"operator":        {started, Claim{}, ""},
 	} {
@@ -256,7 +256,7 @@ func TestResolveKeepsTheNameAndTokenOfAStartedAgent(t *testing.T) {
 	}
 }
 
-func TestResolveMapsTheRegisteredSessionToMainWithItsToken(t *testing.T) {
+func TestResolveMapsTheRegisteredSessionToLeadWithItsToken(t *testing.T) {
 	f := Folder{Home: t.TempDir()}
 	registered(t, f)
 	token, err := f.Issue("lead")
@@ -311,17 +311,17 @@ func TestResolveGivesAPreTokenWorkerItsLegacyToken(t *testing.T) {
 	}
 }
 
-func TestResolveGivesAPreTokenMainItsLegacyTokenOnlyInItsOwnConversation(t *testing.T) {
+func TestResolveGivesAPreTokenLeadItsLegacyTokenOnlyInItsOwnConversation(t *testing.T) {
 	f := preTokenHome(t)
 	if err := f.IssueLegacy(); err != nil {
 		t.Fatal(err)
 	}
 
-	own := f.Resolve(Claim{Agent: "main", Session: mainConversation})
+	own := f.Resolve(Claim{Agent: "main", Session: leadConversation})
 	spoof := f.Resolve(Claim{Agent: "main", Session: "worker-session"})
 
 	if own.Token == "" {
-		t.Error("main got no token in its own conversation")
+		t.Error("the lead got no token in its own conversation")
 	}
 	if spoof.Token != "" {
 		t.Errorf("a worker that claims main got the token %q", spoof.Token)

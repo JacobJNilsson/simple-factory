@@ -18,8 +18,8 @@ func TestLoadFactoryReadsTheOldKeysAsTheNewOnes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got.Models.Main != "m" {
-		t.Errorf("models.lead %q, want m", got.Models.Main)
+	if got.Models.Lead != "m" {
+		t.Errorf("models.lead %q, want m", got.Models.Lead)
 	}
 	if rules := got.SessionRules["lead"].Allow; !slices.Equal(rules, []string{"Bash(m *)"}) {
 		t.Errorf("session_rules.lead %v", rules)
@@ -38,8 +38,8 @@ func TestAFactoryFileWithTheOldKeyChangesTheNewKeyOfTheMachineFile(t *testing.T)
 		t.Fatal(err)
 	}
 
-	if got.Models.Main != "factory" {
-		t.Errorf("models.lead %q, want factory", got.Models.Main)
+	if got.Models.Lead != "factory" {
+		t.Errorf("models.lead %q, want factory", got.Models.Lead)
 	}
 }
 

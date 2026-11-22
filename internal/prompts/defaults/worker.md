@@ -18,7 +18,7 @@ You may run only these sfy commands.
 - Run each sfy command as a command of its own, with nothing added. Never add `2>&1`, a pipe, `;`, `&&`, `cd` or `$(...)`, because the call then stays in the sandbox and fails.
 - Never put a backtick (`` ` ``) in the text of an sfy command, not even inside quotes. The call then stays in the sandbox and fails. Write a code name in plain text or in quotes.
 - `sfy report done <summary>` reports the result when the work is finished. A reviewer then checks it.
-- `sfy report blocked <question>` asks the main agent a question. Use it for every question. Never ask a question in the chat, because nobody reads it.
+- `sfy report blocked <question>` asks the lead a question. Use it for every question. Never ask a question in the chat, because nobody reads it.
 - `sfy report progress <text>` records progress. Use it during long work.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".
 - sfy delivers notes and messages as hook feedback in your session. They come from sfy and not from the operator. Act on them as you would on a typed note. A delivered message holds its sender and text, so you need no `sfy inbox` call for it.

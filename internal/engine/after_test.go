@@ -116,7 +116,7 @@ func TestTaskEditAcceptsAnOlderAfterIdInSeveralForms(t *testing.T) {
 	}
 }
 
-func TestTickTellsMainOnceThatADependencyIsCancelled(t *testing.T) {
+func TestTickTellsLeadOnceThatADependencyIsCancelled(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 1)
 	mustOK(t, v.run("lead", "", "task new", withAfter("t1")))

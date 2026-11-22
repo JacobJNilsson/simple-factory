@@ -25,7 +25,7 @@ func (f *fakeRegistration) Clear() error {
 	return nil
 }
 
-func TestDownLeavesARegisteredMainRunningAndClearsTheRegistration(t *testing.T) {
+func TestDownLeavesARegisteredLeadRunningAndClearsTheRegistration(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 1)
 	reg := &fakeRegistration{registered: true}
@@ -46,7 +46,7 @@ func TestDownLeavesARegisteredMainRunningAndClearsTheRegistration(t *testing.T) 
 	}
 }
 
-func TestDownWithOnlyARegisteredMainStopsNoSession(t *testing.T) {
+func TestDownWithOnlyARegisteredLeadStopsNoSession(t *testing.T) {
 	v := newEnv(t)
 	reg := &fakeRegistration{registered: true}
 	v.e.SetRegistration(reg)
@@ -63,7 +63,7 @@ func TestDownWithOnlyARegisteredMainStopsNoSession(t *testing.T) {
 	}
 }
 
-func TestDownStopsMainWhenNothingRegistered(t *testing.T) {
+func TestDownStopsLeadWhenNothingRegistered(t *testing.T) {
 	v := newEnv(t)
 	v.e.SetRegistration(&fakeRegistration{})
 

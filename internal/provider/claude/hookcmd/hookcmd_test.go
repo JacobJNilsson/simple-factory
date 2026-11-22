@@ -365,7 +365,7 @@ func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
 	}
 }
 
-func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
+func TestUserHookRequestCarriesTheTokenOfTheLead(t *testing.T) {
 	home := t.TempDir()
 	token, err := identity.Folder{Home: home}.Issue("lead")
 	if err != nil {

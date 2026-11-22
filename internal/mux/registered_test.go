@@ -31,18 +31,18 @@ func addressFile(t *testing.T, content string) string {
 	return path
 }
 
-func TestRegisteredSendsTheMainCallsToTheRecordedAddress(t *testing.T) {
+func TestRegisteredSendsTheLeadCallsToTheRecordedAddress(t *testing.T) {
 	a := &aliveMux{alive: true}
 	m := Registered(a, "lead", addressFile(t, "dev\n"))
 
 	_ = m.Send("lead", "hi")
 	_ = m.Notify("lead", "n")
 	_ = m.Show("lead")
-	_ = m.ShowMain("lead")
+	_ = m.ShowLead("lead")
 	_, _ = m.Alive("lead")
 	_ = m.Send("worker-t1", "hi")
 
-	want := []string{"send dev", "notify dev", "show dev", "showmain dev", "alive dev", "send worker-t1"}
+	want := []string{"send dev", "notify dev", "show dev", "showlead dev", "alive dev", "send worker-t1"}
 	if !slices.Equal(a.calls, want) {
 		t.Fatalf("got %q, want %q", a.calls, want)
 	}

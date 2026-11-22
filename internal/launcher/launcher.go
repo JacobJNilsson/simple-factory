@@ -12,16 +12,16 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
 
-// Launcher is the engine's Launcher with the calls that starting sfy needs for the main agent.
+// Launcher is the engine's Launcher with the calls that starting sfy needs for the lead.
 type Launcher interface {
 	engine.Launcher
-	// ShowMain shows the main agent's session again with the show_main template.
-	ShowMain(name string) error
-	// StartMain starts the main agent. It resumes the last conversation when it can, and reports whether it did.
-	StartMain(spec engine.SessionSpec) (resumed bool, err error)
-	// MainCommand prepares the main agent's session and returns the argv that runs it, without starting a session.
+	// ShowLead shows the lead's session again with the show_lead template.
+	ShowLead(name string) error
+	// StartLead starts the lead. It resumes the last conversation when it can, and reports whether it did.
+	StartLead(spec engine.SessionSpec) (resumed bool, err error)
+	// LeadCommand prepares the lead's session and returns the argv that runs it, without starting a session.
 	// The caller runs the argv in its own terminal. resumed reports whether the argv resumes the last conversation.
-	MainCommand(spec engine.SessionSpec) (argv []string, resumed bool, err error)
+	LeadCommand(spec engine.SessionSpec) (argv []string, resumed bool, err error)
 }
 
 type launcher struct {
@@ -30,7 +30,7 @@ type launcher struct {
 	log io.Writer
 }
 
-// resumeGrace is how long a resumed main agent must run before sfy counts the resume as working.
+// resumeGrace is how long a resumed lead must run before sfy counts the resume as working.
 // It is long enough for a failed resume to exit. Tests shorten it.
 var resumeGrace = 2 * time.Second
 
@@ -42,19 +42,19 @@ func New(m mux.Mux, p provider.Provider, log io.Writer) Launcher {
 }
 
 // Start asks the provider for the session's command, runs it in a new session, and shows the session.
-// The main agent runs the show_main template and every other agent runs the show template.
+// The lead runs the show_lead template and every other agent runs the show template.
 // A failed show leaves the start successful, because the agent runs either way.
 func (l launcher) Start(spec engine.SessionSpec) error {
 	if spec.Kind == "lead" {
-		_, err := l.StartMain(spec)
+		_, err := l.StartLead(spec)
 		return err
 	}
 	return l.begin(spec)
 }
 
-// StartMain starts the main agent and resumes its last conversation when the provider can.
+// StartLead starts the lead and resumes its last conversation when the provider can.
 // When the resumed session ends within the grace time, it starts a new conversation instead.
-func (l launcher) StartMain(spec engine.SessionSpec) (bool, error) {
+func (l launcher) StartLead(spec engine.SessionSpec) (bool, error) {
 	if spec.Fresh || !l.p.Resumes(spec) {
 		return false, l.begin(spec)
 	}
@@ -73,9 +73,9 @@ func (l launcher) StartMain(spec engine.SessionSpec) (bool, error) {
 	return false, l.begin(spec)
 }
 
-// MainCommand returns the provider's argv for the main agent and whether it resumes the last conversation.
+// LeadCommand returns the provider's argv for the lead and whether it resumes the last conversation.
 // It starts no session and runs no show template.
-func (l launcher) MainCommand(spec engine.SessionSpec) ([]string, bool, error) {
+func (l launcher) LeadCommand(spec engine.SessionSpec) ([]string, bool, error) {
 	// The provider records a new conversation in Command, so it must answer Resumes first.
 	if err := l.p.Preflight(spec.Kind); err != nil {
 		return nil, false, err
@@ -99,7 +99,7 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 	}
 	show := l.Show
 	if spec.Kind == "lead" {
-		show = l.ShowMain
+		show = l.ShowLead
 	}
 	if err := show(spec.Name); err != nil && l.log != nil {
 		_, _ = fmt.Fprintf(l.log, "%s show of %s failed: %v\n", time.Now().Format(time.RFC3339), spec.Name, err)

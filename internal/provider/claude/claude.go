@@ -56,7 +56,7 @@ type filesystem struct {
 	AllowWrite []string `json:"allowWrite"`
 }
 
-// sandbox is Claude Code's sandbox block. Workers and reviewers get it, and the main agent does not.
+// sandbox is Claude Code's sandbox block. Workers and reviewers get it, and the lead does not.
 type sandbox struct {
 	Enabled                  bool       `json:"enabled"`
 	FailIfUnavailable        bool       `json:"failIfUnavailable"`
@@ -133,20 +133,20 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		env = append(env, a.inherited()...)
 	}
 	argv := []string{a.claudeCommand(), "--name", spec.Name, "--model", spec.Model}
-	// The main agent gets no permission flag, so claude uses the operator's own default mode.
+	// The lead gets no permission flag, so claude uses the operator's own default mode.
 	if spec.Kind != "lead" {
 		argv = append(argv, "--permission-mode", "acceptEdits")
 	}
 	prompt := spec.Prompt
 	argv = append(argv, "--settings", path, "--append-system-prompt", role)
-	// The main agent gets the skills too, because it runs in the working folder and sees no skill in the factory folder.
+	// The lead gets the skills too, because it runs in the working folder and sees no skill in the factory folder.
 	plugin, err := a.pluginArgs(filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
 	argv = append(argv, plugin...)
 	if spec.Kind == "lead" {
-		conversation, resumed, err := a.mainConversation(spec)
+		conversation, resumed, err := a.leadConversation(spec)
 		if err != nil {
 			return nil, err
 		}
@@ -386,7 +386,7 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 	// Hooks run from the settings and need no rule. Agents run sfy by its name on the PATH.
 	if spec.Kind == "lead" {
 		rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
-		rules = append(rules, a.mainReads()...)
+		rules = append(rules, a.leadReads()...)
 	} else {
 		for _, c := range sfyRules(spec.Kind) {
 			rules = append(rules, "Bash("+c+")")
@@ -410,8 +410,8 @@ func sfyRules(kind string) []string {
 	return nil
 }
 
-// mainReads lets the main agent read the factory folder without a prompt and list folders. It gets no cat rule, because a rule matches the command text and cannot limit a path.
-func (a adapter) mainReads() []string {
+// leadReads lets the lead read the factory folder without a prompt and list folders. It gets no cat rule, because a rule matches the command text and cannot limit a path.
+func (a adapter) leadReads() []string {
 	return []string{"Read(" + rulePath(a.home) + "/**)", "Bash(ls *)"}
 }
 
@@ -423,7 +423,7 @@ const pushWithGitOptions = "Bash(git -* push*)"
 // pushAny denies every git push. A worker of a held task gets it and has no push allow rule.
 const pushAny = "Bash(git push*)"
 
-// deny returns the deny rules of a session. The main agent gets none, and its merge guard hook limits no-merge repos.
+// deny returns the deny rules of a session. The lead gets none, and its merge guard hook limits no-merge repos.
 func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
 	switch spec.Kind {

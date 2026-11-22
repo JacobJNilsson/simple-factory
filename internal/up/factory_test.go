@@ -69,11 +69,11 @@ func TestFactoryEnvKeepsSFYHOMEAndUsesTheDefaultInTheHomeFolder(t *testing.T) {
 	}
 }
 
-func TestMainAgentWorksInTheWorkingFolder(t *testing.T) {
-	if got := (options{home: "/s", dir: "/w"}).mainDir(); got != "/w" {
+func TestLeadWorksInTheWorkingFolder(t *testing.T) {
+	if got := (options{home: "/s", dir: "/w"}).leadDir(); got != "/w" {
 		t.Errorf("factory: %q, want /w", got)
 	}
-	if got := (options{home: "/s"}).mainDir(); got != "/s" {
+	if got := (options{home: "/s"}).leadDir(); got != "/s" {
 		t.Errorf("default: %q, want /s", got)
 	}
 }
@@ -86,7 +86,7 @@ func TestSocketPathOfALongNamedFactoryStaysWithinTheLimit(t *testing.T) {
 	}
 }
 
-func TestShowMainGetsTheFolderRulesFactory(t *testing.T) {
+func TestShowLeadGetsTheFolderRulesFactory(t *testing.T) {
 	home, _ := filepath.EvalSymlinks(t.TempDir())
 	dir := filepath.Join(home, "Developer", "acme")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -109,7 +109,7 @@ func TestShowMainGetsTheFolderRulesFactory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.mux.ShowMain("lead"); err != nil {
+	if err := p.mux.ShowLead("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)

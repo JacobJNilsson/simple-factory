@@ -14,18 +14,18 @@ import (
 )
 
 // ErrNoSession reports that sfy register ran outside an agent session.
-var ErrNoSession = errors.New("sfy cannot tell which agent session runs this command. Run sfy register inside the agent session that becomes the main agent")
+var ErrNoSession = errors.New("sfy cannot tell which agent session runs this command. Run sfy register inside the agent session that becomes the lead")
 
-// ErrMainRuns reports that sfy register found a main agent.
-var ErrMainRuns = errors.New("a main agent already runs. sfy register works only when no main agent runs")
+// ErrLeadRuns reports that sfy register found a lead.
+var ErrLeadRuns = errors.New("a lead already runs. sfy register works only when no lead runs")
 
 // ErrNoWhoami reports a template set that cannot name the terminal of the agent.
 var ErrNoWhoami = errors.New("the template set needs a whoami template that prints the address of this terminal, so sfy can reach the agent. Add one to the set")
 
 // registerIntro is the first line of the prompt that sfy register prints.
-const registerIntro = "You are now the sfy main agent. Follow the prompt below as your role from now on."
+const registerIntro = "You are now the sfy lead. Follow the prompt below as your role from now on."
 
-// Register makes the agent session that runs it the main agent. The agent reads the printed prompt as its role.
+// Register makes the agent session that runs it the lead. The agent reads the printed prompt as its role.
 func Register(environ []string, env func(string) string, stdout, stderr io.Writer) error {
 	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {
@@ -34,7 +34,7 @@ func Register(environ []string, env func(string) string, stdout, stderr io.Write
 	return register(o)
 }
 
-// register refuses when a main agent runs or the set cannot name this terminal.
+// register refuses when a lead runs or the set cannot name this terminal.
 // Otherwise it starts the sfy process when it does not run, records the address and the session, and prints the prompt.
 func register(o options) error {
 	id := o.session()
@@ -44,12 +44,12 @@ func register(o options) error {
 	if err := o.moveToLead(); err != nil {
 		return err
 	}
-	alive, err := o.launcher.Alive(mainSession)
+	alive, err := o.launcher.Alive(leadSession)
 	if err != nil {
 		return err
 	}
 	if alive {
-		return ErrMainRuns
+		return ErrLeadRuns
 	}
 	address, err := o.whoamiAddress()
 	if err != nil {
@@ -70,10 +70,10 @@ func register(o options) error {
 			return err
 		}
 	}
-	if _, err := recordMainPrompt(o.home, o.layers); err != nil {
+	if _, err := recordLeadPrompt(o.home, o.layers); err != nil {
 		return err
 	}
-	if _, err := (identity.Folder{Home: o.home}).Issue(mainSession); err != nil {
+	if _, err := (identity.Folder{Home: o.home}).Issue(leadSession); err != nil {
 		return err
 	}
 	if err := o.record(address, registration.Record{ID: id, Dir: dir}); err != nil {
@@ -83,7 +83,7 @@ func register(o options) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(o.out, "%s\n\n%s\n\n%s\n", registerIntro, text, mainPrompt(o.home))
+	_, err = fmt.Fprintf(o.out, "%s\n\n%s\n\n%s\n", registerIntro, text, leadPrompt(o.home))
 	return err
 }
 
@@ -104,10 +104,10 @@ func (o options) whoamiAddress() (string, error) {
 
 // record writes the address and the registration. A failed write leaves neither file.
 func (o options) record(address string, r registration.Record) error {
-	if err := os.MkdirAll(filepath.Dir(mainAddressPath(o.home)), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(leadAddressPath(o.home)), 0o700); err != nil {
 		return err
 	}
-	if err := os.WriteFile(mainAddressPath(o.home), []byte(address+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(leadAddressPath(o.home), []byte(address+"\n"), 0o600); err != nil {
 		return err
 	}
 	if err := registration.Write(o.home, r); err != nil {

@@ -50,8 +50,8 @@ func (e *Engine) startQueued() error {
 	return errors.Join(errs...)
 }
 
-// noteCancelledDeps tells main once for each queued task that waits for a cancelled task.
-// The waiting task stays queued, and main edits or cancels it.
+// noteCancelledDeps tells the lead once for each queued task that waits for a cancelled task.
+// The waiting task stays queued, and the lead edits or cancels it.
 func (e *Engine) noteCancelledDeps(tasks []task.Task) error {
 	state := map[string]task.State{}
 	for _, t := range tasks {
@@ -146,7 +146,7 @@ func workerPrompt(t task.Task) string {
 	return prompt
 }
 
-// startFailed counts a failed start. After maxStartFailures in a row the task moves to escalated and main hears of it.
+// startFailed counts a failed start. After maxStartFailures in a row the task moves to escalated and the lead hears of it.
 func (e *Engine) startFailed(t task.Task, err error) error {
 	e.startFails[t.ID]++
 	var pre *PreflightError
@@ -162,7 +162,7 @@ func (e *Engine) startFailed(t task.Task, err error) error {
 	return errors.Join(err, e.escalateTask(t, why, true))
 }
 
-// resendNotes gives the late notes to main, the workers of active tasks and the reviewers of tasks in review.
+// resendNotes gives the late notes to the lead, the workers of active tasks and the reviewers of tasks in review.
 func (e *Engine) resendNotes() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-func TestDownStopsMainAndEverySessionThatRuns(t *testing.T) {
+func TestDownStopsLeadAndEverySessionThatRuns(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 2)
 	v.l.dead = map[string]bool{"review-t1-1": true}
@@ -86,6 +86,6 @@ func TestTickDoesNothingAfterDown(t *testing.T) {
 	}
 
 	if got := v.inbox(t, "lead"); len(got) != 0 {
-		t.Fatalf("main got %v", got)
+		t.Fatalf("the lead got %v", got)
 	}
 }

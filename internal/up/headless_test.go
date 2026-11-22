@@ -219,7 +219,7 @@ func TestHeadlessRestartHandsOverToANewProcess(t *testing.T) {
 	if len(r.m.starts) != 0 || len(r.m.stops) != 0 {
 		t.Errorf("restart used the multiplexer: starts %v, stops %v", r.m.starts, r.m.stops)
 	}
-	want := "Stopped the sfy process.\nStarted the sfy process.\nTold the main agent.\n"
+	want := "Stopped the sfy process.\nStarted the sfy process.\nTold the lead.\n"
 	if r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}

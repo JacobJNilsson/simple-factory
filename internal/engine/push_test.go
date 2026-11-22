@@ -82,7 +82,7 @@ func TestAPassedReviewAfterFeedbackKeepsTheWorkerAndTellsItToPush(t *testing.T) 
 		t.Fatalf("got %+v", tk)
 	}
 	if got := v.inbox(t, "lead"); len(got) != 0 {
-		t.Fatalf("main heard of an approval before the push: %v", got)
+		t.Fatalf("the leadheard of an approval before the push: %v", got)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestTheTaskIsApprovedOnlyAfterTheWorkerReportsThePush(t *testing.T) {
 	}
 	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") {
-		t.Fatalf("main got %v", got)
+		t.Fatalf("the leadgot %v", got)
 	}
 	if !slices.Contains(v.l.stopped, "worker-t1") {
 		t.Fatalf("stopped %v", v.l.stopped)
@@ -185,14 +185,14 @@ func TestAPassedFirstReviewTellsTheWorkerToPushAndApprovesAfterTheReport(t *test
 		t.Fatalf("got %+v", tk)
 	}
 	if got := v.inbox(t, "lead"); len(got) != 0 {
-		t.Fatalf("main heard of an approval before the push: %v", got)
+		t.Fatalf("the leadheard of an approval before the push: %v", got)
 	}
 	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed the branch."))
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
 	if got := v.inbox(t, "lead"); len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") || !strings.Contains(got[0].Body, "worker pushed") {
-		t.Fatalf("main got %v", got)
+		t.Fatalf("the leadgot %v", got)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestAPassedReviewOnARepoWithNoRemoteApprovesWithoutAPush(t *testing.T) {
 	}
 	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "no remote") || !strings.Contains(got[0].Body, "task integrate t1") {
-		t.Fatalf("main got %v", got)
+		t.Fatalf("the leadgot %v", got)
 	}
 	if !slices.Contains(v.l.stopped, "worker-t1") {
 		t.Fatalf("the worker kept running: %v", v.l.stopped)

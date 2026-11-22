@@ -20,7 +20,7 @@ import (
 
 // Models names the model of each kind of agent.
 type Models struct {
-	Main     string `toml:"lead"`
+	Lead     string `toml:"lead"`
 	Worker   string `toml:"worker"`
 	Reviewer string `toml:"reviewer"`
 }
@@ -38,7 +38,7 @@ type Config struct {
 	Multiplexer  string        `toml:"multiplexer"`
 	Models       Models        `toml:"models"`
 	Allow        []string      `toml:"allow"`
-	// NoMerge stops the main agent from integrating approved branches. The operator merges them by hand.
+	// NoMerge stops the lead from integrating approved branches. The operator merges them by hand.
 	// A .sfy.toml file sets it for one repo or for the repos below one folder.
 	NoMerge bool `toml:"no_merge"`
 	// DraftPR makes the push note tell the worker to open any PR as a draft. sfy opens no PR itself.
@@ -128,7 +128,7 @@ func defaults(userTempDir func() (string, error)) Config {
 		CheckTimeout:      DefaultCheckTimeout,
 		Provider:          "claude",
 		Multiplexer:       "tmux",
-		Models:            Models{Main: "opus", Worker: "sonnet", Reviewer: "sonnet"},
+		Models:            Models{Lead: "opus", Worker: "sonnet", Reviewer: "sonnet"},
 		Allow:             []string{"git", "make", "go", "gofmt"},
 		DenyRead: []string{
 			"~/.ssh", "~/.aws", "~/.gnupg",

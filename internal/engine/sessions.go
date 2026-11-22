@@ -21,18 +21,18 @@ const (
 // errAliveUnknown marks a failure that follows from an alive check that could not tell whether a session runs.
 var errAliveUnknown = errors.New("cannot tell whether the session runs")
 
-// aliveErrTicks is how many ticks in a row an alive check may fail before sfy tells main.
+// aliveErrTicks is how many ticks in a row an alive check may fail before sfy tells the lead.
 const aliveErrTicks = 3
 
 // probeState is what the counted alive checks of one session know. Only sessions.probe and sessions.watch touch it.
 type probeState struct {
-	// goneTold is true after sfy told main that the session no longer runs.
+	// goneTold is true after sfy told the lead that the session no longer runs.
 	goneTold bool
 	// errs counts the alive checks in a row that failed. A check that answers resets it.
 	errs int
 	// lastErr is the error of the latest failed alive check.
 	lastErr error
-	// errTold is true after sfy told main that it cannot tell whether the session runs.
+	// errTold is true after sfy told the lead that it cannot tell whether the session runs.
 	errTold bool
 }
 
@@ -46,7 +46,7 @@ type agentState struct {
 	probe probeState
 }
 
-// sessionEvent is what a counted alive check tells that main has not heard yet.
+// sessionEvent is what a counted alive check tells that the lead has not heard yet.
 type sessionEvent int
 
 const (
@@ -119,7 +119,7 @@ func (s *sessions) probe(name string) liveness {
 // probeGone is probe for a caller that needs to know only whether the session is gone.
 func (s *sessions) probeGone(name string) bool { return s.probe(name) == sessionGone }
 
-// watch probes a session and reports a change that main has not heard of.
+// watch probes a session and reports a change that the lead has not heard of.
 // A session that is gone is told once, until it runs again. A failed check is told once after aliveErrTicks in a row, and then err holds its error.
 func (s *sessions) watch(name string) (ev sessionEvent, err error) {
 	l := s.probe(name)
@@ -208,8 +208,8 @@ func (s *sessions) end(name string) error {
 	return nil
 }
 
-// checkWorkers tells main once when a worker session is gone, and again only after the worker runs again.
-// sfy does not restart a worker that died. The main agent decides what to do.
+// checkWorkers tells the lead once when a worker session is gone, and again only after the worker runs again.
+// sfy does not restart a worker that died. The lead decides what to do.
 func (e *Engine) checkWorkers() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {

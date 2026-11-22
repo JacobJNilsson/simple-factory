@@ -28,7 +28,7 @@ type Message struct {
 	Created            time.Time
 }
 
-// Verdict is a reviewer's judgment of one round, or feedback that the operator or main sent.
+// Verdict is a reviewer's judgment of one round, or feedback that the operator or the lead sent.
 type Verdict struct {
 	Round int
 	Pass  bool

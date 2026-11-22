@@ -51,7 +51,7 @@ func TestLoadFactoryPutsAFactoryConfigDFileOverTheMachineConfigToml(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (config.Models{Main: "m", Worker: "shared", Reviewer: "sonnet"}); got.Models != want {
+	if want := (config.Models{Lead: "m", Worker: "shared", Reviewer: "sonnet"}); got.Models != want {
 		t.Fatalf("models %+v, want %+v", got.Models, want)
 	}
 }

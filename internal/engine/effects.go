@@ -78,7 +78,7 @@ func (e *Engine) cleanup(t task.Task) error {
 	}
 	dir := t.Dir
 	t.Dir = ""
-	// The save comes first, so a failed save retries the whole cleanup and main hears of a kept workspace once.
+	// The save comes first, so a failed save retries the whole cleanup and the lead hears of a kept workspace once.
 	if err := e.save(t); err != nil {
 		return err
 	}

@@ -12,20 +12,20 @@ import (
 )
 
 // ErrNotAllowed reports that a worker or reviewer ran sfy restart.
-var ErrNotAllowed = errors.New("only the operator and the main agent run sfy restart")
+var ErrNotAllowed = errors.New("only the operator and the lead run sfy restart")
 
 // ErrNotStopped reports a sfy process that kept answering after its session ended.
 var ErrNotStopped = errors.New("the sfy process still answers after it was stopped. Stop it by hand and run sfy")
 
-// mainSession is the multiplexer session of the main agent.
-const mainSession = protocol.Lead
+// leadSession is the multiplexer session of the lead.
+const leadSession = protocol.Lead
 
 // mayRestart reports whether the agent may run sfy restart. The operator has no agent name.
-func mayRestart(agent string) bool { return agent == "" || protocol.AgentName(agent) == mainSession }
+func mayRestart(agent string) bool { return agent == "" || protocol.AgentName(agent) == leadSession }
 
 // restart stops the sfy process and starts it again as a plain sfy does.
 // The multiplexer ends the sfy session with a hangup, which the sfy process handles by removing its socket and lock file.
-// A running main agent keeps its session and chat, and gets a note. Workers and reviewers keep their sessions, and their tasks stay on disk.
+// A running lead keeps its session and chat, and gets a note. Workers and reviewers keep their sessions, and their tasks stay on disk.
 // Before it stops anything, it prints what changed in the definition since the last start, and the note repeats those lines.
 func restart(o options) error {
 	// The report only informs, so a broken state file must not keep the factory from a restart.
@@ -62,7 +62,7 @@ func restart(o options) error {
 	if err := o.moveToLead(); err != nil {
 		return err
 	}
-	mainAlive, err := o.launcher.Alive(mainSession)
+	leadAlive, err := o.launcher.Alive(leadSession)
 	if err != nil {
 		return err
 	}
@@ -76,22 +76,22 @@ func restart(o options) error {
 	if err := report(o.out, started); err != nil {
 		return err
 	}
-	if !mainAlive {
+	if !leadAlive {
 		return nil
 	}
-	return o.noteMain(changes)
+	return o.noteLead(changes)
 }
 
-// noteMain tells the running main agent that sfy restarted, what changed in the definition, and where to read a changed prompt.
+// noteLead tells the running lead that sfy restarted, what changed in the definition, and where to read a changed prompt.
 // The note is one line, because a multiplexer sends a new line as Enter.
-func (o options) noteMain(changes []string) error {
-	changed, err := recordMainPrompt(o.home, o.layers)
+func (o options) noteLead(changes []string) error {
+	changed, err := recordLeadPrompt(o.home, o.layers)
 	if err != nil {
 		return err
 	}
 	note := strings.Join(append([]string{"sfy restarted."}, changes...), " ")
 	if changed {
-		note += " Your prompt changed. Read the new text in " + mainPromptPath(o.home) + " with the Read tool."
+		note += " Your prompt changed. Read the new text in " + leadPromptPath(o.home) + " with the Read tool."
 	}
 	// The new sfy process gives the note, so sfy types nothing into a busy pane.
 	ans, err := o.call(protocol.Request{Command: "restarted", Body: note})
@@ -101,7 +101,7 @@ func (o options) noteMain(changes []string) error {
 	if !ans.OK {
 		return errors.New(ans.Error)
 	}
-	told := "Told the main agent."
+	told := "Told the lead."
 	if ans.Text != "" {
 		told = ans.Text
 	}

@@ -21,7 +21,7 @@ func TestTaskArchiveKeepsTheStateAndLeavesTheWorkspaceAlone(t *testing.T) {
 	}
 }
 
-func TestTaskArchiveIsForTheOperatorAndTheMainAgent(t *testing.T) {
+func TestTaskArchiveIsForTheOperatorAndTheLead(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Done, 1)
 

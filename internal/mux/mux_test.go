@@ -52,12 +52,12 @@ func TestFromMapAcceptsOptionalShow(t *testing.T) {
 	}
 }
 
-func TestFromMapAcceptsOptionalShowMain(t *testing.T) {
+func TestFromMapAcceptsOptionalShowLead(t *testing.T) {
 	got, err := FromMap(map[string]string{"start": "a", "send": "b", "alive": "c", "stop": "d", "show_lead": "e"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ShowMain != "e" || got.Show != "" {
+	if got.ShowLead != "e" || got.Show != "" {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -186,10 +186,10 @@ func herdrSet(t *testing.T) Templates {
 	return set
 }
 
-func TestHerdrExampleHidesWorkersAndShowsTheMainAgent(t *testing.T) {
+func TestHerdrExampleHidesWorkersAndShowsTheLead(t *testing.T) {
 	set := herdrSet(t)
-	if set.Show != "" || set.ShowMain == "" {
-		t.Fatalf("show %q, show_main %q", set.Show, set.ShowMain)
+	if set.Show != "" || set.ShowLead == "" {
+		t.Fatalf("show %q, show_lead %q", set.Show, set.ShowLead)
 	}
 }
 
@@ -244,26 +244,26 @@ func TestShowFailureIsAnError(t *testing.T) {
 	}
 }
 
-func showSet(show, showMain string) Templates {
-	return Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Show: show, ShowMain: showMain}
+func showSet(show, showLead string) Templates {
+	return Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Show: show, ShowLead: showLead}
 }
 
-func TestShowMainRunsTheShowMainTemplate(t *testing.T) {
+func TestShowLeadRunsTheShowLeadTemplate(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
-	m := Runner(showSet("echo show >> "+shellQuote(out), "echo show_main >> "+shellQuote(out)))
-	if err := m.ShowMain("lead"); err != nil {
+	m := Runner(showSet("echo show >> "+shellQuote(out), "echo show_lead >> "+shellQuote(out)))
+	if err := m.ShowLead("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
-	if string(got) != "show_main\n" {
+	if string(got) != "show_lead\n" {
 		t.Fatalf("got %q", got)
 	}
 }
 
-func TestShowMainFallsBackToShow(t *testing.T) {
+func TestShowLeadFallsBackToShow(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	m := Runner(showSet("echo show >> "+shellQuote(out), ""))
-	if err := m.ShowMain("lead"); err != nil {
+	if err := m.ShowLead("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -274,12 +274,12 @@ func TestShowMainFallsBackToShow(t *testing.T) {
 
 func TestShowWithEmptyShowDoesNothingForAWorker(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
-	m := Runner(showSet("", "echo show_main >> "+shellQuote(out)))
+	m := Runner(showSet("", "echo show_lead >> "+shellQuote(out)))
 	if err := m.Show("worker-t1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(out); err == nil {
-		t.Fatal("show_main ran for a worker")
+		t.Fatal("show_lead ran for a worker")
 	}
 }
 
@@ -302,7 +302,7 @@ func TestHerdrShowPassesTheAddressToHerdrApp(t *testing.T) {
 	stub("hc", `echo '{"address":"t6z","agent":"sleep","name":"main","state":"live","turn":0}'`)
 	stub("herdr-app", `echo "$@" > `+shellQuote(out))
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	if err := Runner(set).ShowMain("lead"); err != nil {
+	if err := Runner(set).ShowLead("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -332,7 +332,7 @@ func TestHerdrShowRetriesUntilTheTerminalIsKnown(t *testing.T) {
 	herdrStubs(t, `echo x >> `+shellQuote(count)+`
 if [ $(wc -l < `+shellQuote(count)+`) -le 2 ]; then echo '{"error":"no running terminal"}'; exit 1; fi
 echo '{"pending": true}'`)
-	if err := Runner(set).ShowMain("lead"); err != nil {
+	if err := Runner(set).ShowLead("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(count)
@@ -346,7 +346,7 @@ func TestHerdrShowFailureCarriesHerdrAppOutput(t *testing.T) {
 	count := filepath.Join(t.TempDir(), "count")
 	herdrStubs(t, `echo x >> `+shellQuote(count)+`
 echo '{"error":"no running terminal \"main\""}'; exit 1`)
-	err := Runner(set).ShowMain("lead")
+	err := Runner(set).ShowLead("lead")
 	var ce *commandError
 	if !errors.As(err, &ce) || !strings.Contains(ce.stderr, "no running terminal") {
 		t.Fatalf("want herdr-app's message in the error, got %v", err)
@@ -364,7 +364,7 @@ func TestHerdrShowFailsWithoutAnAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	if err := Runner(set).ShowMain("lead"); err == nil {
+	if err := Runner(set).ShowLead("lead"); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -511,12 +511,12 @@ func TestHomeFillsPlaceholderAndEnvForEveryTemplate(t *testing.T) {
 		return "printf '%s|%s' {home} \"$SFY_HOME\" > " + shellQuote(filepath.Join(dir, file))
 	}
 	m := RunnerFor(Templates{Start: probe("start"), Send: probe("send"), Alive: probe("alive"), Stop: probe("stop"),
-		Notify: probe("notify"), Show: probe("show"), ShowMain: probe("show_main")}, home)
+		Notify: probe("notify"), Show: probe("show"), ShowLead: probe("show_lead")}, home)
 	calls := map[string]func() error{
 		"start": func() error { return m.Start("n", dir, []string{"true"}) }, "send": func() error { return m.Send("n", "x") },
 		"alive": func() error { _, err := m.Alive("n"); return err }, "stop": func() error { return m.Stop("n") },
 		"notify": func() error { return m.Notify("n", "x") }, "show": func() error { return m.Show("n") },
-		"show_main": func() error { return m.ShowMain("n") },
+		"show_lead": func() error { return m.ShowLead("n") },
 	}
 	for file, call := range calls {
 		if err := call(); err != nil {

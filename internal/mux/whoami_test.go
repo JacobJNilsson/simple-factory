@@ -51,7 +51,7 @@ func TestWhoamiSeesTheEnvironmentOfSfy(t *testing.T) {
 }
 
 func TestPrefixedPassesWhoamiOnWithoutThePrefix(t *testing.T) {
-	m, ok := Prefixed(Registered(whoamiRunner(`printf dev`), "pre-main", "/none"), "pre-").(Whoamier)
+	m, ok := Prefixed(Registered(whoamiRunner(`printf dev`), "pre-lead", "/none"), "pre-").(Whoamier)
 	if !ok {
 		t.Fatal("Prefixed must pass Whoami on")
 	}

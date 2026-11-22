@@ -83,7 +83,7 @@ func newParts(env func(string) string) (parts, error) {
 	prefix := config.Prefix(home, env)
 	// The move asks the plain set, because the old terminal name has the prefix and no recorded address.
 	move := func() error { return moveToLead(home, prefix, m.Alive) }
-	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home), registration.Path(home)), prefix)
+	m = mux.Prefixed(mux.Registered(m, prefix+leadSession, leadAddressPath(home), registration.Path(home)), prefix)
 	who, _ := m.(mux.Whoamier)
 	layers := config.Layers(home, env("HOME"))
 	agent := claude.New(cfg, home, bin, layers)
@@ -258,7 +258,7 @@ func factoryEnv(env func(string) string, getwd func() (string, error)) (func(str
 	}, nil
 }
 
-// Restart runs sfy restart for the factory folder that env names. The operator and the main agent may run it.
+// Restart runs sfy restart for the factory folder that env names. The operator and the lead may run it.
 // With update set, it upgrades through brew or from the newest GitHub release before it reads the config, and restarts only when that succeeds.
 // version is the running sfy version, which the release update compares with the newest tag.
 // The upgraded binary then reads the config, because a config written for the new version can fail the old one.

@@ -271,7 +271,7 @@ func (e *Engine) taskCancel(req protocol.Request) (string, error) {
 	return "", e.cleanup(t)
 }
 
-// taskComplete ends an approved task, once main has merged its result.
+// taskComplete ends an approved task, once the lead has merged its result.
 func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 	t, err := e.load(req)
 	if err != nil {
@@ -479,7 +479,7 @@ func (e *Engine) refuseGone(agent string) error {
 	return fmt.Errorf("the session of %s is gone, so nobody would read the message. Run sfy task feedback %s <text> to start a new worker, or sfy task cancel %s", agent, id, id)
 }
 
-// live fails unless the named agent runs now: main, a worker of a task in work, or a reviewer of the task's current round.
+// live fails unless the named agent runs now: the lead, a worker of a task in work, or a reviewer of the task's current round.
 func (e *Engine) live(agent string) error {
 	if agent == "lead" {
 		return nil
@@ -564,7 +564,7 @@ func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 	return nil
 }
 
-// reportBlocked lets a worker or a reviewer tell the main agent that it cannot go on.
+// reportBlocked lets a worker or a reviewer tell the lead that it cannot go on.
 func (e *Engine) reportBlocked(req protocol.Request) (string, error) {
 	var t task.Task
 	var err error
@@ -677,7 +677,7 @@ func pushNow(t task.Task) string {
 	return fmt.Sprintf("Push the existing branch now with exactly `git push --force-with-lease=%s:%s origin HEAD:%s`, then run sfy report pushed <summary>. The lease makes git refuse the push when the remote branch moved since checkout. In that case run sfy report blocked.", t.Existing, t.Lease, t.Existing)
 }
 
-// approve moves a task to approved and tells main to integrate it. pushed is true when the worker pushed the branch.
+// approve moves a task to approved and tells the lead to integrate it. pushed is true when the worker pushed the branch.
 func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 	t.Approve()
 	if err := e.save(t); err != nil {
@@ -706,11 +706,11 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 	if err := e.message("lead", from, note); err != nil {
 		return err
 	}
-	// The work is finished, so both sessions end. The workspace stays until main completes the task.
+	// The work is finished, so both sessions end. The workspace stays until the lead completes the task.
 	return e.endSessions(t)
 }
 
-// hold moves a task with a passed review to held and tells main that the push waits for the operator.
+// hold moves a task with a passed review to held and tells the lead that the push waits for the operator.
 // The worker never pushes, so both sessions end and the workspace stays.
 func (e *Engine) hold(t task.Task, from string) error {
 	t.PlaceOnHold()
@@ -793,13 +793,13 @@ func (e *Engine) escalate(req protocol.Request) (string, error) {
 }
 
 // escalateTask moves a task to escalated and draws the operator's attention.
-// It also tells main, unless main escalated the task itself and already knows.
-func (e *Engine) escalateTask(t task.Task, why string, tellMain bool) error {
+// It also tells the lead, unless the lead escalated the task itself and already knows.
+func (e *Engine) escalateTask(t task.Task, why string, tellLead bool) error {
 	t.Escalate()
 	if err := e.save(t); err != nil {
 		return err
 	}
-	if tellMain {
+	if tellLead {
 		if err := e.message("lead", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
 			return err
 		}
@@ -815,7 +815,7 @@ func (e *Engine) status(protocol.Request) (string, error) {
 	return store.RenderStatus(tasks), nil
 }
 
-// maxReminders is how many turns in a row without a report get a reminder before main hears of it.
+// maxReminders is how many turns in a row without a report get a reminder before the lead hears of it.
 const maxReminders = 2
 
 // runs reports whether a hook comes from a session that sfy still counts as running.
@@ -853,7 +853,7 @@ func (e *Engine) hookBusy(req protocol.Request) (string, error) {
 	return "", nil
 }
 
-// restarted runs when a new sfy process tells the main agent that sfy restarted. The note waits until the main agent waits for input.
+// restarted runs when a new sfy process tells the lead that sfy restarted. The note waits until the lead waits for input.
 func (e *Engine) restarted(req protocol.Request) (string, error) {
 	if strings.TrimSpace(req.Body) == "" {
 		return "", errors.New("restarted needs a note")
@@ -865,11 +865,11 @@ func (e *Engine) restarted(req protocol.Request) (string, error) {
 	return "", err
 }
 
-// restartHeld is the answer to restarted when the note waits for the main agent.
-const restartHeld = "The main agent gets the note when it waits."
+// restartHeld is the answer to restarted when the note waits for the lead.
+const restartHeld = "The lead gets the note when it waits."
 
 // reminder counts a turn that ended without a report and returns the reminder text.
-// After maxReminders it tells main once and returns no text.
+// After maxReminders it tells the lead once and returns no text.
 func (e *Engine) reminder(name string, s *agentState) (string, error) {
 	s.reminders++
 	if s.reminders > maxReminders {
@@ -884,7 +884,7 @@ func (e *Engine) reminder(name string, s *agentState) (string, error) {
 // hookPermission runs when an agent's permission prompt opens.
 // The body is a one-line description of the tool call. The answer is the denial reason, or empty when sfy makes no decision.
 // A worker or a reviewer never waits at a prompt. The hook denies the call and records it in the log.
-// Main hears nothing, so a denial does not wake it.
+// The lead hears nothing, so a denial does not wake it.
 func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
 	runs := e.runs(name)
@@ -893,7 +893,7 @@ func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 			return "", nil
 		}
 		e.notes.Prompted(name)
-		return "", e.l.Notify("lead", "Main waits at a permission prompt. "+req.Body)
+		return "", e.l.Notify("lead", "The lead waits at a permission prompt. "+req.Body)
 	}
 	// A stale agent of a finished task gets the denial too, because its prompt would wait for nobody.
 	if runs {

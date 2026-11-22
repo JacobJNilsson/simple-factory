@@ -18,13 +18,13 @@ func registerRig(t *testing.T) *rig {
 	return r
 }
 
-func TestRegisterRefusesWhenAMainAgentRuns(t *testing.T) {
+func TestRegisterRefusesWhenALeadRuns(t *testing.T) {
 	r := registerRig(t)
 	r.m.alive["lead"] = true
 
 	err := register(r.o)
 
-	if !errors.Is(err, ErrMainRuns) {
+	if !errors.Is(err, ErrLeadRuns) {
 		t.Fatalf("got %v", err)
 	}
 	if _, ok := registration.Read(r.o.home); ok || len(r.m.starts) != 0 {
@@ -82,7 +82,7 @@ func TestRegisterRecordsTheSessionAndTheAddressAndStartsTheSfyProcess(t *testing
 		t.Errorf("starts %v, want the sfy process only", r.m.starts)
 	}
 	if len(r.l.specs) != 0 || len(r.l.commands) != 0 {
-		t.Errorf("sfy started a main agent: %v %v", r.l.specs, r.l.commands)
+		t.Errorf("sfy started a lead: %v %v", r.l.specs, r.l.commands)
 	}
 	if _, err := os.Stat(filepath.Join(r.o.home, "lead-prompt.md")); err != nil {
 		t.Errorf("lead-prompt.md: %v", err)

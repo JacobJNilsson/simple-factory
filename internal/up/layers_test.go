@@ -19,17 +19,17 @@ func writeTestFile(t *testing.T, path, body string) {
 	}
 }
 
-func TestRecordMainPromptJoinsTheMachineAndTheFactoryAdditions(t *testing.T) {
+func TestRecordLeadPromptJoinsTheMachineAndTheFactoryAdditions(t *testing.T) {
 	userHome := t.TempDir()
 	home := filepath.Join(config.FactoriesDir(userHome), "acme")
 	writeTestFile(t, filepath.Join(config.DefaultHome(userHome), "prompts", "lead.d", "a.md"), "machine addition")
 	writeTestFile(t, filepath.Join(home, "prompts", "lead.d", "b.md"), "factory addition")
 
-	if _, err := recordMainPrompt(home, config.Layers(home, userHome)); err != nil {
+	if _, err := recordLeadPrompt(home, config.Layers(home, userHome)); err != nil {
 		t.Fatal(err)
 	}
 
-	b, err := os.ReadFile(mainPromptPath(home))
+	b, err := os.ReadFile(leadPromptPath(home))
 	if err != nil {
 		t.Fatal(err)
 	}

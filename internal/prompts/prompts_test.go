@@ -284,14 +284,14 @@ func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
 	}
 }
 
-func TestMainPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
+func TestLeadPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
 	text, err := prompts.For("lead", []string{t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"sfy task integrate <id>", "Never merge, rebase or push by hand", "no-merge", ".sfy.toml", "tell the operator its name"} {
 		if !strings.Contains(text, want) {
-			t.Errorf("main prompt lacks %q", want)
+			t.Errorf("lead prompt lacks %q", want)
 		}
 	}
 }

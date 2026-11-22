@@ -10,7 +10,7 @@ import (
 // Stopping reports that sfy down stopped the sessions, so the server ends the sfy process after it answers.
 func (e *Engine) Stopping() bool { return e.down.Load() }
 
-// downCommand stops the main agent and every worker and reviewer session that runs, through the launcher.
+// downCommand stops the lead and every worker and reviewer session that runs, through the launcher.
 // It changes no task. A failed stop keeps the sfy process running, so the operator can run sfy down again.
 func (e *Engine) downCommand(protocol.Request) (string, error) {
 	tasks, err := e.st.Tasks()
@@ -40,7 +40,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 			continue
 		}
 		// sfy did not start a registered agent, so it ends only the registration.
-		if name == "lead" && e.registeredMain() {
+		if name == "lead" && e.registeredLead() {
 			if err := e.reg.Clear(); err != nil {
 				errs = append(errs, err)
 				continue

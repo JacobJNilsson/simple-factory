@@ -47,13 +47,13 @@ type Deps struct {
 	Now     func() time.Time
 	// Logf receives one line for each note that sfy types or skips. It may be nil.
 	Logf func(format string, args ...any)
-	// Registered reports that main registered itself, so it has no session folder and no channel. It may be nil.
+	// Registered reports that the lead registered itself, so it has no session folder and no channel. It may be nil.
 	Registered func() bool
 	// Runs reports whether sfy still counts the session as running. Other hooks only record the wait. It may be nil.
 	Runs func(name string) bool
 	// Gone reports whether an alive check answered that the session is gone. A failed check is never gone. It may be nil, and Panes then answers.
 	Gone func(name string) bool
-	// Probe is Gone for the counted check that Tick runs for main. It may be nil, and Gone then answers.
+	// Probe is Gone for the counted check that Tick runs for the lead. It may be nil, and Gone then answers.
 	Probe func(name string) bool
 	// Resend is how long an unread message waits before sfy types its note again.
 	Resend time.Duration
@@ -409,7 +409,7 @@ func (d *Delivery) typeAfterHook(name string, s *session) error {
 	return d.ignoreGone(name, d.d.Panes.Send(name, newMessageNote))
 }
 
-// deliver asks the channel to deliver text. A registered main agent has no sfy session folder, so it gets no delivery.
+// deliver asks the channel to deliver text. A registered lead has no sfy session folder, so it gets no delivery.
 func (d *Delivery) deliver(name, text, messageID string) (bool, error) {
 	if d.d.Channel == nil || (name == "lead" && d.d.Registered()) {
 		return false, nil

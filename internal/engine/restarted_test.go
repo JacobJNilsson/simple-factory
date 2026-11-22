@@ -10,10 +10,10 @@ import (
 const (
 	restartNote      = "sfy restarted."
 	typedRestartNote = "lead: " + restartNote
-	heldAnswer       = "The main agent gets the note when it waits."
+	heldAnswer       = "The lead gets the note when it waits."
 )
 
-// Each test builds a fresh engine, so it knows nothing about main, as after sfy restart.
+// Each test builds a fresh engine, so it knows nothing about the lead, as after sfy restart.
 
 func TestTheRestartNoteGoesThroughTheProviderAndNothingIsTyped(t *testing.T) {
 	v := newEnv(t)
@@ -27,7 +27,7 @@ func TestTheRestartNoteGoesThroughTheProviderAndNothingIsTyped(t *testing.T) {
 	}
 }
 
-func TestTheRestartNoteWaitsForTheTurnEndOfMain(t *testing.T) {
+func TestTheRestartNoteWaitsForTheTurnEndOfLead(t *testing.T) {
 	v := newEnv(t)
 
 	a := v.run("", "", "restarted", restartNote)
@@ -42,7 +42,7 @@ func TestTheRestartNoteWaitsForTheTurnEndOfMain(t *testing.T) {
 	}
 }
 
-func TestTheRestartNoteWaitsForABusyRegisteredMainEvenWhenTheProviderCanDeliver(t *testing.T) {
+func TestTheRestartNoteWaitsForABusyRegisteredLeadEvenWhenTheProviderCanDeliver(t *testing.T) {
 	v := newEnv(t)
 	v.ch.canDeliver = true
 	v.e.SetRegistration(&fakeRegistration{registered: true})

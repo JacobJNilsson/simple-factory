@@ -89,7 +89,7 @@ func TestLoadFactoryChangesANestedKeyAndKeepsItsSiblings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := (config.Models{Main: "m", Worker: "f", Reviewer: "sonnet"}); got.Models != want {
+	if want := (config.Models{Lead: "m", Worker: "f", Reviewer: "sonnet"}); got.Models != want {
 		t.Fatalf("models %+v, want %+v", got.Models, want)
 	}
 }

@@ -18,13 +18,13 @@ func registeredEnv(t *testing.T, id string) func(string) string {
 	return envOf(map[string]string{"SFY_HOME": home, "CLAUDE_CODE_SESSION_ID": id})
 }
 
-func TestAgentMapsTheRegisteredSessionToMain(t *testing.T) {
+func TestAgentMapsTheRegisteredSessionToLead(t *testing.T) {
 	if got := Agent(registeredEnv(t, "s-main")); got != "lead" {
 		t.Fatalf("got %q", got)
 	}
 }
 
-func TestRegisteredSessionRunsCommandsAsMain(t *testing.T) {
+func TestRegisteredSessionRunsCommandsAsLead(t *testing.T) {
 	live := liveServer(t)
 	env := func(k string) string {
 		if k == "CLAUDE_CODE_SESSION_ID" {

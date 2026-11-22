@@ -10,7 +10,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-// approvedRepoTask runs a repo task through a passed review and a push, so it waits for main.
+// approvedRepoTask runs a repo task through a passed review and a push, so it waits for the lead.
 func (v env) approvedRepoTask(t *testing.T) {
 	t.Helper()
 	v.firstReview(t)
