@@ -67,6 +67,18 @@ To add lines without a copy of the whole prompt, put files that end in `.md` in 
 
 For example, a writing rule for every factory goes in `~/.sfy/prompts/worker.d/writing.md`. A factory that needs another rule puts its own `writing.md` in `~/.sfy/factories/acme/prompts/worker.d/`. A factory that needs no rule puts an empty `writing.md` there.
 
+## Skills
+
+To give the sessions of one factory their own skills, put skill folders in `skills/` of the factory folder. Each skill folder holds a `SKILL.md`:
+
+```
+~/.sfy/factories/acme/skills/release-notes/SKILL.md
+```
+
+The main agent, the workers and the reviewers of that factory all get the skills. Claude Code shows each one as `factory:<skill>`, as in `factory:release-notes`. A skill for every session on the machine belongs in `~/.claude/skills` instead, so the machine layer `~/.sfy` has no `skills/` for other factories. The default factory reads `~/.sfy/skills/`, because `~/.sfy` is its factory folder.
+
+At each session start, sfy writes a small plugin into `sessions/<name>/plugin/` of the factory folder and passes it to claude with `--plugin-dir`. The plugin holds a manifest and a link to `skills/`, so an edit to a skill applies at the next session start. A plugin folder gives a session no edit rights, so no session can change the skills without a permission grant. A link in `skills/` is fine. Run `sfy config` to see the skills that sfy found.
+
 ## A factory per folder
 
 A factory has a factory folder with its own tasks, notes, sfy process and main agent. It also has a working folder, which you work in and the main agent runs in. Stand in a folder and run `sfy up` to get the factory of that working folder. For example, `sfy up` in `~/Developer/acme` creates the factory `acme` and starts its main agent with `~/Developer/acme` as its working directory.
@@ -107,11 +119,14 @@ review_rounds = 3 # default
 #   writing.md: /home/you/.sfy/prompts/worker.d/writing.md
 ...
 
+# Skills
+# release-notes
+
 # Factory files
 # checks
 ```
 
-Each settings line names the file that set it last, or `default`. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
+Each settings line names the file that set it last, or `default`. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The skills part lists each folder in `skills/` that holds a `SKILL.md`. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
 
 To pick any other folder as a factory folder, set `SFY_HOME`:
 
