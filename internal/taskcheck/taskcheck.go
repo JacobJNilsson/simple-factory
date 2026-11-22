@@ -68,11 +68,28 @@ func (r Runner) StartShell(spec engine.ShellSpec, done func(engine.CheckResult))
 		}
 		return box.Wrap(runtime.GOOS, dir, tmp, argv)
 	}
+	keep := keepAll
+	if spec.PassEnv != nil {
+		keep = keepOnly(*spec.PassEnv)
+	}
 	go func() {
-		res := Run(r.Ctx, spec.Dir, spec.Command, r.Timeout, wrap)
+		res := runWith(r.Ctx, spec.Dir, spec.Command, r.Timeout, wrap, keep)
 		res.Drops = readDrops(spec.Drop)
 		done(res)
 	}()
+}
+
+// shellBase lists the variables that a shell agent with its own pass_env list keeps besides that list and the LC_ variables.
+var shellBase = []string{"HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG", "PATH"}
+
+// keepAll keeps every variable of sfy's environment that checkEnv lets through.
+func keepAll(string) bool { return true }
+
+// keepOnly keeps the variables of shellBase, the LC_ variables and the named ones.
+func keepOnly(names []string) func(string) bool {
+	return func(name string) bool {
+		return slices.Contains(shellBase, name) || slices.Contains(names, name) || strings.HasPrefix(name, "LC_")
+	}
 }
 
 // readDrops returns the .md files of a drop folder in name order. A folder that cannot be read gives none.
@@ -99,15 +116,20 @@ func readDrops(dir string) [][]byte {
 // Run runs `sh -c command` in dir and waits for it. The command gets its own session, no stdin and the environment from checkEnv.
 // A timeout or the end of ctx kills the whole process group.
 func Run(ctx context.Context, dir, command string, timeout time.Duration, wrap Wrapper) engine.CheckResult {
+	return runWith(ctx, dir, command, timeout, wrap, keepAll)
+}
+
+// runWith is Run with keep, which picks the variables of sfy's environment that the command gets.
+func runWith(ctx context.Context, dir, command string, timeout time.Duration, wrap Wrapper, keep func(string) bool) engine.CheckResult {
 	start := time.Now()
 	out := &tailBuffer{max: MaxOutput}
-	timedOut, err := run(ctx, dir, command, timeout, wrap, out)
+	timedOut, err := run(ctx, dir, command, timeout, wrap, keep, out)
 	text, cut := out.String()
 	return engine.CheckResult{Output: text, Cut: cut, Err: err, TimedOut: timedOut, Took: time.Since(start)}
 }
 
 // run reports whether the timeout, and not ctx, stopped the command.
-func run(ctx context.Context, dir, command string, timeout time.Duration, wrap Wrapper, out *tailBuffer) (timedOut bool, err error) {
+func run(ctx context.Context, dir, command string, timeout time.Duration, wrap Wrapper, keep func(string) bool, out *tailBuffer) (timedOut bool, err error) {
 	tmp, err := os.MkdirTemp("", "sfy-check-")
 	if err != nil {
 		return false, err
@@ -120,7 +142,13 @@ func run(ctx context.Context, dir, command string, timeout time.Duration, wrap W
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = dir, checkEnv(os.Environ(), tmp)
+	var environ []string
+	for _, e := range os.Environ() {
+		if name, _, _ := strings.Cut(e, "="); keep(name) {
+			environ = append(environ, e)
+		}
+	}
+	cmd.Dir, cmd.Env = dir, checkEnv(environ, tmp)
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
