@@ -139,6 +139,12 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	}
 	prompt := spec.Prompt
 	argv = append(argv, "--settings", path, "--append-system-prompt", role)
+	// The main agent gets the skills too, because it runs in the working folder and sees no skill in the factory folder.
+	plugin, err := a.pluginArgs(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	argv = append(argv, plugin...)
 	if spec.Kind == "main" {
 		conversation, resumed, err := a.mainConversation(spec)
 		if err != nil {
