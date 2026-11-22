@@ -85,6 +85,9 @@ func (e *Engine) createTask(t task.Task, source string) (task.Task, string, erro
 	if err := e.checkExisting(t); err != nil {
 		return t, "", err
 	}
+	if err := e.checkList(t); err != nil {
+		return t, "", err
+	}
 	t.Updated = e.c.Now()
 	if err := e.st.Create(t); err != nil {
 		return t, "", err
@@ -197,6 +200,12 @@ func (e *Engine) taskEdit(req protocol.Request) (string, error) {
 	if t.Dir != "" && edited.Existing != t.Existing {
 		return "", fmt.Errorf("task %s has a workspace, so its branch is fixed", t.ID)
 	}
+	if t.Dir != "" && edited.List != t.List {
+		return "", fmt.Errorf("task %s has a workspace, so its ## List section is fixed", t.ID)
+	}
+	if err := e.checkList(edited); err != nil {
+		return "", err
+	}
 	edited = t.WithFileFieldsOf(edited)
 	if err := e.checkAfter(edited); err != nil {
 		return "", err
@@ -227,6 +236,14 @@ func (e *Engine) checkExisting(t task.Task) error {
 	}
 	_, err := e.w.RemoteBranch(t)
 	return err
+}
+
+// checkList refuses a List section that names no list of the process.
+func (e *Engine) checkList(t task.Task) error {
+	if _, ok := e.proc.Lists[t.List]; t.List != "" && !ok {
+		return fmt.Errorf("## List names %q, which is no list of this factory's process", t.List)
+	}
+	return nil
 }
 
 // checkAfter rejects an After id that is the task's own id, names no task, or is newer than the task.

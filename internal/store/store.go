@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
@@ -96,6 +97,17 @@ type stateFile struct {
 	// Lease is the task's field of the same name.
 	Lease   string    `json:"lease,omitempty"`
 	Updated time.Time `json:"updated"`
+	// List and Agent hold a position that the state fields cannot give. They stay empty for each position of the default process.
+	List  string `json:"list,omitempty"`
+	Agent string `json:"agent,omitempty"`
+}
+
+// ownPosition returns the position that state.json must hold beside the state fields, or the zero position when the state fields give it.
+func ownPosition(t task.Task) process.Position {
+	if at := t.Position(); at != t.StatePosition() {
+		return at
+	}
+	return process.Position{}
 }
 
 var (
@@ -275,9 +287,11 @@ func writeTask(dir string, t task.Task) error {
 	if err := writeFile(filepath.Join(dir, "task.md"), []byte(t.Markdown())); err != nil {
 		return err
 	}
+	at := ownPosition(t)
 	b, err := json.MarshalIndent(stateFile{
 		State: t.State, Before: t.Before, Round: t.Round, Archived: t.Archived, Source: t.Source, SourceID: t.SourceID, Progress: t.Progress,
 		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Released: t.Released, Branch: t.Branch, Lease: t.Lease, Updated: t.Updated,
+		List: at.List, Agent: at.Agent,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -311,6 +325,9 @@ func (f files) Task(id string) (task.Task, error) {
 	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, protocol.AgentName(st.Source)
 	t.SourceID = st.SourceID
 	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Released, t.Branch, t.Lease, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Released, st.Branch, st.Lease, st.Updated
+	if st.List != "" && st.Agent != "" {
+		t.At = process.Position{List: st.List, Agent: st.Agent}
+	}
 	return t, nil
 }
 
