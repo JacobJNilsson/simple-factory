@@ -3,8 +3,6 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -16,33 +14,6 @@ func (e *Engine) SetProcess(p process.Process) {
 	defer e.mu.Unlock()
 	e.proc = p
 	e.sess.proc = p
-}
-
-// Runnable refuses a valid process that this engine cannot run yet.
-// A session agent keeps the name, harness and ends of a default agent, because session names and commands follow those names.
-// A shell agent may have any name. A shell branch needs a run of its own agent, which the engine does not do yet.
-func Runnable(p process.Process) error {
-	def := process.Default()
-	var errs []error
-	for _, name := range slices.Sorted(maps.Keys(p.Agents)) {
-		a := p.Agents[name]
-		if a.Harness == process.Shell {
-			continue
-		}
-		d, ok := def.Agents[name]
-		if !ok || d.Harness != a.Harness || d.Ends != a.Ends {
-			errs = append(errs, fmt.Errorf("process: agents.%s: this sfy runs a %s agent only under a default name with the default harness and ends. Use a shell agent, or one of the default agents", name, a.Harness))
-		}
-	}
-	for _, name := range slices.Sorted(maps.Keys(p.Lists)) {
-		if p.Lists[name].Then.Pass.Shell != nil {
-			errs = append(errs, fmt.Errorf("process: lists.%s.then.pass: this sfy does not run a shell branch yet", name))
-		}
-	}
-	if first, err := p.First(p.Start); err == nil && first.Agent != "worker" {
-		errs = append(errs, fmt.Errorf("process: the start list %s must begin with the worker", p.Start))
-	}
-	return errors.Join(errs...)
 }
 
 // handoff is what an agent that ended passes to the agent after it.

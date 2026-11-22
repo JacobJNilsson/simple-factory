@@ -303,7 +303,7 @@ The gate runs in the check sandbox after `sfy report done`. When it exits with a
 
 A shell agent can write a note for the lead into the folder that `{drop}` names, in the format of a drop file. The lead gets it from `gate@<task id>`. Each agent's result lands in `tasks/<id>/results/`, and `{result}` names the file of the result before.
 
-This release runs new shell agents only. A `claude`, `lead` or `operator` agent keeps the name, harness and `ends` of a default agent, and `sfy up` refuses any other.
+This release runs a narrow part of the process schema. A shell agent runs only between `worker` and `reviewer` of a list that starts with `worker`. A `claude`, `lead` or `operator` agent keeps its default name and keys, except `model` of `worker` and `reviewer` and the permissions `allow` and `excluded_commands`. `sfy up`, `sfy restart` and `sfy config` refuse anything else with an error that names the key. SPEC.md, section The task process, lists the rules.
 
 ## Terminal tools
 
