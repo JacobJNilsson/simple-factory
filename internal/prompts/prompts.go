@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -48,7 +49,7 @@ func Role(kind string, layers []string, hasRepo bool) (string, error) {
 	return strings.TrimRight(base, "\n") + "\n\n" + part, nil
 }
 
-// For returns the prompt for a kind of agent: "lead", "worker", "reviewer" or WorkerRepoPart.
+// For returns the prompt of a name: "lead", or the prompt name of an agent such as "worker", "reviewer" or WorkerRepoPart.
 // The last layer with prompts/<kind>.md gives the base, else the embedded default does.
 // The .md files of prompts/<kind>.d/ in all layers follow in name order, each after a blank line, as appendAdditions merges them.
 func For(kind string, layers []string) (string, error) {
@@ -83,12 +84,36 @@ func Sources(kind string, layers []string) (base string, additions []Addition, e
 	return base, additions, nil
 }
 
+// promptName limits a prompt name to the names of agents, so a name cannot leave the prompts folder.
+var promptName = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// checkKind refuses a name that is neither the lead nor a valid agent name. The old name of the lead is no prompt name of its own.
 func checkKind(kind string) error {
-	switch kind {
-	case lead, "worker", "reviewer", WorkerRepoPart:
+	if kind == lead || (kind != oldLead && promptName.MatchString(kind)) {
 		return nil
 	}
 	return fmt.Errorf("prompts: unknown kind %q", kind)
+}
+
+// MissingError reports a prompt name that no layer has a file for and that has no embedded default.
+type MissingError struct {
+	Name string
+}
+
+func (e *MissingError) Error() string {
+	return fmt.Sprintf("prompts: no layer has prompts/%s.md, and sfy has no default prompt of that name", e.Name)
+}
+
+// Has reports whether a prompt of the name exists in a layer or as an embedded default.
+func Has(name string, layers []string) (bool, error) {
+	if err := checkKind(name); err != nil {
+		return false, err
+	}
+	if _, ok, err := lastBase(name, layers); ok || err != nil {
+		return ok, err
+	}
+	_, err := fs.Stat(defaults, "defaults/"+name+".md")
+	return err == nil, nil
 }
 
 // lead is the kind of the lead, and oldLead is the name that its prompt files had before.
@@ -148,6 +173,9 @@ func base(kind string, layers []string) (string, error) {
 		return string(b), nil
 	}
 	d, err := defaults.ReadFile("defaults/" + kind + ".md")
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", &MissingError{Name: kind}
+	}
 	if err != nil {
 		return "", fmt.Errorf("prompts: %w", err)
 	}
