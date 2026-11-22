@@ -133,6 +133,13 @@ max_workers = 1 # /home/you/.sfy/factories/acme/config.toml
 review_rounds = 3 # default
 ...
 
+# Process
+# start = build # default
+# list build = worker, check, reviewer # default
+#   pass: if remote and hold held, if remote ship, otherwise land
+#   fail: at check build with a new round, at reviewer build, otherwise escalated
+...
+
 # Prompts
 # lead: base default
 # worker: base default
@@ -148,7 +155,7 @@ review_rounds = 3 # default
 # Old names
 ```
 
-Each settings line names the file that set it last, or `default`. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The skills part lists each folder in `skills/` that holds a `SKILL.md`. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
+Each settings line names the file that set it last, or `default`. The process part lists each list with its agents, its branches and the file that set its agents last, then each agent. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The skills part lists each folder in `skills/` that holds a `SKILL.md`. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
 
 To pick any other folder as a factory folder, set `SFY_HOME`:
 
@@ -271,6 +278,32 @@ The command runs in a sandbox with the worker's `allow_write` and `deny_read` li
 ```toml
 check_timeout = "40m"
 ```
+
+## Add a step to the task process
+
+Every task runs through a process of agents and lists. The default runs the worker, the check and the reviewer in the list `build`, then pushes and hands the branch to the lead. `sfy config` prints the whole process, and SPEC.md, section The task process, describes each key.
+
+To run a script of the factory before the check, add a shell agent and put it in `build`. Put the script in the factory folder, so the worker cannot edit it:
+
+```toml
+# ~/.sfy/factories/acme/config.d/50-gate.toml
+[agents.gate]
+harness = "shell"
+run = ["sh {factory}/checks/gate.sh {task_file}"]
+show = "{from} (gate runs)"
+
+[lists.build]
+agents = ["worker", "gate", "check", "reviewer"]
+
+[lists.build.then]
+fail.gate = { list = "build", round = true }
+```
+
+The gate runs in the check sandbox after `sfy report done`. When it exits with a code other than 0, its output goes to the worker, and the fail counts as a round. `status.md` shows `working (gate runs)` while it runs. The other keys of `lists.build.then` keep their default, because the files merge key by key. A later file's `agents` list replaces the list as a whole.
+
+A shell agent can write a note for the lead into the folder that `{drop}` names, in the format of a drop file. The lead gets it from `gate@<task id>`. Each agent's result lands in `tasks/<id>/results/`, and `{result}` names the file of the result before.
+
+This release runs new shell agents only. A `claude`, `lead` or `operator` agent keeps the name, harness and `ends` of a default agent, and `sfy up` refuses any other.
 
 ## Terminal tools
 

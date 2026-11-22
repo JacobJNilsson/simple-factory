@@ -113,6 +113,50 @@ A task moves through these states:
 - `sfy task resume` ends `escalated`. The task returns to the state it had before the escalation, with the same round. sfy tells its worker to go on, and its reviewer too when the task returns to `review`. A task that escalated after its last failed review returns to `feedback`, so its worker fixes the result and gets one more review round. The command fails for a task in any other state.
 - sfy does not restart a worker that ended on its own. It tells the lead, which decides what happens to the task.
 
+### The task process
+
+sfy runs every task through a process of agents, lists and branches. The rules above are the embedded default process. A factory that sets no `agents`, `lists` or `start` key runs it unchanged.
+
+- **Agents.** An `[agents.<name>]` table defines one agent. Its `harness` is `claude`, `shell`, `lead` or `operator`, and it defaults to the `provider` key. A `claude` agent runs in a session that the launcher starts through the adapter of its harness. A `shell` agent runs its `run` commands with `sh -c` in the workspace, in the check sandbox, as the task's check runs. A `lead` agent notes the lead and waits for `sfy task complete` or `sfy task integrate`. An `operator` agent waits for `sfy task push`.
+- **How an agent ends.** The `ends` key names the command that passes the agent. A `claude` agent with `ends = "done"` passes at `sfy report done`, with `ends = "pushed"` at `sfy report pushed`, and with `ends = "verdict"` at `sfy verdict pass`. It fails at `sfy verdict fail`. A `shell` agent passes when every command exits 0. An entry that is only `{task_check}` is skipped for a task without `## Check`, and an agent with nothing to run passes at once. `sfy report blocked`, `sfy report progress`, `sfy task cancel` and `sfy escalate` work for every agent.
+- **Lists.** A `[lists.<name>]` table holds `agents`, a list of agent and list names in order. A list name in `agents` is a join, and sfy replaces it with that list's agents at every depth when it loads the config. A list ends with a fail at the first agent that fails, or with a pass after its last agent passes. `max_rounds` is the round at which a fail escalates, and it defaults to `review_rounds`.
+- **Branches.** The `then` table of a list picks the next target. A target is a list name, `done`, `escalated`, or a table `{ list = "<name>", round = true }` that also counts a round. `pass` is a target, or an array of entries whose `if` facts must all hold, where the last entry has no `if`. The facts are `repo`, `remote`, `hold` and `branch`. `fail` is a target, or a table keyed by the name of the agent that failed. Without `then`, a pass goes to `done` and a fail to `escalated`. A branch to a list starts that list's first agent. A branch to `done` completes the task as `sfy task complete` does. An agent with `count_round` counts a round when it starts.
+- **The default.** In the operator's notation:
+
+  ```
+  build = [worker, check, reviewer]
+    fail at check    -> build, a new round
+    fail at reviewer -> build
+    pass, remote and hold -> held
+    pass, remote          -> ship
+    pass                  -> land
+  ship = [push, land]       a join, so [push, integrate]
+  held = [release, ship]    a join, so [release, push, integrate]
+  land = [integrate] -> done
+  ```
+
+  `worker` is a `claude` agent with `session = "task"`. `push` copies the worker with `like = "worker"`, so it shares the worker's session and its exact push rules. `check` is a `shell` agent that runs `{task_check}`. `reviewer` is a `claude` agent with `session = "round"` and `count_round`, so a fresh reviewer starts each round. `release` is the `operator` agent, and `integrate` the `lead` agent. `sfy config` prints the full tables.
+- **States.** The task states stay as the table above names them. A task in `build/worker` is `working` or `feedback`, in `build/reviewer` it is `review`, and in `land/integrate` it is `approved`. A task in `ship/push` is `review` with the push flag, in `held/release` it is `held`, and in `held/push` it is `review` with the push and release flags. A task in a shell agent keeps the state of the agent before it, so a restart stops the run and an older sfy reads every `state.json`. `status.md` shows a running shell agent by its `show` key, where `{from}` stands for the state, as in `working (check runs)`.
+- **Results.** sfy stores each agent's result in `tasks/<id>/results/<n>-<agent>.md`, where `<n>` counts up: the worker's report, the tail of a shell agent's output, a verdict, the text of `sfy report pushed`, and the text after the id of `sfy task push`. The verdict files stay, and `sfy task show` reads them as before. The reviewer gets the worker's report in its first message, and a failed agent's result goes to the worker as a message. In a `run` command, `{result}` names the file of the result before.
+- **Placeholders.** A `run` command may hold `{task_check}`, the task's check command as it is. `{factory}`, `{task_file}`, `{result}` and `{drop}` each give a path as one quoted shell word. `{drop}` names a fresh folder, `tasks/<id>/drop/<n>-<agent>/`, which sfy adds to that run's write list. When the run ends, sfy gives each drop file in it to the lead as a message from `<agent>@<task id>`, such as `check@t12`. sfy ignores the drop's `From` and `Id` lines, and a drop of `Kind: task` is refused. A command gets no `SFY_*` variable.
+- **Permissions of an agent.** The `permissions` table of a `claude` agent may set `edit`, `push`, `allow` and `excluded_commands`. sfy adds `allow` and `excluded_commands` to `session_rules.<name>`, so both keys mean one list. The table of a `shell` agent may set `sandbox`, `allow_write` and `deny_read`. `sandbox = false` runs the commands with no sandbox. `allow_write` and `deny_read` replace the factory's list of that name for this agent, and the sandbox still hides the sfy socket and every `sessions` folder. A wide agent runs only scripts from the factory folder and treats the workspace as data. `sfy config` marks it as wide.
+- **What a factory may change.** A factory may add `shell` agents, change the agents and branches of the default lists, set `max_rounds`, and add lists that a branch reaches. The deep merge keeps every key of the default that a file leaves out, and a file's `agents` list replaces the list as a whole. A `claude`, `lead` or `operator` agent keeps a default name with its default harness and `ends`, the start list begins with `worker`, and a shell branch is refused. A factory with a gate agent in `build` looks like this:
+
+  ```toml
+  [agents.gate]
+  harness = "shell"
+  run = ["sh {factory}/checks/gate.sh {task_file}"]
+  show = "{from} (gate runs)"
+
+  [lists.build]
+  agents = ["worker", "gate", "check", "reviewer"]
+
+  [lists.build.then]
+  fail.gate = { list = "build", round = true }
+  ```
+
+- **Validation.** `sfy up`, `sfy restart` and `sfy config` check the process at each load. They refuse a name used for both an agent and a list, a name outside `[a-z][a-z0-9-]*`, an unknown agent or list in `agents`, a join that contains itself, a key that does not apply to the agent's harness, an unknown harness, a session harness with no adapter, an unknown target or fact, and a loop in which no branch counts a round and no agent waits. They also refuse a process that no longer has the position of an open task, and the error names the task and its position. `sfy restart` loads the config before it stops the old process, so a refused change keeps the factory running.
+
 ## State
 
 - One long-running sfy process is the only writer of sfy state. The CLI sends each command to that process over a Unix socket. Agents never write state files.
@@ -297,7 +341,10 @@ sfy builds a factory's settings from three places, lowest first: the defaults in
 | `pass_env` | none | Names of environment variables that workers and reviewers keep. |
 | `no_merge` | `false` | When true, the lead leaves approved branches for the operator. A per-repo file can set it per repo. |
 | `draft_pr` | `false` | When true, the push note tells the worker that any PR it opens must be a draft. A per-repo file can set it per repo. |
-| `session_rules.lead`, `.worker`, `.reviewer` | none | Tables with an `allow` list and an `excluded_commands` list. sfy adds them to that kind's permission allow rules and sandbox excluded commands. |
+| `start` | `build` | The list that a task starts in, as the section The task process describes. |
+| `agents.<name>` | the default agents | The agents of the task process. |
+| `lists.<name>` | the default lists | The lists and branches of the task process. |
+| `session_rules.lead`, `.worker`, `.reviewer` | none | Tables with an `allow` list and an `excluded_commands` list. sfy adds them to that kind's permission allow rules and sandbox excluded commands. The name of any `claude` agent of the process is a kind too. |
 | `session_settings.lead`, `.worker`, `.reviewer` | none | Tables of extra keys. sfy merges them with its own keys in that kind's settings file. Worker and reviewer files hold `promptSuggestionEnabled = false` unless a table sets it. |
 
 ### Factory definition
@@ -309,7 +356,7 @@ A factory's definition is the `config.d/` folder, the `config.toml`, the `prompt
 - **Prompts.** The base `<kind>.md` comes from the last place that has one. Without one, the embedded default is the base. sfy collects the `.md` files of `prompts/<kind>.d/` from both places by file name. A factory file replaces the machine file of the same name. A file that holds only white space removes the file of that name from the prompt. sfy appends the rest in name order, each after a blank line. A missing folder adds nothing, a file without `.md` is skipped, and a file that cannot be read is an error.
 - **When a change applies.** Settings apply at the next `sfy restart`. The merge guard reads them at its next run. A prompt file applies at the next start of a session of that kind. The restart note names `lead-prompt.md` when the lead's prompt changed. `sfy restart` prints each setting and each prompt file that changed since the last start, and the restart note holds the same lines.
 - **Skills.** The `skills/` folder of the factory folder holds skill folders, each with a `SKILL.md`. Every session of the factory gets them, as the section Extending sfy describes. The machine layer has no `skills/`, because `~/.claude/skills` already reaches every session on the machine. For the default factory, `~/.sfy/skills/` is the factory's own folder. A change to a skill applies at the next start of a session.
-- **`sfy config`** prints the flat result in five parts, after a header that names the factory and the two places. The settings come as TOML lines with dotted keys, and each line ends with a comment that names the file that set it last, or `default`. The prompts part names the base file of each kind and each addition in append order. A removed addition names the file that removed it. The skills part names each folder in `skills/` that holds a `SKILL.md`. The factory files part lists each name in the factory folder that is neither state nor definition, as the State section describes. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes, and stderr gets a warning line for each. The output prints the values of `session_settings.<kind>.env` as `<set>`, because such a value may hold a token. A factory repo that others can read must hold no token. Name the variables in `pass_env` and keep the values in the operator's environment.
+- **`sfy config`** prints the flat result in six parts, after a header that names the factory and the two places. The settings come as TOML lines with dotted keys, and each line ends with a comment that names the file that set it last, or `default`. The process part names the start list, each list with its joined agents, its branches and the file that set its agents last, and each agent with its harness and `ends`. It marks a wide shell agent. The prompts part names the base file of each kind and each addition in append order. A removed addition names the file that removed it. The skills part names each folder in `skills/` that holds a `SKILL.md`. The factory files part lists each name in the factory folder that is neither state nor definition, as the State section describes. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes, and stderr gets a warning line for each. The output prints the values of `session_settings.<kind>.env` as `<set>`, because such a value may hold a token. A factory repo that others can read must hold no token. Name the variables in `pass_env` and keep the values in the operator's environment.
 
 ### Session settings
 
@@ -323,7 +370,7 @@ preferredNotifChannel = "notifications_disabled"
 preferredNotifChannel = "notifications_disabled"
 ```
 
-A table may set `permissions`, `hooks` and `sandbox`, and sfy merges them with its own keys. `permissions.allow` and `permissions.deny` get the table's rules after sfy's rules. Each event in `hooks` gets the table's hooks after sfy's hooks. A key that sfy does not write, such as a network allow list in `sandbox`, is added. Where sfy writes a value itself, sfy's value wins, at every depth. That keeps the identity token, the note delivery and the sandbox working. A factory that needs a different value sets the sfy key that controls it, such as `allow_write`. A kind other than `lead`, `worker` or `reviewer` is a config error. Worker and reviewer settings files hold `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. Nobody reads those panes, so a suggestion would only look like a stuck message and cost a model request. A table can set the key to `true` to override the default. The lead's file stays at Claude Code's default. Without the tables, the settings files hold only sfy's keys and that default.
+A table may set `permissions`, `hooks` and `sandbox`, and sfy merges them with its own keys. `permissions.allow` and `permissions.deny` get the table's rules after sfy's rules. Each event in `hooks` gets the table's hooks after sfy's hooks. A key that sfy does not write, such as a network allow list in `sandbox`, is added. Where sfy writes a value itself, sfy's value wins, at every depth. That keeps the identity token, the note delivery and the sandbox working. A factory that needs a different value sets the sfy key that controls it, such as `allow_write`. A kind other than `lead` or the name of a `claude` agent of the process, such as `worker` or `reviewer`, is a config error. Worker and reviewer settings files hold `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. Nobody reads those panes, so a suggestion would only look like a stuck message and cost a model request. A table can set the key to `true` to override the default. The lead's file stays at Claude Code's default. Without the tables, the settings files hold only sfy's keys and that default.
 
 ### Per-repo configuration
 
@@ -375,7 +422,8 @@ A use of sfy extends it at these points, without changes to the core:
 - **Skills.** A skill folder in `skills/` of the factory folder reaches the lead, the workers and the reviewers of that factory. The Claude adapter writes a plugin into `sessions/<name>/plugin/` at each session start. The plugin holds the manifest `.claude-plugin/plugin.json` with the name `factory`, and a link `skills` to the factory's `skills/`. The adapter passes the folder to claude with `--plugin-dir`, so a skill shows as `factory:<skill>`. A plugin folder grants no edit rights, so a session cannot edit the skills without a permission grant. The lead gets the skills too, because it runs in the working folder and sees nothing in the factory folder. Without `skills/`, the adapter writes no plugin, removes an earlier one, and adds no flag.
 - **Task files.** A task file may carry extra sections. sfy passes the whole file to the worker and the reviewer.
 - **Programs.** A program sends a message or a task to the lead with a file in the drop folder, as the section Dropped messages describes. A program that runs the CLI with no token acts as the operator.
-- **Providers.** A new provider is a new adapter that implements the Go interface.
+- **Process.** The `agents`, `lists` and `start` keys change the task process, as the section The task process describes.
+- **Providers.** A new provider is a new adapter that implements the Go interface. The launcher keeps one adapter for each session harness, and a new session harness adds one entry to that map.
 - **Multiplexers.** A new multiplexer is a new template set in `config.toml`.
 - **Configuration.** `config.toml` in the machine layer and in the factory folder sets the models, the limits, the allow list and the sandbox paths.
 - **Isolation.** A VM or a container for each task can replace the sandbox and its two path lists.
