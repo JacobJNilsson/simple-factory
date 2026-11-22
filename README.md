@@ -105,6 +105,7 @@ sfy keeps its state in `~/.sfy`:
 | `sfy restart` | Restarts the sfy process and keeps the agents running. |
 | `sfy status` | Prints `status.md`. |
 | `sfy task list` | Lists the tasks. |
+| `sfy config` | Prints the factory's merged settings and prompt files, with the file behind each. |
 | `sfy send main <text>` | Sends a message to the main agent. The operator may send only to `main`. The main agent may send to any agent. |
 | `sfy help` | Lists every command. |
 
@@ -112,16 +113,16 @@ sfy keeps its state in `~/.sfy`:
 
 See `docs/configuration.md` for the details of each item.
 
-- Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets.
+- Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets for every factory. A `config.toml` in a factory folder changes single keys for that factory. `sfy config` prints the merged result and the file behind each key.
 - Per-repo config: `.sfy/config.toml` in a repo, or a `.sfy.toml` file in a repo or in a parent folder up to `$HOME`, sets per-repo keys. `draft_pr = true` makes the push note ask for draft PRs. `no_merge = true` stops the main agent from integrating approved branches, so you merge them by hand. For example, put `no_merge = true` in `~/Developer/work/.sfy.toml` to cover every work repo below it. The `.sfy/` folder wins, then the nearest `.sfy.toml`.
 - Headless: `headless = true` in `~/.sfy/config.toml` runs the sfy process detached, with no terminal window. Its log goes to `~/.sfy/sfy.log`. Stop everything with `sfy down`, or stop only the sfy process with `kill $(cat ~/.sfy/sfy.pid)`. `sfy restart` keeps it headless, and moves a process from a window to headless. See `docs/configuration.md`.
 - Check timeout: `check_timeout` in `~/.sfy/config.toml` sets how long a task's check may run. The default is `20m`.
-- Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind.
+- Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind in every factory. Files in `prompts/<kind>.d/` of a factory folder add lines for that factory, and a file with the name of a machine file replaces it.
 - Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
 - Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.
 - Terminal tools: a template set under `[multiplexers.<name>]` plugs in another tool. See `docs/herdr.md` and `docs/rex.md`.
-- A factory per folder: `sfy up` in a folder runs a separate factory for it, with no setup. Its state lives in `~/.sfy/factories/<name>/`, and sfy writes nothing in the folder. See `docs/configuration.md`.
-- A second state folder by hand: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
+- A factory per folder: `sfy up` in a working folder runs a separate factory for it, with no setup. Its factory folder is `~/.sfy/factories/<name>/`, and sfy writes nothing in the working folder. See `docs/configuration.md`.
+- A second factory folder by hand: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
 - A running agent: `sfy register` turns a Claude Code session that already runs into the main agent.
 
 ## More

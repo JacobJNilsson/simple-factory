@@ -29,9 +29,9 @@ What the build does, against the open points below:
 - **Prompt (section 3).** `sfy register` prints the prompt as a tool result, with a first line that tells the agent to follow it as its role. The costs listed in section 3 stay: no system prompt, and a compaction may drop it. `main-prompt.md` holds the same text.
 - **Identity (section 4).** The CLI asks the provider for the current session's id and maps the registered id to `main`. It makes no `whoami` call, so it adds no shell call to each command. `sfy down`, `sfy up` and `sfy hooks install` refuse for it.
 - **Lifecycle (section 5).** `sfy down` clears the registration and stops no session for the registered agent. `sfy restart` keeps the agent and sends it the note. A plain `sfy` does not show it. When `alive` reports the address gone, the registration goes with the address. The next `sfy` starts a main agent as usual and does not resume the registered conversation, because the registered id is not the recorded `conversation-id`.
-- **Several state folders (section 6).** The registration lives in the state folder, next to the address. The check for one terminal that registers in two folders is not built.
+- **Several factory folders (section 6).** The registration lives in the factory folder, next to the address. The check for one terminal that registers in two folders is not built.
 
-The state is in `sessions/main/registered.json`, which holds the session id and the working folder. The Claude names stay in `internal/provider/claude`.
+The state is in `sessions/main/registered.json`, which holds the session id and the folder that the command ran in. The Claude names stay in `internal/provider/claude`.
 
 The text below is the investigation as it stood before the decisions.
 
@@ -204,18 +204,18 @@ For each template, what sfy should run on a session it did not start.
 
 **Resume of the main conversation (read, `conversation.go`).**
 
-- The first start writes `sessions/main/conversation-id`. A resumed start passes `--resume <id>` and requires the same folder. sfy's main always starts in the state folder.
+- The first start writes `sessions/main/conversation-id`. A resumed start passes `--resume <id>` and requires the same folder. sfy's main always starts in the factory folder.
 - A registered agent has its own conversation, and sfy does not know its id. The file stays missing or stale.
 - If the registered agent ends and the operator runs a plain `sfy`, the stored address is dead. `ensure` sees Alive false and starts a new main with the templates. If a stale conversation id exists, it resumes that one. The old address must go first, or Send keeps typing into a dead target.
 - Design 1 avoids the mismatch. sfy starts the agent, writes the id, and `sfy up --here` resumes it the next time like today.
 
 **A plain `sfy` while a registered main runs (read, `run` in `up.go`).** It prints "The main agent already runs and was shown." and calls `ShowMain`. Show must skip a registered session, as the table says.
 
-## 6. Several state folders (task t45)
+## 6. Several factory folders (task t45)
 
-I did not read t45's code. This section reasons from its description: a prefix per state folder, so several sfy folders run side by side.
+I did not read t45's code. This section reasons from its description: a prefix per factory folder, so several sfy folders run side by side.
 
-- The address file lives in the state folder, at `sessions/main/address`. Two folders have two files, so the stored addresses do not collide.
+- The address file lives in the factory folder, at `sessions/main/address`. Two folders have two files, so the stored addresses do not collide.
 - A prefix changes the names that sfy gives its own sessions, for example `<prefix>-main`. A registered main has a stored address and needs no prefix. The resolve step must run before the prefix, or the prefix must skip a registered name.
 - One terminal can host one agent, but a single address file does not know that. `sfy up --register` could write the same address into two folders. Two folders would then type notes into one agent, and both would claim it as `main`. The step must refuse an address that another folder's file holds. That check needs a scan of the sibling folders, which sfy cannot find without a registry. Design 1 avoids it, because `--here` replaces the shell with the agent, so the terminal cannot register twice.
 - `SFY_HOME` selects the folder (`SPEC.md`). A registered agent has no `SFY_HOME` in its environment, so its `sfy` commands go to `~/.sfy`. With several folders it needs the variable on every command, like `SFY_AGENT`. This is one more reason to prefer an exec that sets the environment.
@@ -239,7 +239,7 @@ The operator opens a terminal, or quits the agent in it, and runs `sfy up --here
 - What breaks:
   - The terminal's shell is gone. Closing the terminal ends the agent.
   - `sfy down` leaves main running, which changes one SPEC sentence.
-  - An agent that already runs cannot join. The operator quits it and starts it with `--here`. The conversation can continue only if it started in the state folder.
+  - An agent that already runs cannot join. The operator quits it and starts it with `--here`. The conversation can continue only if it started in the factory folder.
 - Size: medium, about 230 lines with tests.
 
 ### Design 2. `sfy up --register` from inside the running agent
@@ -295,7 +295,7 @@ claude --settings /tmp/x.json
 # a second turn
 ```
 
-Repeat with the hook in `.claude/settings.local.json` of the working folder. Pass: `/tmp/hit.txt` grows after the second turn. The file that grew tells which route reloads.
+Repeat with the hook in `.claude/settings.local.json` of the session's folder. Pass: `/tmp/hit.txt` grows after the second turn. The file that grew tells which route reloads.
 
 **T3. A leading assignment under an allow rule (question 4).** In a main session with the `Bash(sfy *)` allow rule, ask for `SFY_AGENT=main sfy status`. Pass: no permission prompt.
 
