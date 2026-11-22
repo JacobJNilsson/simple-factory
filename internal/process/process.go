@@ -269,6 +269,14 @@ func (a Agent) copyFrom(base Agent) Agent {
 
 func (a Agent) has(key string) bool { return slices.Contains(a.Keys, key) }
 
+// Owner returns the agent whose session the named agent runs in: the agent that its like key names, or the agent itself.
+func (p Process) Owner(name string) Agent {
+	if a := p.Agents[name]; a.Like != "" {
+		return p.Agents[a.Like]
+	}
+	return p.Agents[name]
+}
+
 // Label returns the text that status.md shows for the agent in list. {from} in its show key stands for from.
 func (a Agent) Label(list, from string) string {
 	if a.Show == "" {
