@@ -20,8 +20,8 @@ var StateNames = []string{
 	"sfy.log", "sfy.sock", "sfy.lock", "sfy.pid",
 }
 
-// DefinitionNames are the names in a factory folder that say how sfy behaves.
-var DefinitionNames = []string{"config.toml", "prompts"}
+// definitionNames are the names in a factory folder that say how sfy behaves.
+var definitionNames = []string{"config.toml", "prompts"}
 
 // FactoryFiles lists the names in the factory folder home that are neither state nor definition, such as a checks folder that a factory repo installed.
 // It leaves out the folder file, the main agent's notes.md, and the factories folder of the default factory.
@@ -37,7 +37,7 @@ func FactoryFiles(home, userHome string) ([]string, error) {
 	var out []string
 	for _, e := range entries {
 		name := e.Name()
-		if slices.Contains(StateNames, name) || slices.Contains(DefinitionNames, name) || name == folderFile || name == "notes.md" {
+		if slices.Contains(StateNames, name) || slices.Contains(definitionNames, name) || name == folderFile || name == "notes.md" {
 			continue
 		}
 		if isDefault && filepath.Join(home, name) == FactoriesDir(userHome) {
