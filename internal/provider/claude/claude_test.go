@@ -1020,6 +1020,71 @@ func TestWorkerAndReviewerTurnOffPromptSuggestions(t *testing.T) {
 	}
 }
 
+// settingsWith writes a worker's settings with one session_settings.worker table and reads them back.
+func settingsWith(t *testing.T, table config.SessionValues) (settings, config.SessionValues) {
+	t.Helper()
+	home := t.TempDir()
+	cfg := config.Config{SessionSettings: map[string]config.SessionValues{"worker": table}}
+	command(t, claude.New(cfg, home, bin), worker())
+	b, err := os.ReadFile(settingsPath(home, "worker-t1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw config.SessionValues
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	return readSettings(t, home, "worker-t1"), raw
+}
+
+func TestSessionSettingsDenyAddsARuleAndKeepsSfysDenyRules(t *testing.T) {
+	plain, _ := settingsWith(t, config.SessionValues{})
+	s, _ := settingsWith(t, config.SessionValues{
+		"permissions": map[string]any{"deny": []any{"Bash(curl *)"}},
+	})
+
+	if want := slices.Concat(plain.Permissions.Deny, []string{"Bash(curl *)"}); !slices.Equal(s.Permissions.Deny, want) {
+		t.Errorf("deny %v, want %v", s.Permissions.Deny, want)
+	}
+}
+
+func TestSessionSettingsKeepSfysValueOnAConflict(t *testing.T) {
+	s, _ := settingsWith(t, config.SessionValues{
+		"permissions": map[string]any{"defaultMode": "plan"},
+	})
+
+	if s.Permissions.DefaultMode != "acceptEdits" {
+		t.Errorf("defaultMode %q, want sfy's acceptEdits", s.Permissions.DefaultMode)
+	}
+}
+
+func TestSessionSettingsStopHookFollowsSfysStopHook(t *testing.T) {
+	extra := map[string]any{"type": "command", "command": "echo done"}
+	s, _ := settingsWith(t, config.SessionValues{
+		"hooks": map[string]any{"Stop": []any{map[string]any{"hooks": []any{extra}}}},
+	})
+
+	groups := s.Hooks["Stop"]
+	if len(groups) != 2 || groups[0].Hooks[0].Command != bin+" hook turn-ended" || groups[1].Hooks[0].Command != "echo done" {
+		t.Fatalf("Stop hooks %+v, want sfy's hook and then the extra hook", groups)
+	}
+}
+
+func TestSessionSettingsSandboxAddsAKeyAndKeepsSfysSandbox(t *testing.T) {
+	s, raw := settingsWith(t, config.SessionValues{
+		"sandbox": map[string]any{"enabled": false, "network": map[string]any{"allowedDomains": []any{"example.com"}}},
+	})
+
+	if !s.Sandbox.Enabled || !s.Sandbox.FailIfUnavailable {
+		t.Errorf("sandbox %+v, want sfy's sandbox on", s.Sandbox)
+	}
+	box, _ := raw["sandbox"].(map[string]any)
+	network, _ := box["network"].(map[string]any)
+	if domains, ok := network["allowedDomains"].([]any); !ok || len(domains) != 1 || domains[0] != "example.com" {
+		t.Errorf("sandbox.network %v, want the extra allowedDomains", network)
+	}
+}
+
 func TestConfigOverridesPromptSuggestionDefault(t *testing.T) {
 	cfg := config.Config{SessionSettings: map[string]config.SessionValues{
 		"worker":   {"promptSuggestionEnabled": true},

@@ -231,8 +231,7 @@ func (a adapter) extraSettings(kind string) config.SessionValues {
 }
 
 // marshalSettings encodes s. Without extra keys the output is the struct's own encoding.
-// With extra keys, the output has sfy's keys and the extra keys at the top level, sorted by name.
-// The config load has already refused extra keys that sfy writes itself.
+// With extra keys, the output holds sfy's keys merged with the extra keys through mergeExtra, sorted by name.
 func marshalSettings(s settings, extra config.SessionValues) ([]byte, error) {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil || len(extra) == 0 {
@@ -242,12 +241,53 @@ func marshalSettings(s settings, extra config.SessionValues) ([]byte, error) {
 	if err := json.Unmarshal(b, &merged); err != nil {
 		return nil, err
 	}
+	// The round trip gives the TOML values the shapes that JSON decoding gives, such as []any for every list.
+	eb, err := json.Marshal(extra)
+	if err != nil {
+		return nil, err
+	}
+	var plain config.SessionValues
+	if err := json.Unmarshal(eb, &plain); err != nil {
+		return nil, err
+	}
+	mergeExtra(merged, plain, "")
+	return json.MarshalIndent(merged, "", "  ")
+}
+
+// mergeExtra adds the extra keys to sfy's own settings, and sfy's value wins where both set a key.
+// Tables merge at every depth. The lists permissions.allow, permissions.deny and each hooks event get the extra entries after sfy's.
+func mergeExtra(own, extra config.SessionValues, path string) {
 	for k, v := range extra {
-		if _, taken := merged[k]; !taken {
-			merged[k] = v
+		key := k
+		if path != "" {
+			key = path + "." + k
+		}
+		cur, taken := own[k]
+		if !taken {
+			own[k] = v
+			continue
+		}
+		ownList, ownIsList := cur.([]any)
+		extraList, extraIsList := v.([]any)
+		if ownIsList && extraIsList && appendsExtra(key) {
+			own[k] = append(ownList, extraList...)
+			continue
+		}
+		ownTable, ownIsTable := cur.(map[string]any)
+		extraTable, extraIsTable := v.(map[string]any)
+		if ownIsTable && extraIsTable {
+			mergeExtra(ownTable, extraTable, key)
 		}
 	}
-	return json.MarshalIndent(merged, "", "  ")
+}
+
+// appendsExtra reports whether the list at a settings key path takes extra entries after sfy's own.
+func appendsExtra(key string) bool {
+	if key == "permissions.allow" || key == "permissions.deny" {
+		return true
+	}
+	event, ok := strings.CutPrefix(key, "hooks.")
+	return ok && !strings.Contains(event, ".")
 }
 
 // sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands. The excluded patterns run outside it.

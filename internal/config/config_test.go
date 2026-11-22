@@ -188,26 +188,17 @@ func TestLoadReadsNestedSessionSettingsValues(t *testing.T) {
 	}
 }
 
-func TestLoadRefusesAReservedKeyWithANestedValue(t *testing.T) {
-	home := writeConfig(t, "[session_settings.worker]\nhooks = { a = 1 }\n")
+func TestLoadAcceptsTheProviderKeysThatSfyAlsoWrites(t *testing.T) {
+	home := writeConfig(t, "[session_settings.worker.permissions]\ndeny = [\"Bash(curl *)\"]\n[session_settings.worker.hooks]\nStop = []\n[session_settings.worker.sandbox]\nx = 1\n")
 
-	_, err := config.Load(home)
+	c, err := config.Load(home)
 
-	var bad *config.SessionSettingsError
-	if !errors.As(err, &bad) || bad.Key != "hooks" {
-		t.Errorf("want a SessionSettingsError naming hooks, got %v", err)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestLoadRefusesAReservedSessionSettingsKeyNamingIt(t *testing.T) {
 	for _, key := range []string{"permissions", "hooks", "sandbox"} {
-		home := writeConfig(t, "[session_settings.worker]\n"+key+" = \"x\"\n")
-
-		_, err := config.Load(home)
-
-		var bad *config.SessionSettingsError
-		if !errors.As(err, &bad) || bad.Kind != "worker" || bad.Key != key {
-			t.Errorf("%s: want a SessionSettingsError naming the key, got %v", key, err)
+		if _, ok := c.SessionSettings["worker"][key]; !ok {
+			t.Errorf("worker table lacks %s: %v", key, c.SessionSettings["worker"])
 		}
 	}
 }
@@ -243,7 +234,7 @@ func TestLoadRefusesAnUnknownSessionSettingsKind(t *testing.T) {
 	_, err := config.Load(home)
 
 	var bad *config.SessionSettingsError
-	if !errors.As(err, &bad) || bad.Kind != "workr" || bad.Key != "" {
+	if !errors.As(err, &bad) || bad.Kind != "workr" {
 		t.Fatalf("want a SessionSettingsError naming the kind, got %v", err)
 	}
 }

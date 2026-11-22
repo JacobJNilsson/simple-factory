@@ -70,36 +70,24 @@ type SessionRule struct {
 // SessionValues holds the extra keys of one session kind. Each value is any TOML value.
 type SessionValues map[string]any
 
-// SessionSettingsError reports a session_settings table that sfy refuses.
-// Key is empty when the kind itself is unknown.
+// SessionSettingsError reports a session_settings or session_rules table of a kind that sfy does not know.
 type SessionSettingsError struct {
 	Kind string
-	Key  string
 }
 
 func (e *SessionSettingsError) Error() string {
-	if e.Key == "" {
-		return fmt.Sprintf("config: unknown session kind %q", e.Kind)
-	}
-	return fmt.Sprintf("config: session_settings.%s.%s is reserved, because sfy writes %s itself", e.Kind, e.Key, e.Key)
+	return fmt.Sprintf("config: unknown session kind %q", e.Kind)
 }
 
 // sessionKinds lists the kinds that session_settings accepts.
 var sessionKinds = []string{"main", "worker", "reviewer"}
 
-// reservedSessionKeys are the settings keys that sfy writes itself.
-var reservedSessionKeys = []string{"permissions", "hooks", "sandbox"}
-
-// validateSessionSettings refuses an unknown kind and a key that sfy owns.
+// validateSessionSettings refuses an unknown kind.
+// A key that sfy writes itself, such as permissions, is fine, because the provider merges it with sfy's own value.
 func validateSessionSettings(tables map[string]SessionValues) error {
 	for _, kind := range slices.Sorted(maps.Keys(tables)) {
 		if !slices.Contains(sessionKinds, kind) {
 			return &SessionSettingsError{Kind: kind}
-		}
-		for _, key := range slices.Sorted(maps.Keys(tables[kind])) {
-			if slices.Contains(reservedSessionKeys, key) {
-				return &SessionSettingsError{Kind: kind, Key: key}
-			}
 		}
 	}
 	return nil
