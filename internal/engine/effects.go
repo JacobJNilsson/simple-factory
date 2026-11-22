@@ -44,15 +44,15 @@ func (e *Engine) message(to, from, body string) error {
 // noReportNote is the reminder for a turn that ended without a report.
 const noReportNote = "Your turn ended without a report. If you need an answer, run sfy report blocked <question>."
 
-// endSessions stops the worker and every reviewer of a task, and forgets their state.
+// endSessions stops every task session and every round session of a task, and forgets their state.
+// The shell agent of the task stops after the first task session, so a check result cannot outlive the worker.
 func (e *Engine) endSessions(t task.Task) error {
-	if err := e.sess.end(workerOf(t)); err != nil {
-		return err
-	}
-	delete(e.checking, t.ID)
-	for r := 1; r <= t.Round; r++ {
-		if err := e.sess.end(reviewerOfRound(t.ID, r)); err != nil {
+	for i, name := range e.sess.allSessions(t) {
+		if err := e.sess.end(name); err != nil {
 			return err
+		}
+		if i == 0 {
+			delete(e.checking, t.ID)
 		}
 	}
 	return nil

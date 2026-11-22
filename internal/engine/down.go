@@ -22,10 +22,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 		if t.Dir == "" {
 			continue
 		}
-		names = append(names, workerOf(t))
-		for r := 1; r <= t.Round; r++ {
-			names = append(names, reviewerOfRound(t.ID, r))
-		}
+		names = append(names, e.sess.allSessions(t)...)
 	}
 	var stopped []string
 	var errs []error

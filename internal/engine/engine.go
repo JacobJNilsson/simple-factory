@@ -5,7 +5,6 @@ package engine
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -247,26 +246,6 @@ func (k kind) label() string {
 	return "a " + string(k)
 }
 
-var (
-	workerName   = regexp.MustCompile(`^worker-t[0-9]+$`)
-	reviewerName = regexp.MustCompile(`^review-t[0-9]+-[0-9]+$`)
-)
-
-// kindOf reads the kind from a session name. Only the empty name is the operator. The old name of the lead reads as the lead.
-func kindOf(agent string) (kind, bool) {
-	switch {
-	case agent == "":
-		return operator, true
-	case protocol.AgentName(agent) == protocol.Lead:
-		return lead, true
-	case workerName.MatchString(agent):
-		return worker, true
-	case reviewerName.MatchString(agent):
-		return reviewer, true
-	}
-	return operator, false
-}
-
 type handler func(e *Engine, req protocol.Request) (string, error)
 
 type command struct {
@@ -289,7 +268,8 @@ var commands = map[string]command{
 	"task feedback":   {(*Engine).taskFeedback, []kind{operator, lead}},
 	"task complete":   {(*Engine).taskComplete, []kind{operator, lead}},
 	"task integrate":  {(*Engine).taskIntegrate, []kind{operator, lead}},
-	"task push":       {(*Engine).taskPush, []kind{operator, lead}},
+	"task release":    {(*Engine).taskRelease, []kind{operator, lead}},
+	"task push":       {(*Engine).taskRelease, []kind{operator, lead}},
 	"task archive":    {(*Engine).taskArchive, []kind{operator, lead}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
 	"send":            {(*Engine).send, []kind{operator, lead}},
@@ -355,7 +335,7 @@ func (e *Engine) handleLocal(req protocol.Request, cmd command) (protocol.Answer
 		return protocol.Answer{Error: err.Error()}, nil
 	}
 	req.Caller.Agent = protocol.AgentName(req.Caller.Agent)
-	k, known := kindOf(req.Caller.Agent)
+	k, known := e.kindOf(req.Caller.Agent)
 	if !known {
 		return protocol.Answer{Error: fmt.Sprintf("unknown caller %q. Agent names are lead, worker-<id> and review-<id>-<round>", req.Caller.Agent)}, nil
 	}

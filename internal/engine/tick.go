@@ -94,8 +94,16 @@ const maxStartFailures = 3
 // startWorker saves the task as working before it starts the session, so a crash leaves a record of the workspace.
 // A failure puts the task back in queued. A workspace that Remove could not delete stays in Dir, and the next try reuses it.
 // A reopened task has earlier work in its workspace, so a failed start keeps the workspace.
+// The worker is the first agent of the task's start list, which Runnable and the List check make a claude agent that ends at done.
 func (e *Engine) startWorker(t task.Task) error {
+	first, err := e.proc.First(e.sess.startList(t))
+	if err != nil {
+		return e.startFailed(t, fmt.Errorf("task %s: %w", t.ID, err))
+	}
 	prompt, pending := workerPrompt(t), t.Pending
+	if a := e.proc.Agents[first.Agent]; a.Message != "" {
+		prompt += "\n" + a.Message + "\n"
+	}
 	p, err := e.w.Prepare(t)
 	t.Branch, t.Lease = p.Branch, p.Lease
 	if err != nil {
@@ -103,10 +111,11 @@ func (e *Engine) startWorker(t task.Task) error {
 	}
 	dir := p.Dir
 	t.StartWork(dir)
+	t.MoveTo(first)
 	if err := e.save(t); err != nil {
 		return errors.Join(err, e.discard(t))
 	}
-	if err := e.sess.start(t, worker, prompt); err != nil {
+	if err := e.sess.start(t, first.Agent, prompt); err != nil {
 		rmErr := e.discard(t)
 		t.RequeueAfterFailedStart(pending, rmErr == nil && !t.Reopened)
 		return e.startFailed(t, errors.Join(fmt.Errorf("task %s: start worker: %w", t.ID, err), rmErr, e.save(t)))
@@ -171,10 +180,10 @@ func (e *Engine) resendNotes() error {
 	names := []string{"lead"}
 	for _, t := range tasks {
 		if t.State.Active() {
-			names = append(names, workerOf(t))
+			names = append(names, e.workerOf(t))
 		}
 		if t.State == task.Review {
-			names = append(names, reviewerOf(t))
+			names = append(names, e.reviewerOf(t))
 		}
 	}
 	return e.notes.Tick(names)

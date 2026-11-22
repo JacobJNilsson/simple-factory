@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/drop"
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -238,10 +239,16 @@ func (e *Engine) checkExisting(t task.Task) error {
 	return err
 }
 
-// checkList refuses a List section that names no list of the process.
+// checkList refuses a List section that names no list of the process, or a list that a task cannot start in.
 func (e *Engine) checkList(t task.Task) error {
-	if _, ok := e.proc.Lists[t.List]; t.List != "" && !ok {
+	if t.List == "" {
+		return nil
+	}
+	if _, ok := e.proc.Lists[t.List]; !ok {
 		return fmt.Errorf("## List names %q, which is no list of this factory's process", t.List)
+	}
+	if err := startable(e.proc, t.List); err != nil {
+		return fmt.Errorf("## List names %q, but %w", t.List, err)
 	}
 	return nil
 }
@@ -267,12 +274,12 @@ func (e *Engine) checkAfter(t task.Task) error {
 
 // noteWorker tells a worker to read its changed task file. A pane that no longer takes the note is no failure, because the message waits in the inbox.
 func (e *Engine) noteWorker(t task.Task) error {
-	return e.noteTaskFile(t, "worker-"+t.ID)
+	return e.noteTaskFile(t, e.workerOf(t))
 }
 
 // noteReviewer tells the running reviewer of a task in review to read the changed task file.
 func (e *Engine) noteReviewer(t task.Task) error {
-	return e.noteTaskFile(t, reviewerOf(t))
+	return e.noteTaskFile(t, e.reviewerOf(t))
 }
 
 func (e *Engine) noteTaskFile(t task.Task, name string) error {
@@ -378,7 +385,7 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 	if err := e.st.AddFeedback(t.ID, t.Round, body); err != nil {
 		return "", err
 	}
-	from, to := req.Caller.Agent, "worker-"+t.ID
+	from, to := req.Caller.Agent, e.workerOf(t)
 	if from == "" {
 		from = "operator"
 	}
@@ -387,8 +394,14 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		note += " " + holdPush
 	}
 	note += "\n\n" + body
-	reviewer := reviewerOf(t)
-	switch t.TakeFeedback(body) {
+	reviewer := e.reviewerOf(t)
+	mode, back := e.feedbackMode(t)
+	if mode == task.ModeMessage {
+		to = e.sessionAt(t)
+	}
+	// Every session ended at an operator or a lead agent, so feedback that sends the task back there starts a new worker.
+	ended := t.State == task.Held || t.State == task.Approved
+	switch t.TakeFeedbackAs(body, mode) {
 	case task.FeedbackToWorker:
 		if err := e.save(t); err != nil {
 			return "", err
@@ -401,13 +414,51 @@ func (e *Engine) taskFeedback(req protocol.Request) (string, error) {
 		}
 	case task.FeedbackStopsReviewer:
 		// The review judges a result that the feedback may change, so it ends without a verdict.
+		t.MoveTo(back)
+		to = e.sess.nameOf(t, back.Agent)
 		if err := e.save(t); err != nil {
 			return "", err
 		}
-		return "", errors.Join(e.sess.end(reviewer), e.message(to, from, note))
+		delete(e.checking, t.ID)
+		if ended {
+			return "", e.sess.start(t, back.Agent, workerPrompt(t)+"\nFeedback:\n\n"+body+"\n")
+		}
+		return "", errors.Join(e.endRound(t, reviewer), e.message(to, from, note))
 	case task.FeedbackKept:
 	}
 	return "", e.save(t)
+}
+
+// feedbackMode reads the feedback key of the agent at the task's position.
+// A list name stops the agent and gives the first agent of that list, which Runnable makes a claude agent that ends at done.
+// A message for an agent with no session reopens the task, because no agent would read it.
+func (e *Engine) feedbackMode(t task.Task) (task.FeedbackMode, process.Position) {
+	at := t.Position()
+	a, ok := e.proc.Agents[at.Agent]
+	switch {
+	case !ok:
+		return task.ModeReopen, process.Position{}
+	case a.Feedback == process.FeedbackReopen:
+		return task.ModeReopen, process.Position{}
+	case a.Feedback == process.FeedbackMessage && a.Harness == process.Claude:
+		return task.ModeMessage, process.Position{}
+	case a.Feedback == process.FeedbackMessage:
+		return task.ModeReopen, process.Position{}
+	}
+	first, err := e.proc.First(a.Feedback)
+	if err != nil {
+		return task.ModeReopen, process.Position{}
+	}
+	return task.ModeStop, first
+}
+
+// sessionAt returns the session of the claude agent at the task's position, or the task's worker when no claude agent is there.
+func (e *Engine) sessionAt(t task.Task) string {
+	at := t.Position()
+	if e.proc.Agents[at.Agent].Harness == process.Claude {
+		return e.sess.nameOf(t, at.Agent)
+	}
+	return e.workerOf(t)
 }
 
 // taskArchive hides a done or cancelled task from the default views. The task keeps its state, files and id.
@@ -439,7 +490,7 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 		return "", fmt.Errorf("task %s has no recorded state to return to", t.ID)
 	}
 	if t.Before.Active() {
-		if err := e.refuseGone("worker-" + t.ID); err != nil {
+		if err := e.refuseGone(e.workerOf(t)); err != nil {
 			return "", err
 		}
 	}
@@ -460,9 +511,9 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 	for _, f := range pending {
 		note += "\n\nFeedback:\n\n" + f
 	}
-	names := []string{"worker-" + t.ID}
+	names := []string{e.workerOf(t)}
 	if t.State == task.Review && !t.Pushing {
-		names = append(names, reviewerOf(t))
+		names = append(names, e.reviewerOf(t))
 	}
 	var errs []error
 	for _, name := range names {
@@ -510,10 +561,8 @@ func (e *Engine) refuseGone(agent string) error {
 	if !e.sess.isGone(agent) {
 		return nil
 	}
-	id := strings.TrimPrefix(agent, "worker-")
-	if k, _ := kindOf(agent); k == reviewer {
-		id = strings.Split(agent, "-")[1]
-	}
+	session, _ := e.sess.parse(agent)
+	id := session.task
 	return fmt.Errorf("the session of %s is gone, so nobody would read the message. Run sfy task feedback %s <text> to start a new worker, or sfy task cancel %s", agent, id, id)
 }
 
@@ -522,27 +571,24 @@ func (e *Engine) live(agent string) error {
 	if agent == "lead" {
 		return nil
 	}
-	k, _ := kindOf(agent)
-	var id string
-	switch k {
-	case worker:
-		id = strings.TrimPrefix(agent, "worker-")
-	case reviewer:
-		id = strings.Split(agent, "-")[1]
-	default:
+	session, ok := e.sess.parse(agent)
+	if !ok {
 		return fmt.Errorf("%q is not an agent that runs", agent)
 	}
-	t, err := e.st.Task(id)
+	t, err := e.st.Task(session.task)
 	if err != nil {
 		return fmt.Errorf("%q is not an agent that runs", agent)
 	}
-	if k == worker {
+	if session.kind == worker {
 		if err := need(t, task.Working, task.Review, task.Feedback); err != nil {
 			return fmt.Errorf("%s does not run: %w", agent, err)
 		}
+		if agent != e.workerOf(t) {
+			return fmt.Errorf("%s does not run, because task %s is at %s", agent, t.ID, t.Position())
+		}
 		return nil
 	}
-	if t.State != task.Review || agent != reviewerOf(t) {
+	if t.State != task.Review || agent != e.reviewerOf(t) {
 		return fmt.Errorf("%s does not run", agent)
 	}
 	return nil
@@ -554,7 +600,7 @@ func (e *Engine) worker(req protocol.Request, states ...task.State) (task.Task, 
 	if err != nil {
 		return task.Task{}, fmt.Errorf("no task %q for %s", req.Caller.Task, req.Caller.Agent)
 	}
-	if req.Caller.Agent != "worker-"+t.ID {
+	if req.Caller.Agent != e.workerOf(t) {
 		return task.Task{}, fmt.Errorf("%s may report only on its own task", req.Caller.Agent)
 	}
 	return t, need(t, states...)
@@ -569,18 +615,26 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 		return "", fmt.Errorf("sfy already runs the check of task %s. Wait for its result", t.ID)
 	}
 	report := text(req, req.Args)
-	e.record(t.ID, "worker", report)
-	return e.passFrom(t, t.Position(), handoff{from: req.Caller.Agent, report: report})
+	at := t.Position()
+	e.record(t.ID, at.Agent, report)
+	return e.passFrom(t, at, handoff{from: req.Caller.Agent, report: report})
 }
 
-// startReview moves a task to review and starts its reviewer. checked is true when sfy ran the task's check and it passed.
-func (e *Engine) startReview(t task.Task, report string, checked bool) error {
+// startReview moves a task to review at the reviewer at at and starts it. checked is true when sfy ran the task's check and it passed.
+// A reviewer with count_round counts a new round, and its message key follows the prompt.
+func (e *Engine) startReview(t task.Task, at process.Position, report string, checked bool) error {
 	verdicts, err := e.st.Verdicts(t.ID)
 	if err != nil {
 		return err
 	}
+	a := e.proc.Agents[at.Agent]
 	before := t
-	t.StartReview()
+	if a.CountRound {
+		t.StartReview()
+	} else {
+		t.EnterReview()
+	}
+	t.MoveTo(at)
 	if err := e.save(t); err != nil {
 		return err
 	}
@@ -594,7 +648,10 @@ func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 		}
 	}
 	prompt += fmt.Sprintf("The worker reports:\n\n%s\n", report)
-	if err := e.sess.start(t, reviewer, prompt); err != nil {
+	if a.Message != "" {
+		prompt += "\n" + a.Message + "\n"
+	}
+	if err := e.sess.start(t, at.Agent, prompt); err != nil {
 		// The worker can retry only if the task is back in its old state.
 		if rerr := e.save(before); rerr != nil {
 			return errors.Join(err, rerr)
@@ -608,7 +665,7 @@ func (e *Engine) startReview(t task.Task, report string, checked bool) error {
 func (e *Engine) reportBlocked(req protocol.Request) (string, error) {
 	var t task.Task
 	var err error
-	if strings.HasPrefix(req.Caller.Agent, "review-") {
+	if k, _ := e.kindOf(req.Caller.Agent); k == reviewer {
 		t, err = e.reviewing(req)
 	} else {
 		t, err = e.worker(req, task.Working, task.Feedback, task.Review)
@@ -633,10 +690,6 @@ func (e *Engine) reportProgress(req protocol.Request) (string, error) {
 	return "", e.save(t)
 }
 
-func reviewerOf(t task.Task) string { return reviewerOfRound(t.ID, t.Round) }
-
-func reviewerOfRound(id string, round int) string { return fmt.Sprintf("review-%s-%d", id, round) }
-
 // reviewing returns the task in review that the calling reviewer judges.
 func (e *Engine) reviewing(req protocol.Request) (task.Task, error) {
 	t, err := e.st.Task(req.Caller.Task)
@@ -649,8 +702,11 @@ func (e *Engine) reviewing(req protocol.Request) (task.Task, error) {
 	if t.Pushing {
 		return task.Task{}, fmt.Errorf("round %d of task %s already has its verdict", t.Round, t.ID)
 	}
-	if req.Caller.Agent != reviewerOf(t) {
+	if req.Caller.Agent != e.reviewerOf(t) {
 		return task.Task{}, fmt.Errorf("%s may judge only round %d of task %s", req.Caller.Agent, t.Round, t.ID)
+	}
+	if run, ok := e.checking[t.ID]; ok {
+		return task.Task{}, fmt.Errorf("round %d of task %s already has its verdict, and sfy runs the %s now", t.Round, t.ID, run.at.Agent)
 	}
 	return t, nil
 }
@@ -672,12 +728,18 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 }
 
 // askPush tells the worker of a passed review to push, or starts a worker that pushes after the operator released a held task.
-func (e *Engine) askPush(t task.Task, from string) error {
+// The pushing agent runs in its own session, so the session of the agent that passed ends unless the push runs in it.
+func (e *Engine) askPush(t task.Task, at process.Position, from string) error {
 	if t.State == task.Held {
-		return e.releasePush(t)
+		return e.releasePush(t, at)
 	}
 	// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
+	// A pushing agent with a session of its own starts that session instead.
+	pusher := e.sess.nameOf(t, at.Agent)
+	running := t.State.Active() && pusher == e.workerOf(t)
+	before := t
 	t.AwaitPush()
+	t.MoveTo(at)
 	if err := e.save(t); err != nil {
 		return err
 	}
@@ -686,7 +748,19 @@ func (e *Engine) askPush(t task.Task, from string) error {
 	if cfg, err := e.configFor(t); err == nil && cfg.DraftPR {
 		note += " Any PR you open must be a draft. Use gh pr create --draft."
 	}
-	return errors.Join(e.message(workerOf(t), from, note), e.sess.end(from))
+	if a := e.proc.Agents[at.Agent]; a.Message != "" {
+		note += "\n\n" + a.Message
+	}
+	if !running {
+		if err := e.sess.start(t, at.Agent, fmt.Sprintf("Do your part of this task.\n\n%s\n%s", t.Markdown(), note)); err != nil {
+			return errors.Join(err, e.save(before))
+		}
+		return e.endRound(t, from)
+	}
+	if from == pusher {
+		return e.message(pusher, from, note)
+	}
+	return errors.Join(e.message(pusher, from, note), e.sess.end(from))
 }
 
 // reportPushed lets the worker of a passed review say that it pushed. The task is approved only now.
@@ -717,12 +791,30 @@ func pushNow(t task.Task) string {
 	return fmt.Sprintf("Push the existing branch now with exactly `git push --force-with-lease=%s:%s origin HEAD:%s`, then run sfy report pushed <summary>. The lease makes git refuse the push when the remote branch moved since checkout. In that case run sfy report blocked.", t.Existing, t.Lease, t.Existing)
 }
 
-// approve moves a task to approved and tells the lead to integrate it. pushed is true when the worker pushed the branch.
-func (e *Engine) approve(t task.Task, from string, pushed bool) error {
+// approve moves a task to the lead agent at at and tells the lead to integrate it. pushed is true when the worker pushed the branch.
+// A lead agent with a prompt key gives that text as the note instead, and its message key follows the note.
+func (e *Engine) approve(t task.Task, at process.Position, from string, pushed bool) error {
 	t.Approve()
+	t.MoveTo(at)
 	if err := e.save(t); err != nil {
 		return err
 	}
+	note := e.approveNote(t, pushed)
+	if a := e.proc.Agents[at.Agent]; slices.Contains(a.Keys, "prompt") {
+		note = fmt.Sprintf("Task %s is at %s. %s When it is done, run: sfy task complete %s", t.ID, at, a.Prompt, t.ID)
+	}
+	if a := e.proc.Agents[at.Agent]; a.Message != "" {
+		note += "\n\n" + a.Message
+	}
+	if err := e.message("lead", from, note); err != nil {
+		return err
+	}
+	// The work is finished, so both sessions end. The workspace stays until the lead completes the task.
+	return e.endSessions(t)
+}
+
+// approveNote returns the note that tells the lead how to integrate an approved task.
+func (e *Engine) approveNote(t task.Task, pushed bool) string {
 	note := fmt.Sprintf("Task %s is approved. It has no repo. Check its result, then run: sfy task complete %s", t.ID, t.ID)
 	if t.Repo != "" {
 		where := "The repo has no remote, so the branch exists only locally."
@@ -743,35 +835,43 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 			}
 		}
 	}
-	if err := e.message("lead", from, note); err != nil {
-		return err
-	}
-	// The work is finished, so both sessions end. The workspace stays until the lead completes the task.
-	return e.endSessions(t)
+	return note
 }
 
-// hold moves a task with a passed review to held and tells the lead that the push waits for the operator.
-// The worker never pushes, so both sessions end and the workspace stays.
-func (e *Engine) hold(t task.Task, from string) error {
+// hold moves a task to the operator agent at at and tells the lead that the task waits for the operator.
+// No agent runs while the task waits, so every session ends and the workspace stays.
+// A held push gets today's note. Any other wait names the position and sfy task release.
+func (e *Engine) hold(t task.Task, at process.Position, from string) error {
 	t.PlaceOnHold()
+	t.MoveTo(at)
 	if err := e.save(t); err != nil {
 		return err
 	}
 	note := fmt.Sprintf("Task %s passed its review, and its push is on hold. Branch %s of the repo folder %s is not pushed. The push waits for the operator. Tell the operator, and run sfy task push %s only when the operator says to push.", t.ID, e.w.BranchOf(t), e.w.RepoFolder(t.Repo), t.ID)
+	if !t.HoldsPush() {
+		note = fmt.Sprintf("Task %s waits for the operator at %s. Tell the operator, and run sfy task release %s only when the operator says to go on.", t.ID, at, t.ID)
+	}
+	if a := e.proc.Agents[at.Agent]; a.Message != "" {
+		note += "\n\n" + a.Message
+	}
 	if err := e.message("lead", from, note); err != nil {
 		return err
 	}
 	return e.endSessions(t)
 }
 
-// taskPush releases the push hold of a held task. It starts a worker that may push, and the task goes on as after a passed review.
-func (e *Engine) taskPush(req protocol.Request) (string, error) {
+// taskRelease passes the operator agent of a held task. sfy task push is its old name.
+// A push after the release starts a worker that may push, and the task goes on as after a passed review.
+func (e *Engine) taskRelease(req protocol.Request) (string, error) {
 	t, err := e.load(req)
 	if err != nil {
 		return "", err
 	}
 	if err := need(t, task.Held); err != nil {
 		return "", err
+	}
+	if run, ok := e.checking[t.ID]; ok {
+		return "", fmt.Errorf("task %s is already released, and sfy runs the %s now", t.ID, run.at.Agent)
 	}
 	at := t.Position()
 	if released := strings.TrimSpace(text(req, req.Args[1:])); released != "" {
@@ -784,15 +884,19 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 	return e.passFrom(t, at, handoff{from: from})
 }
 
-// releasePush moves a held task back to review and starts a worker that may push, as after a passed review.
-func (e *Engine) releasePush(t task.Task) error {
+// releasePush moves a held task to the pushing agent at at and starts its session, which may push, as after a passed review.
+func (e *Engine) releasePush(t task.Task, at process.Position) error {
 	before := t
 	t.ReleasePush()
+	t.MoveTo(at)
 	if err := e.save(t); err != nil {
 		return err
 	}
 	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\n%s\n", t.ID, t.Markdown(), pushNow(t))
-	if err := e.sess.start(t, worker, prompt); err != nil {
+	if a := e.proc.Agents[at.Agent]; a.Message != "" {
+		prompt += "\n" + a.Message + "\n"
+	}
+	if err := e.sess.start(t, at.Agent, prompt); err != nil {
 		return errors.Join(err, e.save(before))
 	}
 	return nil
@@ -815,7 +919,7 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 	if err := e.st.AddVerdict(t.ID, t.Round, false, req.Body); err != nil {
 		return "", err
 	}
-	reviewer := reviewerOf(t)
+	reviewer := e.reviewerOf(t)
 	at := t.Position()
 	e.record(t.ID, at.Agent, req.Body)
 	note := func(t task.Task) string {
@@ -880,7 +984,7 @@ func (e *Engine) hookTurnEnded(req protocol.Request) (string, error) {
 	reminder := ""
 	if e.runs(name) {
 		s := e.sess.agent(name)
-		if k, _ := kindOf(name); (k == worker || k == reviewer) && !s.reported {
+		if k, _ := e.kindOf(name); (k == worker || k == reviewer) && !s.reported {
 			var err error
 			reminder, err = e.reminder(name, s)
 			errs = append(errs, err)

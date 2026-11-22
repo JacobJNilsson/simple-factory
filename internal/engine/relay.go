@@ -103,7 +103,7 @@ func (e *Engine) relay(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("the relay from factory %s carries no valid token of that factory: %w", from, err)
 	}
-	if k, _ := kindOf(protocol.AgentName(name)); k != lead {
+	if protocol.AgentName(name) != protocol.Lead {
 		return "", fmt.Errorf("only the lead of factory %s may send to another factory", from)
 	}
 	if len(req.Args) == 0 || protocol.AgentName(req.Args[0]) != protocol.Lead {

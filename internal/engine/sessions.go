@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/process"
@@ -144,50 +145,100 @@ func (s *sessions) watch(name string) (ev sessionEvent, err error) {
 	return nothingNew, nil
 }
 
-// workerOf returns the session name of the worker of a task.
-func workerOf(t task.Task) string { return "worker-" + t.ID }
+// startList returns the name of the list that a task starts in: its List section, or the start list of the process.
+func (s *sessions) startList(t task.Task) string { return cmp.Or(t.List, s.proc.Start) }
 
-// startAgent returns the first claude agent of the start list that ends with ends.
-// The Model section of a task sets the agent that ends at done, and the Reviewer model section the agent that ends at verdict.
-func (s *sessions) startAgent(ends string) process.Agent {
-	agents, _ := s.proc.Flatten(s.proc.Start)
-	for _, name := range agents {
-		if a := s.proc.Agents[name]; a.Harness == process.Claude && a.Ends == ends {
-			return a
+// nameOf returns the session name of a claude agent for a task.
+// A task session is <prefix>-<id>, and a round session is <prefix>-<id>-<round>. An agent with like has the session of the agent it copies.
+func (s *sessions) nameOf(t task.Task, agent string) string {
+	o := s.proc.Owner(agent)
+	if o.Session == process.SessionRound {
+		return roundSession(o.SessionName, t.ID, t.Round)
+	}
+	return o.SessionName + "-" + t.ID
+}
+
+// kindOfOwner returns the kind of the session that the agent owner runs: reviewer when an agent in that session ends at a verdict.
+func (s *sessions) kindOfOwner(owner string) kind {
+	for _, a := range s.proc.Agents {
+		if a.Harness == process.Claude && s.proc.Owner(a.Name).Name == owner && a.Ends == process.EndsVerdict {
+			return reviewer
 		}
 	}
-	return process.Agent{}
+	return worker
 }
 
-func (s *sessions) workerSpec(t task.Task, prompt string) SessionSpec {
-	a := s.startAgent(process.EndsDone)
-	return SessionSpec{
-		Name: workerOf(t), Kind: "worker", Harness: a.Harness, Task: t.ID, Dir: t.Dir,
-		Model: t.WorkerModel(cmp.Or(a.Model, s.cfg.Models.Worker)), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
-		Branch: s.branchOf(t), Lease: t.Lease, NoPush: t.HoldsPush(),
+// sessionAgent returns the claude agent at the task's position whose kind matches, else the nearest such agent before it in its list,
+// else the first such agent of the task's start list. verdict picks the agents that end at a verdict, and otherwise the agents that end at done or pushed.
+func (s *sessions) sessionAgent(t task.Task, verdict bool) string {
+	matches := func(name string) bool {
+		a := s.proc.Agents[name]
+		return a.Harness == process.Claude && (a.Ends == process.EndsVerdict) == verdict
 	}
-}
-
-func (s *sessions) reviewerSpec(t task.Task, prompt string) SessionSpec {
-	a := s.startAgent(process.EndsVerdict)
-	return SessionSpec{
-		Name: reviewerOf(t), Kind: "reviewer", Harness: a.Harness, Task: t.ID, Dir: t.Dir,
-		Model: t.ReviewerModelOr(cmp.Or(a.Model, s.cfg.Models.Reviewer)), Prompt: prompt, Protected: t.Protected,
+	at := t.Position()
+	if agents, err := s.proc.Flatten(at.List); err == nil {
+		for i := slices.Index(agents, at.Agent); i >= 0; i-- {
+			if matches(agents[i]) {
+				return agents[i]
+			}
+		}
 	}
+	agents, _ := s.proc.Flatten(s.startList(t))
+	for _, name := range agents {
+		if matches(name) {
+			return name
+		}
+	}
+	return ""
 }
 
-// start starts the worker or the reviewer of a task and resets what sfy knows of the session.
+// workerOf returns the session name of the worker of a task: the session of its nearest claude agent that ends at done or pushed.
+func (s *sessions) workerOf(t task.Task) string { return s.nameOf(t, s.sessionAgent(t, false)) }
+
+// reviewerOf returns the session name of the reviewer of the task's round: the session of its nearest claude agent that ends at a verdict.
+func (s *sessions) reviewerOf(t task.Task) string { return s.nameOf(t, s.sessionAgent(t, true)) }
+
+// isStartAgent reports whether the agent owner runs the first claude agent that ends at done in the task's start list.
+// The Model section of a task sets the model of that agent.
+func (s *sessions) isStartAgent(t task.Task, owner string) bool {
+	agents, _ := s.proc.Flatten(s.startList(t))
+	for _, name := range agents {
+		if a := s.proc.Agents[name]; a.Harness == process.Claude && a.Ends == process.EndsDone {
+			return s.proc.Owner(name).Name == owner
+		}
+	}
+	return false
+}
+
+// specFor returns the spec of the session of a claude agent for a task. An agent with like gets the spec of the agent it copies.
+func (s *sessions) specFor(t task.Task, agent, prompt string) SessionSpec {
+	o := s.proc.Owner(agent)
+	perm := o.Permissions
+	spec := SessionSpec{
+		Name: s.nameOf(t, agent), Kind: string(s.kindOfOwner(o.Name)), Harness: o.Harness, Task: t.ID, Dir: t.Dir,
+		Prompt: prompt, Protected: t.Protected, Agent: o.Name, Role: o.Prompt, RepoRole: o.RepoPrompt,
+		ReadOnly: !perm.Edit, Unsandboxed: !perm.Sandbox, AllowWrite: perm.AllowWrite, DenyRead: perm.DenyRead, PassEnv: perm.PassEnv,
+	}
+	if spec.Kind == string(reviewer) {
+		spec.Model = t.ReviewerModelOr(cmp.Or(o.Model, s.cfg.ModelOf(o.Name, true)))
+		spec.HasRepo = t.Repo != "" && o.RepoPrompt != ""
+		return spec
+	}
+	spec.Model = cmp.Or(o.Model, s.cfg.ModelOf(o.Name, false))
+	if s.isStartAgent(t, o.Name) {
+		spec.Model = t.WorkerModel(spec.Model)
+	}
+	spec.HasRepo, spec.Branch, spec.Lease, spec.NoPush = t.Repo != "", s.branchOf(t), t.Lease, t.HoldsPush() || !perm.Push
+	return spec
+}
+
+// start starts the session of a claude agent for a task and resets what sfy knows of the session.
 // It changes no state when it fails, so the caller keeps its own rollback.
-func (s *sessions) start(t task.Task, k kind, prompt string) error {
-	var spec SessionSpec
-	switch k {
-	case worker:
-		spec = s.workerSpec(t, prompt)
-	case reviewer:
-		spec = s.reviewerSpec(t, prompt)
-	default:
-		return fmt.Errorf("cannot start a session of kind %q", k)
+func (s *sessions) start(t task.Task, agent, prompt string) error {
+	if a := s.proc.Agents[agent]; a.Harness != process.Claude {
+		return fmt.Errorf("cannot start a session for the %s agent %s", a.Harness, agent)
 	}
+	spec := s.specFor(t, agent, prompt)
 	file, err := s.taskFile(t.ID)
 	if err != nil {
 		return err
@@ -237,7 +288,7 @@ func (e *Engine) checkWorkers() error {
 		if !t.State.Active() {
 			continue
 		}
-		name := workerOf(t)
+		name := e.workerOf(t)
 		ev, werr := e.sess.watch(name)
 		switch ev {
 		case cannotTell:
