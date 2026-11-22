@@ -74,7 +74,7 @@ type options struct {
 	home string
 	// layers are the folders that the main prompt comes from, lowest first.
 	layers []string
-	// dir is the folder of the factory. The main agent works there. It is empty for the default factory, whose main agent works in home.
+	// dir is the working folder, where the main agent works. It is empty for the default factory, whose main agent works in home.
 	dir    string
 	config config.Config
 	// bin is the absolute path of the sfy binary.
