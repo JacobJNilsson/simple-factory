@@ -66,7 +66,19 @@ func validFrom(name string) bool {
 
 // Parse checks a drop file and returns its parts.
 // On an error, the returned drop still holds From and ID when they passed their checks, so sfy can reply to the sender.
-func Parse(raw []byte) (Drop, error) {
+func Parse(raw []byte) (Drop, error) { return parse(raw, false) }
+
+// ParseFromAgent checks a drop that a shell agent wrote to the folder that sfy made for its run.
+// sfy knows the sender, so it ignores From and Id. A drop of a shell agent is a message, never a task.
+func ParseFromAgent(raw []byte) (Drop, error) {
+	d, err := parse(raw, true)
+	if err == nil && d.Kind != KindMessage {
+		err = errors.New("a shell agent may drop only a message")
+	}
+	return d, err
+}
+
+func parse(raw []byte, fromAgent bool) (Drop, error) {
 	if len(raw) > maxSize {
 		return Drop{}, fmt.Errorf("the drop has more than %d bytes", maxSize)
 	}
@@ -90,12 +102,12 @@ func Parse(raw []byte) (Drop, error) {
 	var errs []error
 	if from := fields["From"]; validFrom(from) {
 		d.From = from
-	} else {
+	} else if !fromAgent {
 		errs = append(errs, fmt.Errorf("the From name %q is not allowed. A name has 1 to 32 characters from a-z, 0-9 and -, and is not operator, sfy, lead or main", from))
 	}
 	if id := fields["Id"]; idName.MatchString(id) {
 		d.ID = id
-	} else {
+	} else if !fromAgent {
 		errs = append(errs, fmt.Errorf("the Id %q is not allowed. An id has 1 to 64 characters from A-Z, a-z, 0-9, ., _ and -", id))
 	}
 	switch to := fields["To"]; to {

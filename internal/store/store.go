@@ -56,7 +56,18 @@ type Store interface {
 	MarkRead(agent string, ids []string) error
 	// Verdicts returns the task's verdicts and feedback ordered by round. Feedback follows the verdict of its round.
 	Verdicts(id string) ([]Verdict, error)
+	// AddResult records the result text of an agent of the task and returns the path of the file that holds it.
+	AddResult(id, agent, body string) (path string, err error)
+	// Results returns the task's results in the order that the agents ended.
+	Results(id string) ([]Result, error)
 	WriteStatus(text string) error
+}
+
+// Result is the text that one agent of a task ended with. N counts the results of the task from 1.
+type Result struct {
+	N           int
+	Agent, Path string
+	Body        string
 }
 
 type files struct{ dir string }
@@ -361,6 +372,55 @@ func (f files) AddFeedback(id string, round int, body string) error {
 		}
 	}
 	return writeFile(filepath.Join(d, "verdicts", fmt.Sprintf("%d-feedback-%04d.md", round, n)), []byte(body))
+}
+
+// resultName is the file name of a result: its number, a dash and the agent name.
+var resultName = regexp.MustCompile(`^([0-9]+)-([a-z][a-z0-9-]*)\.md$`)
+
+// AddResult writes results/<n>-<agent>.md, where n is one more than the number of results so far.
+func (f files) AddResult(id, agent, body string) (string, error) {
+	d, err := f.existingTaskDir(id)
+	if err != nil {
+		return "", err
+	}
+	results, err := f.Results(id)
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(d, "results", fmt.Sprintf("%d-%s.md", len(results)+1, agent))
+	if !resultName.MatchString(filepath.Base(path)) {
+		return "", fmt.Errorf("store: invalid agent name %q", agent)
+	}
+	return path, writeFile(path, []byte(body))
+}
+
+func (f files) Results(id string) ([]Result, error) {
+	d, err := f.existingTaskDir(id)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(d, "results"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var out []Result
+	for _, e := range entries {
+		m := resultName.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		path := filepath.Join(d, "results", e.Name())
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		n, _ := strconv.Atoi(m[1])
+		out = append(out, Result{N: n, Agent: m[2], Path: path, Body: string(body)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].N < out[j].N })
+	return out, nil
 }
 
 func (f files) inbox(agent string) (string, error) {

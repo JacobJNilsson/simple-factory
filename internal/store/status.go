@@ -11,6 +11,11 @@ import (
 
 // RenderStatus returns the text of status.md. It leaves out archived tasks. Escalated tasks come first, then the rest. Each group lists the newest change first, a zero time last, and the higher id first on a tie.
 func RenderStatus(tasks []task.Task) string {
+	return RenderStatusLabeled(tasks, func(t task.Task) string { return t.Label(tasks) })
+}
+
+// RenderStatusLabeled is RenderStatus with the state column from label, so a running shell agent can show its own label.
+func RenderStatusLabeled(tasks []task.Task, label func(task.Task) string) string {
 	var sorted []task.Task
 	for _, t := range tasks {
 		if !t.Archived {
@@ -40,7 +45,7 @@ func RenderStatus(tasks []task.Task) string {
 			changed = t.Updated.In(time.Local).Format("2006-01-02 15:04")
 		}
 		title := strings.ReplaceAll(t.ShownTitle(), "|", `\|`)
-		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, t.Label(tasks), t.Round, agents(t)+models(t), changed)
+		fmt.Fprintf(&b, "| %s | %s | %s | %d | %s | %s |\n", t.ID, title, label(t), t.Round, agents(t)+models(t), changed)
 	}
 	return b.String()
 }
