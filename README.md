@@ -170,7 +170,7 @@ See `docs/configuration.md` for the details of each item.
 - Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind in every factory. Files in `prompts/<kind>.d/` of a factory folder add lines for that factory, and a file with the name of a machine file replaces it.
 - Session settings: `[session_settings.<kind>]` tables add keys to the settings file of a session.
 - Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.
-- Task process: `[agents.<name>]` and `[lists.<name>]` tables change the steps that every task runs through, for example a gate script before the check. `sfy config` prints the process. See `docs/configuration.md`.
+- Task process: `[agents.<name>]` and `[lists.<name>]` tables change the steps that every task runs through, for example a gate script before the check. A factory may define agents and lists of its own names, a shell agent that picks the next list, and an operator step that waits for `sfy task release <id>`. A `## List` section in a task file picks the list that the task starts in. `sfy config` prints the process. See `docs/configuration.md`.
 - Terminal tools: a template set under `[multiplexers.<name>]` plugs in another tool. See `docs/herdr.md` and `docs/rex.md`.
 - A factory per folder: `sfy up` in a working folder runs a separate factory for it, with no setup. Its factory folder is `~/.sfy/factories/<name>/`, and sfy writes nothing in the working folder. See `docs/configuration.md`.
 - A second factory folder by hand: `SFY_HOME=~/.sfy-work sfy up` runs a separate lead.
