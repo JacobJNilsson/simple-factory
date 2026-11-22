@@ -46,7 +46,7 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	}
 	writeProcess(&out, proc, sources)
 	out.WriteString("\n# Prompts\n")
-	for _, kind := range promptKinds {
+	for _, kind := range append(slices.Clone(promptKinds), agentPrompts(proc)...) {
 		if err := writePrompts(&out, kind, layers); err != nil {
 			return err
 		}

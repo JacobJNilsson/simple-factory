@@ -20,6 +20,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
 	"github.com/JacobJNilsson/simple-factory/internal/process"
+	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
@@ -110,6 +111,9 @@ func loadDefinition(home, userHome string) (config.Config, process.Process, erro
 	if err := engine.Runnable(proc); err != nil {
 		return cfg, proc, err
 	}
+	if err := checkPrompts(proc, config.Layers(home, userHome)); err != nil {
+		return cfg, proc, err
+	}
 	tasks, err := store.Files(home).Tasks()
 	if err != nil {
 		return cfg, proc, err
@@ -121,6 +125,36 @@ func loadDefinition(home, userHome string) (config.Config, process.Process, erro
 		}
 	}
 	return cfg, proc, proc.Validate(open)
+}
+
+// agentPrompts returns the prompt names of the claude agents that sfy config does not list already, sorted.
+func agentPrompts(proc process.Process) []string {
+	var names []string
+	for _, a := range proc.Agents {
+		if a.Harness != process.Claude {
+			continue
+		}
+		for _, name := range []string{a.Prompt, a.RepoPrompt} {
+			if name != "" && !slices.Contains(promptKinds, name) && !slices.Contains(names, name) {
+				names = append(names, name)
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// checkPrompts refuses a claude agent whose prompt or repo_prompt no layer has and sfy has no default for, so its session could not start.
+func checkPrompts(proc process.Process, layers []string) error {
+	var errs []error
+	for _, name := range agentPrompts(proc) {
+		has, err := prompts.Has(name, layers)
+		if err == nil && !has {
+			err = &prompts.MissingError{Name: name}
+		}
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // checkHarnesses refuses a provider key or a claude agent whose session harness has no adapter.
