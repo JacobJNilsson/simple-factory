@@ -43,6 +43,16 @@ type SessionSpec struct {
 	Fresh bool
 	// TaskFile is the absolute path of the task's task.md. It is set for workers and reviewers and empty for the lead.
 	TaskFile string
+	// Agent names the process agent that owns the session. Its session_rules and session_settings apply. An empty name means the Kind.
+	Agent string
+	// Role and RepoRole name the prompt of the session and the prompt part for a task with a repo. An empty Role means the prompt of the Kind.
+	Role, RepoRole string
+	// ReadOnly denies the edit tools, for an agent whose permissions set edit to false.
+	ReadOnly bool
+	// Unsandboxed runs the session outside the sandbox, for an agent whose permissions set sandbox to false.
+	Unsandboxed bool
+	// AllowWrite, DenyRead and PassEnv replace the factory's list of that name when they are not nil.
+	AllowWrite, DenyRead, PassEnv *[]string
 }
 
 // Launcher controls agent sessions in terminal panes.

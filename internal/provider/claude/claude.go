@@ -101,7 +101,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if !sessionName.MatchString(spec.Name) {
 		return nil, fmt.Errorf("claude: bad session name %q", spec.Name)
 	}
-	role, err := prompts.Role(spec.Kind, a.layers, spec.HasRepo)
+	role, err := a.role(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	)
 	clean := spec.Kind != "lead"
 	if clean {
-		env = append(env, a.inherited()...)
+		env = append(env, a.inherited(own(spec.PassEnv, a.cfg.PassEnv))...)
 	}
 	argv := []string{a.claudeCommand(), "--name", spec.Name, "--model", spec.Model}
 	// The lead gets no permission flag, so claude uses the operator's own default mode.
@@ -160,13 +160,45 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	return envrun.Wrap(filepath.Dir(path), env, clean, a.sfyBin, argv)
 }
 
+// role returns the prompt of a session. A spec with a Role takes that prompt, and its RepoRole part for a task with a repo.
+func (a adapter) role(spec engine.SessionSpec) (string, error) {
+	if spec.Role == "" {
+		return prompts.Role(spec.Kind, a.layers, spec.HasRepo)
+	}
+	base, err := prompts.For(spec.Role, a.layers)
+	if err != nil || !spec.HasRepo || spec.RepoRole == "" {
+		return base, err
+	}
+	part, err := prompts.For(spec.RepoRole, a.layers)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(base, "\n") + "\n\n" + part, nil
+}
+
+// rulesKey returns the name that the session's session_rules and session_settings tables have: its agent, or its kind.
+func rulesKey(spec engine.SessionSpec) string {
+	if spec.Agent != "" {
+		return spec.Agent
+	}
+	return spec.Kind
+}
+
+// own returns the agent's own list when it has one, and the factory's list otherwise.
+func own(list *[]string, factory []string) []string {
+	if list != nil {
+		return *list
+	}
+	return factory
+}
+
 // inherited returns the variables that a clean worker or reviewer keeps from sfy's environment.
 // CLAUDE_CONFIG_DIR is the only variable that a subscription login needs, and only when it is set.
 // SSH_AUTH_SOCK stays because git push runs outside the sandbox and may use SSH.
-func (a adapter) inherited() []string {
+func (a adapter) inherited(passEnv []string) []string {
 	names := append([]string{
 		"HOME", "USER", "LOGNAME", "SHELL", "TERM", "LANG", "TMPDIR", "CLAUDE_CONFIG_DIR", "SSH_AUTH_SOCK",
-	}, a.cfg.PassEnv...)
+	}, passEnv...)
 	var out []string
 	seen := map[string]bool{}
 	for _, e := range os.Environ() {
@@ -197,15 +229,19 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"FileChanged": {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
-	if spec.Kind == "lead" {
+	switch {
+	case spec.Kind == "lead":
 		// The hook blocks a hand push, merge or rebase in a no-merge repo. sfy task integrate refuses there too.
 		s.Hooks["PreToolUse"] = []hookGroup{{Matcher: "Bash", Hooks: []hook{a.hook("merge-guard")}}}
-	} else {
-		if err := a.sandboxFor(&s, spec.Kind, a.cfg.SessionRules[spec.Kind].ExcludedCommands); err != nil {
+	case spec.Unsandboxed:
+		// An agent outside the sandbox runs only the commands that its allow rules name.
+		s.Permissions.DefaultMode = "acceptEdits"
+	default:
+		if err := a.sandboxFor(&s, spec, a.cfg.SessionRules[rulesKey(spec)].ExcludedCommands); err != nil {
 			return "", err
 		}
 	}
-	b, err := marshalSettings(s, a.extraSettings(spec.Kind))
+	b, err := marshalSettings(s, a.extraSettings(spec.Kind, rulesKey(spec)))
 	if err != nil {
 		return "", fmt.Errorf("claude: %w", err)
 	}
@@ -224,10 +260,10 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 	return path, nil
 }
 
-// extraSettings returns the extra top-level keys for a session kind.
+// extraSettings returns the extra top-level keys for a session kind, from the session_settings table of key.
 // Workers and reviewers turn off prompt suggestions by default, and a config table can override that.
-func (a adapter) extraSettings(kind string) config.SessionValues {
-	configured := a.cfg.SessionSettings[kind]
+func (a adapter) extraSettings(kind, key string) config.SessionValues {
+	configured := a.cfg.SessionSettings[key]
 	if kind == "lead" {
 		return configured
 	}
@@ -300,8 +336,9 @@ func appendsExtra(key string) bool {
 
 // sandboxFor turns on the sandbox for s, with no fallback to unsandboxed commands. The excluded patterns run outside it.
 // A Linux sandbox ignores a write path that does not exist, so each one is created first.
-func (a adapter) sandboxFor(s *settings, kind string, excluded []string) error {
-	for _, p := range a.cfg.AllowWrite {
+func (a adapter) sandboxFor(s *settings, spec engine.SessionSpec, excluded []string) error {
+	allowWrite, denyRead := own(spec.AllowWrite, a.cfg.AllowWrite), own(spec.DenyRead, a.cfg.DenyRead)
+	for _, p := range allowWrite {
 		dir, err := expandHome(p)
 		if err != nil {
 			return err
@@ -317,8 +354,8 @@ func (a adapter) sandboxFor(s *settings, kind string, excluded []string) error {
 	s.Sandbox = &sandbox{
 		Enabled: true, FailIfUnavailable: true, AutoAllowBashIfSandboxed: true,
 		Filesystem: filesystem{
-			DenyRead:   append(deny, a.cfg.DenyRead...),
-			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
+			DenyRead:   append(deny, denyRead...),
+			AllowWrite: append([]string{}, allowWrite...),
 		},
 	}
 	// git push fails inside the macOS sandbox, and the sandbox blocks the sfy socket. The allow rules keep the excluded calls narrow.
@@ -329,7 +366,7 @@ func (a adapter) sandboxFor(s *settings, kind string, excluded []string) error {
 			fmt.Sprintf("/tmp/claude-%d", a.uid), fmt.Sprintf("/private/tmp/claude-%d", a.uid),
 		}}
 	}
-	s.Sandbox.ExcludedCommands = append(append([]string{"git push *"}, sfyRules(kind)...), excluded...)
+	s.Sandbox.ExcludedCommands = append(append([]string{"git push *"}, sfyRules(spec.Kind)...), excluded...)
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
 	return nil
@@ -402,7 +439,7 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 			rules = append(rules, "Bash(git push -u origin "+spec.Branch+")", "Bash(git push --force-with-lease origin "+spec.Branch+")")
 		}
 	}
-	rules = append(rules, a.cfg.SessionRules[spec.Kind].Allow...)
+	rules = append(rules, a.cfg.SessionRules[rulesKey(spec)].Allow...)
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
 	// Hooks run from the settings and need no rule. Agents run sfy by its name on the PATH.
 	if spec.Kind == "lead" {
@@ -454,6 +491,9 @@ func deny(spec engine.SessionSpec) []string {
 		rules = append(rules, "AskUserQuestion", pushWithGitOptions)
 		if spec.NoPush {
 			rules = append(rules, pushAny)
+		}
+		if spec.ReadOnly {
+			rules = append(rules, "Edit", "Write", "NotebookEdit")
 		}
 		for _, p := range spec.Protected {
 			p = rulePath(p)
