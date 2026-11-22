@@ -43,7 +43,8 @@ const usage = `usage:
   sfy task feedback <id> <text...>
   sfy task complete <id>
   sfy task integrate <id>
-  sfy task push <id>
+  sfy task release <id>
+  sfy task push <id>   the old name of sfy task release
   sfy task archive <id>
   sfy send <agent> <text...>
   sfy report done|blocked|progress|pushed <text...>
@@ -103,6 +104,7 @@ var forms = map[string]form{
 	"task feedback":   {words: 2, ids: 1, text: true},
 	"task complete":   {words: 2, ids: 1},
 	"task integrate":  {words: 2, ids: 1},
+	"task release":    {words: 2, ids: 1},
 	"task push":       {words: 2, ids: 1},
 	"task archive":    {words: 2, ids: 1},
 	"send":            {words: 1, ids: 1, text: true},
@@ -132,11 +134,11 @@ func caller(env func(string) string) protocol.Caller {
 	return c
 }
 
-// Restricted reports whether SFY_AGENT names a worker or a reviewer.
-// Such a session may run only the sfy commands that its allow rules name.
+// Restricted reports whether SFY_AGENT names a session that sfy started for a task, such as worker-t4, review-t4-2 or loader-t4.
+// Such a session may run only the sfy commands that its allow rules name. The lead is the one started session that is not restricted.
 func Restricted(env func(string) string) bool {
 	agent := env("SFY_AGENT")
-	return strings.HasPrefix(agent, "worker-") || strings.HasPrefix(agent, "review-")
+	return agent != "" && protocol.AgentName(agent) != protocol.Lead
 }
 
 // WithIdentity returns env with SFY_AGENT set to the caller's session name, as Agent finds it.
