@@ -21,7 +21,7 @@ type manifest struct {
 }
 
 // pluginArgs writes the plugin of the factory's skills into sessionDir and returns the flag that loads it.
-// A plugin directory gives the session no edit rights there, as an added directory would.
+// A plugin directory gives the session no edit rights there, unlike a directory that --add-dir adds.
 // Without a skills folder it removes an earlier plugin and returns no flag.
 func (a adapter) pluginArgs(sessionDir string) ([]string, error) {
 	dir := filepath.Join(sessionDir, "plugin")
