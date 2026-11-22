@@ -59,6 +59,8 @@ type Config struct {
 	SessionSettings map[string]SessionValues `toml:"session_settings"`
 	// SessionRules holds extra permission rules for each session kind.
 	SessionRules map[string]SessionRule `toml:"session_rules"`
+	// AgentModels holds the models keys that name a claude agent other than the worker and the reviewer. It is nil when there are none.
+	AgentModels map[string]string `toml:"-"`
 }
 
 // SessionRule holds the extra rules of one session kind.
@@ -290,6 +292,7 @@ func loadWithProcess(userTempDir func() (string, error), paths ...string) (Confi
 		}
 		merged = mergeTables(merged, raw)
 	}
+	merged, agentModels := splitAgentModels(merged)
 	c := defaults(userTempDir)
 	var text strings.Builder
 	if err := toml.NewEncoder(&text).Encode(merged); err != nil {
@@ -322,7 +325,50 @@ func loadWithProcess(userTempDir func() (string, error), paths ...string) (Confi
 		}
 	}
 	c.SessionRules = withAgentRules(c.SessionRules, p)
+	for _, name := range slices.Sorted(maps.Keys(agentModels)) {
+		if !slices.Contains(kinds, name) {
+			return Config{}, none, &SettingError{Setting: "models." + name, Unknown: true}
+		}
+	}
+	c.AgentModels = agentModels
 	return c, p, nil
+}
+
+// splitAgentModels takes each models key that names another agent than the lead, the worker and the reviewer out of the merged table.
+// Such a key holds the model of the claude agent of its name. The models table keeps the three fixed keys.
+func splitAgentModels(merged rawTable) (rawTable, map[string]string) {
+	models, ok := merged["models"].(map[string]any)
+	if !ok {
+		return merged, nil
+	}
+	var agents map[string]string
+	kept := map[string]any{}
+	for k, v := range models {
+		model, isText := v.(string)
+		if k == "lead" || k == "worker" || k == "reviewer" || !isText {
+			kept[k] = v
+			continue
+		}
+		if agents == nil {
+			agents = map[string]string{}
+		}
+		agents[k] = model
+	}
+	out := maps.Clone(merged)
+	out["models"] = kept
+	return out, agents
+}
+
+// ModelOf returns the model of the named claude agent: its models key, then the worker's or the reviewer's model.
+// A verdict agent falls back to the reviewer's model, and every other agent to the worker's model.
+func (c Config) ModelOf(agent string, verdict bool) string {
+	switch {
+	case c.AgentModels[agent] != "":
+		return c.AgentModels[agent]
+	case agent == "reviewer" || (verdict && agent != "worker"):
+		return c.Models.Reviewer
+	}
+	return c.Models.Worker
 }
 
 // checkValues refuses a number or a duration that is too low.
