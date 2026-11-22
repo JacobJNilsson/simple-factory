@@ -15,6 +15,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/drop"
 	"github.com/JacobJNilsson/simple-factory/internal/engine/delivery"
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -23,6 +24,8 @@ import (
 // SessionSpec describes an agent session to start. Kind is "lead", "worker" or "reviewer".
 type SessionSpec struct {
 	Name, Kind, Task, Dir, Model, Prompt string
+	// Harness names the launcher's adapter for the session. An empty harness means the launcher's default.
+	Harness string
 	// Protected lists the paths that a worker or reviewer must not edit. It is empty for the lead.
 	Protected []string
 	// HasRepo reports that the task names a repo, so a worker gets the repo part of its prompt.
@@ -124,6 +127,8 @@ type Engine struct {
 	factories Factories
 	// drops is the drop folder that programs with no session write to. Without it, the engine reads no drops.
 	drops *drop.Folder
+	// proc is the task process, which decides the agent that comes after each one.
+	proc process.Process
 }
 
 // SetLog makes the engine write one line to w for each note it types and for each unread agent it skips as not alive.
@@ -195,9 +200,9 @@ func (e *Engine) logf(format string, args ...any) {
 // New returns an Engine that works through the given store and interfaces.
 // ch gives notes to sessions without typing. A nil ch means that every note is typed.
 func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg config.Config, c Clock) *Engine {
-	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}}
+	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default()}
 	e.sess = &sessions{
-		l: l, cfg: cfg, logf: e.logf,
+		l: l, cfg: cfg, proc: e.proc, logf: e.logf,
 		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },
 		branchOf:    func(t task.Task) string { return e.w.BranchOf(t) },
 		forgetNotes: func(name string) { e.notes.Forget(name) }, agents: map[string]*agentState{},

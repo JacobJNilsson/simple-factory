@@ -124,7 +124,7 @@ func (e *Engine) taskList(req protocol.Request) (string, error) {
 		if t.Archived != archived {
 			continue
 		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, t.Label(tasks), t.ShownTitle())
+		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, e.label(t, tasks), t.ShownTitle())
 	}
 	return b.String(), nil
 }
@@ -144,7 +144,7 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	}
 	_, t.Checking = e.checking[t.ID]
 	var b strings.Builder
-	fmt.Fprintf(&b, "State: %s\n", t.Label(tasks))
+	fmt.Fprintf(&b, "State: %s\n", e.label(t, tasks))
 	if t.Archived {
 		b.WriteString("Archived: yes\n")
 	}
@@ -306,12 +306,7 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 	if err := need(t, task.Approved); err != nil {
 		return "", err
 	}
-	t.Complete()
-	if err := e.save(t); err != nil {
-		return "", err
-	}
-	e.replyEnd(t)
-	return "", e.cleanup(t)
+	return e.passFrom(t, t.Position(), handoff{from: protocol.Lead})
 }
 
 // NoMergeError reports an integration that the repo config forbids. The operator merges Branch by hand.
@@ -349,12 +344,7 @@ func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
 	if err := e.w.Integrate(t); err != nil {
 		return "", err
 	}
-	t.Complete()
-	if err := e.save(t); err != nil {
-		return "", err
-	}
-	e.replyEnd(t)
-	return "", e.cleanup(t)
+	return e.passFrom(t, t.Position(), handoff{from: protocol.Lead})
 }
 
 // taskFeedback sends feedback on a task to its worker and records it. The round stays as it is.
@@ -558,10 +548,12 @@ func (e *Engine) reportDone(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if t.Check == "" || e.ck == nil {
-		return "", e.startReview(t, text(req, req.Args), false)
+	if _, running := e.checking[t.ID]; running {
+		return "", fmt.Errorf("sfy already runs the check of task %s. Wait for its result", t.ID)
 	}
-	return e.startCheck(t, text(req, req.Args))
+	report := text(req, req.Args)
+	e.record(t.ID, "worker", report)
+	return e.passFrom(t, t.Position(), handoff{from: req.Caller.Agent, report: report})
 }
 
 // startReview moves a task to review and starts its reviewer. checked is true when sfy ran the task's check and it passed.
@@ -657,29 +649,27 @@ func (e *Engine) verdictPass(req protocol.Request) (string, error) {
 	if err := e.st.AddVerdict(t.ID, t.Round, true, req.Body); err != nil {
 		return "", err
 	}
-	remote := false
-	if t.Repo != "" {
-		if remote, err = e.w.HasRemote(t); err != nil {
-			return "", err
-		}
+	at := t.Position()
+	e.record(t.ID, at.Agent, req.Body)
+	return e.passFrom(t, at, handoff{from: req.Caller.Agent})
+}
+
+// askPush tells the worker of a passed review to push, or starts a worker that pushes after the operator released a held task.
+func (e *Engine) askPush(t task.Task, from string) error {
+	if t.State == task.Held {
+		return e.releasePush(t)
 	}
-	if remote && t.HoldsPush() {
-		return "", e.hold(t, req.Caller.Agent)
+	// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
+	t.AwaitPush()
+	if err := e.save(t); err != nil {
+		return err
 	}
-	if remote {
-		// The worker has not pushed. It keeps running, pushes now, and reports before the task is approved.
-		t.AwaitPush()
-		if err := e.save(t); err != nil {
-			return "", err
-		}
-		note := fmt.Sprintf("Review round %d of task %s passed. %s", t.Round, t.ID, pushNow(t))
-		// A repo whose config cannot be read gets no draft rule, because the worker opens no PR unless the task asks.
-		if cfg, err := e.configFor(t); err == nil && cfg.DraftPR {
-			note += " Any PR you open must be a draft. Use gh pr create --draft."
-		}
-		return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.sess.end(req.Caller.Agent))
+	note := fmt.Sprintf("Review round %d of task %s passed. %s", t.Round, t.ID, pushNow(t))
+	// A repo whose config cannot be read gets no draft rule, because the worker opens no PR unless the task asks.
+	if cfg, err := e.configFor(t); err == nil && cfg.DraftPR {
+		note += " Any PR you open must be a draft. Use gh pr create --draft."
 	}
-	return "", e.approve(t, req.Caller.Agent, false)
+	return errors.Join(e.message(workerOf(t), from, note), e.sess.end(from))
 }
 
 // reportPushed lets the worker of a passed review say that it pushed. The task is approved only now.
@@ -697,7 +687,9 @@ func (e *Engine) reportPushed(req protocol.Request) (string, error) {
 			t.Lease = sha
 		}
 	}
-	return "", e.approve(t, req.Caller.Agent, true)
+	at := t.Position()
+	e.record(t.ID, at.Agent, text(req, req.Args))
+	return e.passFrom(t, at, handoff{from: req.Caller.Agent, pushed: true})
 }
 
 // pushNow tells a worker to push. A task with an existing branch gets the one lease form that its settings allow.
@@ -764,16 +756,29 @@ func (e *Engine) taskPush(req protocol.Request) (string, error) {
 	if err := need(t, task.Held); err != nil {
 		return "", err
 	}
+	at := t.Position()
+	if released := strings.TrimSpace(text(req, req.Args[1:])); released != "" {
+		e.record(t.ID, at.Agent, released)
+	}
+	from := req.Caller.Agent
+	if from == "" {
+		from = "operator"
+	}
+	return e.passFrom(t, at, handoff{from: from})
+}
+
+// releasePush moves a held task back to review and starts a worker that may push, as after a passed review.
+func (e *Engine) releasePush(t task.Task) error {
 	before := t
 	t.ReleasePush()
 	if err := e.save(t); err != nil {
-		return "", err
+		return err
 	}
 	prompt := fmt.Sprintf("Task %s passed its review, and the operator released the push.\n\n%s\n%s\n", t.ID, t.Markdown(), pushNow(t))
 	if err := e.sess.start(t, worker, prompt); err != nil {
-		return "", errors.Join(err, e.save(before))
+		return errors.Join(err, e.save(before))
 	}
-	return "", nil
+	return nil
 }
 
 // operatorHold tells the worker of a held task that it may not push.
@@ -794,18 +799,13 @@ func (e *Engine) verdictFail(req protocol.Request) (string, error) {
 		return "", err
 	}
 	reviewer := reviewerOf(t)
-	note := fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run sfy report done.\n\n%s", t.Round, t.ID, req.Body)
-	// The worker has to fix the result, so an escalated task resumes in feedback and not in a review that no longer runs.
-	t.FailReview()
-	if t.Round >= e.cfg.ReviewRounds {
-		msgErr := e.message("worker-"+t.ID, req.Caller.Agent, note)
-		err := e.escalateTask(t, fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round), true)
-		return "", errors.Join(msgErr, err, e.sess.end(reviewer))
+	at := t.Position()
+	e.record(t.ID, at.Agent, req.Body)
+	note := func(t task.Task) string {
+		return fmt.Sprintf("Review round %d of task %s failed. Fix the result, then run sfy report done.\n\n%s", t.Round, t.ID, req.Body)
 	}
-	if err := e.save(t); err != nil {
-		return "", err
-	}
-	return "", errors.Join(e.message("worker-"+t.ID, req.Caller.Agent, note), e.sess.end(reviewer))
+	why := func(t task.Task) string { return fmt.Sprintf("Task %s failed review round %d.", t.ID, t.Round) }
+	return "", e.failAt(t, at, failure{from: req.Caller.Agent, note: note, why: why, end: func() error { return e.sess.end(reviewer) }})
 }
 
 func (e *Engine) inbox(req protocol.Request) (string, error) {
@@ -844,7 +844,7 @@ func (e *Engine) status(protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return store.RenderStatus(tasks), nil
+	return e.renderStatus(tasks), nil
 }
 
 // maxReminders is how many turns in a row without a report get a reminder before the lead hears of it.

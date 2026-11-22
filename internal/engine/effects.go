@@ -21,7 +21,7 @@ func (e *Engine) refreshStatus() error {
 	if err != nil {
 		return err
 	}
-	return e.st.WriteStatus(store.RenderStatus(tasks))
+	return e.st.WriteStatus(e.renderStatus(tasks))
 }
 
 // storeMessage stores a message without a note. Its id sorts in send order and never repeats, because the counter breaks ties within one clock tick.

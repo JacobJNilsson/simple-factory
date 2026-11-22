@@ -59,6 +59,12 @@ func (p Process) First(list string) (Position, error) {
 	return Position{List: list, Agent: agents[0]}, nil
 }
 
+// Last reports whether at is the last agent of its list, so a pass there follows the list's branch.
+func (p Process) Last(at Position) bool {
+	agents, err := p.Flatten(at.List)
+	return err == nil && len(agents) > 0 && agents[len(agents)-1] == at.Agent
+}
+
 // MaxRounds returns the round at which a fail in the list escalates, with fallback for a list that sets none.
 func (p Process) MaxRounds(list string, fallback int) int {
 	if n := p.Lists[list].MaxRounds; n > 0 {

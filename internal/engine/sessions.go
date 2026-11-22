@@ -1,10 +1,12 @@
 package engine
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
@@ -61,6 +63,7 @@ const (
 type sessions struct {
 	l        Launcher
 	cfg      config.Config
+	proc     process.Process
 	taskFile func(id string) (string, error)
 	branchOf func(task.Task) string
 	logf     func(format string, args ...any)
@@ -144,18 +147,32 @@ func (s *sessions) watch(name string) (ev sessionEvent, err error) {
 // workerOf returns the session name of the worker of a task.
 func workerOf(t task.Task) string { return "worker-" + t.ID }
 
+// startAgent returns the first claude agent of the start list that ends with ends.
+// The Model section of a task sets the agent that ends at done, and the Reviewer model section the agent that ends at verdict.
+func (s *sessions) startAgent(ends string) process.Agent {
+	agents, _ := s.proc.Flatten(s.proc.Start)
+	for _, name := range agents {
+		if a := s.proc.Agents[name]; a.Harness == process.Claude && a.Ends == ends {
+			return a
+		}
+	}
+	return process.Agent{}
+}
+
 func (s *sessions) workerSpec(t task.Task, prompt string) SessionSpec {
+	a := s.startAgent(process.EndsDone)
 	return SessionSpec{
-		Name: workerOf(t), Kind: "worker", Task: t.ID, Dir: t.Dir,
-		Model: t.WorkerModel(s.cfg.Models.Worker), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
+		Name: workerOf(t), Kind: "worker", Harness: a.Harness, Task: t.ID, Dir: t.Dir,
+		Model: t.WorkerModel(cmp.Or(a.Model, s.cfg.Models.Worker)), Prompt: prompt, Protected: t.Protected, HasRepo: t.Repo != "",
 		Branch: s.branchOf(t), Lease: t.Lease, NoPush: t.HoldsPush(),
 	}
 }
 
 func (s *sessions) reviewerSpec(t task.Task, prompt string) SessionSpec {
+	a := s.startAgent(process.EndsVerdict)
 	return SessionSpec{
-		Name: reviewerOf(t), Kind: "reviewer", Task: t.ID, Dir: t.Dir,
-		Model: t.ReviewerModelOr(s.cfg.Models.Reviewer), Prompt: prompt, Protected: t.Protected,
+		Name: reviewerOf(t), Kind: "reviewer", Harness: a.Harness, Task: t.ID, Dir: t.Dir,
+		Model: t.ReviewerModelOr(cmp.Or(a.Model, s.cfg.Models.Reviewer)), Prompt: prompt, Protected: t.Protected,
 	}
 }
 
