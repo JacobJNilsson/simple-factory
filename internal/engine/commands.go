@@ -296,6 +296,7 @@ func (e *Engine) taskCancel(req protocol.Request) (string, error) {
 	if err := e.save(t); err != nil {
 		return "", err
 	}
+	e.replyEnd(t)
 	return "", e.cleanup(t)
 }
 
@@ -312,6 +313,7 @@ func (e *Engine) taskComplete(req protocol.Request) (string, error) {
 	if err := e.save(t); err != nil {
 		return "", err
 	}
+	e.replyEnd(t)
 	return "", e.cleanup(t)
 }
 
@@ -354,6 +356,7 @@ func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
 	if err := e.save(t); err != nil {
 		return "", err
 	}
+	e.replyEnd(t)
 	return "", e.cleanup(t)
 }
 
@@ -482,6 +485,9 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 			return "", errors.New("the operator may send only to lead. Run: sfy send lead <text>")
 		}
 		from = "operator"
+	}
+	if name, ok := strings.CutPrefix(req.Args[0], drop.SenderPrefix); ok {
+		return "", e.answerDrop(name, body)
 	}
 	if err := e.live(req.Args[0]); err != nil {
 		return "", err
@@ -827,6 +833,7 @@ func (e *Engine) escalateTask(t task.Task, why string, tellLead bool) error {
 	if err := e.save(t); err != nil {
 		return err
 	}
+	e.replyEnd(t)
 	if tellLead {
 		if err := e.message("lead", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
 			return err

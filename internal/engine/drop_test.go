@@ -156,6 +156,11 @@ func TestTwoSendersThatDropTheSameIdBothArrive(t *testing.T) {
 	if len(msgs) != 2 || msgs[0].From != "drop:alerts" || msgs[1].From != "drop:builds" {
 		t.Fatalf("lead inbox: %+v", msgs)
 	}
+	for _, from := range []string{"alerts", "builds"} {
+		if got := v.replies(t, from); len(got) != 1 || !strings.Contains(got[0], "Kind: receipt\nRe: x1\n") {
+			t.Errorf("replies of %s: %q", from, got)
+		}
+	}
 }
 
 func TestADropWrittenWhileSfyIsDownArrivesAtTheNextStart(t *testing.T) {
@@ -171,6 +176,88 @@ func TestADropWrittenWhileSfyIsDownArrivesAtTheNextStart(t *testing.T) {
 
 	if msgs := v.inbox(t, "lead"); len(msgs) != 1 || msgs[0].Body != "while down\n" {
 		t.Fatalf("lead inbox: %+v", msgs)
+	}
+}
+
+// replies returns the reply files of a sender in write order.
+func (v env) replies(t *testing.T, from string) []string {
+	t.Helper()
+	var out []string
+	for _, name := range v.dropFolder(t, "replies", from) {
+		b, err := os.ReadFile(filepath.Join(v.home, "drop", "replies", from, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, string(b))
+	}
+	return out
+}
+
+func TestEachTakenDropGetsAReceipt(t *testing.T) {
+	v := dropEnv(t)
+	v.dropFile(t, "1-alerts-a1.md", "To: lead\nFrom: alerts\nId: a1\n\nhello\n")
+	v.dropFile(t, "2-alerts-alert-4711.md", dropTask)
+
+	v.pickUp(t)
+
+	got := v.replies(t, "alerts")
+	if len(got) != 2 {
+		t.Fatalf("replies %q", got)
+	}
+	if !strings.Contains(got[0], "Kind: receipt\nRe: a1\n") {
+		t.Errorf("message receipt %q", got[0])
+	}
+	if !strings.Contains(got[1], "Kind: receipt\nRe: alert-4711\nTask: t1\n") {
+		t.Errorf("task receipt %q", got[1])
+	}
+}
+
+func TestARejectedDropGetsTheReasonWhenItsSenderIsValid(t *testing.T) {
+	v := dropEnv(t)
+	v.dropFile(t, "1-alerts-a1.md", "To: worker-t3\nFrom: alerts\nId: a1\n\nx\n")
+
+	v.pickUp(t)
+
+	got := v.replies(t, "alerts")
+	if len(got) != 1 || !strings.Contains(got[0], "Kind: rejected\nRe: a1\n") || !strings.Contains(got[0], "worker-t3") {
+		t.Fatalf("replies %q", got)
+	}
+}
+
+func TestTheEndOfADropTaskWritesAStatusReply(t *testing.T) {
+	v := dropEnv(t)
+	v.dropFile(t, "1-alerts-alert-4711.md", dropTask)
+	v.pickUp(t)
+
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
+
+	got := v.replies(t, "alerts")
+	if len(got) != 2 || !strings.Contains(got[1], "Kind: status\nRe: alert-4711\nTask: t1\nState: cancelled\n") {
+		t.Fatalf("replies %q", got)
+	}
+}
+
+func TestTheLeadAnswersAProgramThatDropped(t *testing.T) {
+	v := dropEnv(t)
+	v.dropFile(t, "1-alerts-a1.md", "To: lead\nFrom: alerts\nId: a1\n\nhello\n")
+	v.pickUp(t)
+
+	mustOK(t, v.run("lead", "", "send", "seen, thanks", "drop:alerts"))
+
+	got := v.replies(t, "alerts")
+	if len(got) != 2 || !strings.Contains(got[1], "From: lead\n") || !strings.Contains(got[1], "Kind: message\n") || !strings.HasSuffix(got[1], "\nseen, thanks\n") {
+		t.Fatalf("replies %q", got)
+	}
+}
+
+func TestTheLeadCannotAnswerANameWithNoEarlierDrop(t *testing.T) {
+	v := dropEnv(t)
+
+	mustFail(t, v.run("lead", "", "send", "hi", "drop:alerts"), "no program dropped")
+	mustFail(t, v.run("lead", "", "send", "hi", "drop:.."), "no program dropped")
+
+	if got := v.dropFolder(t, "replies"); len(got) != 0 {
+		t.Errorf("replies/ holds %v", got)
 	}
 }
 

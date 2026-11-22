@@ -71,6 +71,7 @@ type stateFile struct {
 	Round    int        `json:"round"`
 	Archived bool       `json:"archived,omitempty"`
 	Source   string     `json:"source"`
+	SourceID string     `json:"source_id,omitempty"`
 	Progress string     `json:"progress,omitempty"`
 	Dir      string     `json:"dir,omitempty"`
 	Pending  []string   `json:"pending,omitempty"`
@@ -264,7 +265,7 @@ func writeTask(dir string, t task.Task) error {
 		return err
 	}
 	b, err := json.MarshalIndent(stateFile{
-		State: t.State, Before: t.Before, Round: t.Round, Archived: t.Archived, Source: t.Source, Progress: t.Progress,
+		State: t.State, Before: t.Before, Round: t.Round, Archived: t.Archived, Source: t.Source, SourceID: t.SourceID, Progress: t.Progress,
 		Dir: t.Dir, Pending: t.Pending, Reopened: t.Reopened, Pushing: t.Pushing, Released: t.Released, Branch: t.Branch, Lease: t.Lease, Updated: t.Updated,
 	}, "", "  ")
 	if err != nil {
@@ -297,6 +298,7 @@ func (f files) Task(id string) (task.Task, error) {
 	t.ID = id
 	// A task that the lead created before the rename has the old name as its source.
 	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, protocol.AgentName(st.Source)
+	t.SourceID = st.SourceID
 	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Released, t.Branch, t.Lease, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Released, st.Branch, st.Lease, st.Updated
 	return t, nil
 }

@@ -155,7 +155,9 @@ printf 'To: lead\nFrom: alerts\nId: %s\nKind: task\n\n%s\n' "$id" "$body" > "$di
 mv "$dir/tmp/$file" "$dir/new/$file"
 ```
 
-sfy moves a drop that fails a check to `drop/rejected/`, with the reason in a file beside it that ends in `.why`. SPEC.md, section Dropped messages, holds the full rules.
+sfy moves a drop that fails a check to `drop/rejected/`, with the reason in a file beside it that ends in `.why`.
+
+sfy answers in `drop/replies/<from>/`, in the same format. Each taken drop gets a receipt with `Kind: receipt` and `Re: <id>`, and a rejected drop gets `Kind: rejected` with the reason. When a task from a drop is done, cancelled or escalated, sfy writes `Kind: status` with `Task` and `State`. The lead can answer with `sfy send drop:<from> <text>`, which writes `Kind: message`. Read the folder at your next run, skip names that start with a dot, and delete what you read. sfy removes replies older than 30 days. SPEC.md, section Dropped messages, holds the full rules.
 
 ## Configure
 

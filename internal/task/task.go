@@ -63,6 +63,8 @@ type Task struct {
 	Archived bool
 	// Source is "lead" for the lead, otherwise the creator's name. A drop's stated name has the form drop:<name>.
 	Source string
+	// SourceID is the Id of the drop that created the task, so a status reply names it. It is empty for any other task.
+	SourceID string
 	// Progress is the worker's latest progress report.
 	Progress string
 	// Pending holds feedback that no worker has read yet. The next worker's first message carries it.
