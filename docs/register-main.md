@@ -2,6 +2,8 @@
 
 This note investigates one request. The operator wants an agent that already runs in a terminal to start sfy and register itself as the main agent (operator, 2026-11-16). The investigation changed no Go code.
 
+This note describes the code of its date, when the lead was called the main agent. So it uses the old names, such as the session `main`, `sessions/main/`, `main-prompt.md` and `show_main`. SPEC.md holds the current names, and its section Old names of the lead maps each old name to the new one.
+
 ## Decision
 
 The operator declined registration of a running agent (designs 2 and 3 below, and any form of `sfy up --register`). The operator chose design 1, with one change: it is the default and has no `--here` flag (operator, 2026-11-16).

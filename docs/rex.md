@@ -121,16 +121,16 @@ None of these restores a draft. A restore needs the text of the draft, and `capt
 
 Holding a send until the line is empty needs a check of the line, and no such check exists in the help text. Task t25 was cancelled because Herdr lacks one. Rex does not close that gap on the evidence of the help text alone. Test T4 looks for a block method that does.
 
-## 4. Starting the main agent and finding terminals by name
+## 4. Starting the lead and finding terminals by name
 
-### Main agent
+### Lead
 
-The main agent runs in the operator's terminal, so the operator starts it in the Rex app. Two ways to start it from sfy exist, and both are untested:
+The lead runs in the operator's terminal, so the operator starts it in the Rex app. Two ways to start it from sfy exist, and both are untested:
 
-- Run `rex new main -c {dir} -- <agent command>` and select it with `rex do session.select session_id=main`.
-- Run `rex window new main -c {dir} -- <agent command>` inside the operator's own session, using `$REX_SESSION`. This opens a tab, and `--focus=false` keeps the view.
+- Run `rex new lead -c {dir} -- <agent command>` and select it with `rex do session.select session_id=lead`.
+- Run `rex window new lead -c {dir} -- <agent command>` inside the operator's own session, using `$REX_SESSION`. This opens a tab, and `--focus=false` keeps the view.
 
-Rex sets `REX_SESSION` and `REX_BLOCK` in the environment of each terminal it opens (read in help). The main agent then knows its own session and block. sfy can use them to avoid typing into its own pane. The usage guide says: "Don't send input to your own pane, where the agent is running."
+Rex sets `REX_SESSION` and `REX_BLOCK` in the environment of each terminal it opens (read in help). The lead then knows its own session and block. sfy can use them to avoid typing into its own pane. The usage guide says: "Don't send input to your own pane, where the agent is running."
 
 ### Finding terminals by name
 
@@ -275,7 +275,7 @@ rex ls
 
 Pass: exit 0, and both sessions are gone from the list.
 
-**T9. Main agent environment (Q4).** Start a session with `rex new sfy-env -c /tmp --keep-open -- env`, then run `rex capture -s sfy-env --trim`.
+**T9. Lead environment (Q4).** Start a session with `rex new sfy-env -c /tmp --keep-open -- env`, then run `rex capture -s sfy-env --trim`.
 
 Pass: the output holds `REX_SESSION` and `REX_BLOCK`.
 

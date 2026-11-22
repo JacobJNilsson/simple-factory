@@ -22,7 +22,7 @@ These implementations build on sfy. They are examples and not part of the core.
 
 ## How sfy works
 
-sfy runs coding agents as interactive sessions in terminal panes. You talk to a main agent. It hands tasks to workers, and each worker does its task in its own git worktree. A fresh reviewer checks each result, and the main agent integrates the branch with plain git when the review passes. You can watch every session in your terminal.
+sfy runs coding agents as interactive sessions in terminal panes. You talk to one agent, the lead. It hands tasks to workers, and each worker does its task in its own git worktree. A fresh reviewer checks each result, and the lead integrates the branch with plain git when the review passes. You can watch every session in your terminal.
 
 ## Requirements
 
@@ -57,7 +57,7 @@ Then load it:
 sudo apparmor_parser -r /etc/apparmor.d/bwrap
 ```
 
-sfy checks this before it starts a worker or a reviewer. It also checks that it can find `claude`, on PATH or at `~/.local/bin/claude`. When a check fails, sfy starts no session. It escalates the task, tells the main agent and the operator the cause, and names the fix. After the fix, run `sfy task resume <id>`. sfy installs nothing itself, because that needs root.
+sfy checks this before it starts a worker or a reviewer. It also checks that it can find `claude`, on PATH or at `~/.local/bin/claude`. When a check fails, sfy starts no session. It escalates the task, tells the lead and the operator the cause, and names the fix. After the fix, run `sfy task resume <id>`. sfy installs nothing itself, because that needs root.
 
 ## Install
 
@@ -71,27 +71,27 @@ Run `sfy restart --update`. A brew install upgrades through brew. Any other inst
 
 ## Quick start
 
-Run `sfy`, then talk to the main agent. Describe what you want built and the main agent creates tasks.
+Run `sfy`, then talk to the lead. Describe what you want built and the lead creates tasks.
 
 A task moves through these states:
 
-1. `new`: the main agent prepares the task.
+1. `new`: the lead prepares the task.
 2. `queued`: the task waits for a free worker. A task with an `## After` section also waits until every task that it names is `done`, and shows as `queued (after t6, t8)`. List the ids on separate lines or separate them with commas or spaces. A task may name only older tasks.
 3. `working`: a worker does the task. On a task with a `## Check` section, sfy runs the check when the worker reports done, and a failure sends the output back to the worker. A failed review sends it back as `feedback`.
 4. `review`: a reviewer checks the result.
 5. `approved`: the reviewer passed the result.
-6. `done`: the main agent completed the task.
+6. `done`: the lead completed the task.
 
 A task on a repo works on its own branch, named `<type>/<slug>`, as in `feat/organisation-locations`. The type is a Conventional Commits type. An optional `## Type` section in the task file sets it. Otherwise sfy reads it from a `fix:` style prefix or the first word of the title, and falls back to `feat`. The slug is the title in lower case ASCII words joined by `-`, cut at 50 characters on a word boundary. If the name exists in the repo or on a remote, sfy appends `-2`, `-3` and so on. sfy picks the name once and keeps it, and `sfy task show` prints it. Tasks that started earlier keep their `sfy/<id>` branch.
 
-To work on an existing branch of the remote, such as the branch of your pull request, add a `## Branch` section with one line, the branch name. It needs a `## Repo` section. sfy refuses the default branch and a branch that the remote lacks, and an edit cannot change the branch once the task has a workspace. The worker checks out that branch, tracking `origin/<branch>`, and sfy records the remote sha. After the review passes, the worker may run only `git push --force-with-lease=<branch>:<sha> origin HEAD:<branch>`. The lease names the recorded sha, so git refuses the push when someone else pushed to the branch since. A bare `--force-with-lease` trusts the remote-tracking ref, which a `git fetch` silently updates, so sfy allows no bare lease. `## Push` with `hold` works as usual. After approval, `sfy task integrate` refuses and the main agent runs `sfy task complete <id>`, also in a repo without no-merge.
+To work on an existing branch of the remote, such as the branch of your pull request, add a `## Branch` section with one line, the branch name. It needs a `## Repo` section. sfy refuses the default branch and a branch that the remote lacks, and an edit cannot change the branch once the task has a workspace. The worker checks out that branch, tracking `origin/<branch>`, and sfy records the remote sha. After the review passes, the worker may run only `git push --force-with-lease=<branch>:<sha> origin HEAD:<branch>`. The lease names the recorded sha, so git refuses the push when someone else pushed to the branch since. A bare `--force-with-lease` trusts the remote-tracking ref, which a `git fetch` silently updates, so sfy allows no bare lease. `## Push` with `hold` works as usual. After approval, `sfy task integrate` refuses and the lead runs `sfy task complete <id>`, also in a repo without no-merge.
 
 To choose the model of a task, add a `## Model` section with one line, the model name of the task's worker, such as `opus` or `sonnet`. It overrides `[models] worker` in `config.toml` for that task only. A `## Reviewer model` section does the same for the task's reviewer and overrides `[models] reviewer`. An empty or missing section keeps the configured model. A name may hold letters, digits, `.`, `-`, `[` and `]`, and sfy refuses any other name. `sfy task show` and `status.md` show the models that a task sets. An edit may change them, even after the task has a workspace. The next agent start uses the new model. A planning task on `opus` and an implementation task on `sonnet` can follow each other with `## After`.
 
 sfy keeps its state in `~/.sfy`:
 
 - `tasks/` holds one folder for each task.
-- `notes.md` holds the main agent's notes.
+- `notes.md` holds the lead's notes.
 - `status.md` holds the current state of all tasks.
 - `sessions/<name>/note.md` holds the notes and messages that sfy delivers to a Claude Code session, until the session's hook reads them.
 - `config.toml` holds your settings.
@@ -100,13 +100,13 @@ sfy keeps its state in `~/.sfy`:
 
 | Command | What it does |
 |---|---|
-| `sfy` or `sfy up` | Starts sfy and the main agent. |
+| `sfy` or `sfy up` | Starts sfy and the lead. |
 | `sfy down` | Stops all agents and the sfy process. |
 | `sfy restart` | Restarts the sfy process and keeps the agents running. |
 | `sfy status` | Prints `status.md`. |
 | `sfy task list` | Lists the tasks. |
 | `sfy config` | Prints the factory's merged settings and prompt files, with the file behind each. |
-| `sfy send main <text>` | Sends a message to the main agent. The operator may send only to `main`. The main agent may send to any agent. |
+| `sfy send lead <text>` | Sends a message to the lead. The operator may send only to `lead`. The lead may send to any agent. |
 | `sfy help` | Lists every command. |
 
 ## Configure
@@ -114,7 +114,7 @@ sfy keeps its state in `~/.sfy`:
 See `docs/configuration.md` for the details of each item.
 
 - Config file: `~/.sfy/config.toml` sets limits such as `max_workers` and defines terminal template sets for every factory. A `config.toml` in a factory folder changes single keys for that factory. `sfy config` prints the merged result and the file behind each key.
-- Per-repo config: `.sfy/config.toml` in a repo, or a `.sfy.toml` file in a repo or in a parent folder up to `$HOME`, sets per-repo keys. `draft_pr = true` makes the push note ask for draft PRs. `no_merge = true` stops the main agent from integrating approved branches, so you merge them by hand. For example, put `no_merge = true` in `~/Developer/work/.sfy.toml` to cover every work repo below it. The `.sfy/` folder wins, then the nearest `.sfy.toml`.
+- Per-repo config: `.sfy/config.toml` in a repo, or a `.sfy.toml` file in a repo or in a parent folder up to `$HOME`, sets per-repo keys. `draft_pr = true` makes the push note ask for draft PRs. `no_merge = true` stops the lead from integrating approved branches, so you merge them by hand. For example, put `no_merge = true` in `~/Developer/work/.sfy.toml` to cover every work repo below it. The `.sfy/` folder wins, then the nearest `.sfy.toml`.
 - Headless: `headless = true` in `~/.sfy/config.toml` runs the sfy process detached, with no terminal window. Its log goes to `~/.sfy/sfy.log`. Stop everything with `sfy down`, or stop only the sfy process with `kill $(cat ~/.sfy/sfy.pid)`. `sfy restart` keeps it headless, and moves a process from a window to headless. See `docs/configuration.md`.
 - Check timeout: `check_timeout` in `~/.sfy/config.toml` sets how long a task's check may run. The default is `20m`.
 - Prompt additions: files in `~/.sfy/prompts/<kind>.d/` add lines to the prompt of an agent kind in every factory. Files in `prompts/<kind>.d/` of a factory folder add lines for that factory, and a file with the name of a machine file replaces it.
@@ -122,8 +122,9 @@ See `docs/configuration.md` for the details of each item.
 - Session rules: `[session_rules.<kind>]` tables add permission rules and unsandboxed commands to a kind of session.
 - Terminal tools: a template set under `[multiplexers.<name>]` plugs in another tool. See `docs/herdr.md` and `docs/rex.md`.
 - A factory per folder: `sfy up` in a working folder runs a separate factory for it, with no setup. Its factory folder is `~/.sfy/factories/<name>/`, and sfy writes nothing in the working folder. See `docs/configuration.md`.
-- A second factory folder by hand: `SFY_HOME=~/.sfy-work sfy up` runs a separate main agent.
-- A running agent: `sfy register` turns a Claude Code session that already runs into the main agent.
+- A second factory folder by hand: `SFY_HOME=~/.sfy-work sfy up` runs a separate lead.
+- A running agent: `sfy register` turns a Claude Code session that already runs into the lead.
+- Old names: an older sfy called the lead `main`. sfy still reads `models.main`, `session_rules.main`, `session_settings.main`, `show_main`, `prompts/main.md` and `prompts/main.d/` with a warning. `sfy config` lists each old name that a factory still uses, so you can rename it. The first start of this release moves a running factory to the new names and keeps its lead running. SPEC.md, section Old names of the lead, describes the move and the rollback.
 
 ## More
 

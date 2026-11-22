@@ -4,9 +4,9 @@ This page holds the details of running sfy. SPEC.md holds the full behaviour. Th
 
 ## Restart
 
-Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
+Run `sfy restart` from a terminal outside the agent sessions, or ask the lead to run it. It stops the sfy process and starts it from the installed binary. The lead, workers and reviewers keep running, and their tasks stay on disk. The lead gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
 
-At each start, the sfy process writes the flat result of the definition to `definition.toml` in the factory folder. Before it stops the old process, `sfy restart` compares the new definition with that file and prints each change. The main agent's note holds the same lines:
+At each start, the sfy process writes the flat result of the definition to `definition.toml` in the factory folder. Before it stops the old process, `sfy restart` compares the new definition with that file and prints each change. The lead's note holds the same lines:
 
 ```
 $ sfy restart
@@ -14,7 +14,7 @@ Setting models.worker changed from "sonnet" to "opus".
 The worker prompt file worker.d/writing.md was added.
 Stopped the sfy process.
 Started the sfy process.
-Told the main agent.
+Told the lead.
 ```
 
 When nothing changed, it prints "The definition did not change since the last start." The first start writes the file and reports nothing. The file and the report show the values of `session_settings.<kind>.env` as `<set>`.
@@ -25,11 +25,31 @@ The new sfy process gets the environment of the shell that ran `sfy restart`, in
 
 ## Stop and start
 
-Run `sfy down` from a terminal outside the agent sessions. It stops the main agent, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it. It does not stop a registered main agent, because sfy did not start it. It clears the registration and says so.
+Run `sfy down` from a terminal outside the agent sessions. It stops the lead, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it. It does not stop a registered lead, because sfy did not start it. It clears the registration and says so.
 
-Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process and the main agent. It tells the main agent about each task whose worker is gone.
+Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process and the lead. It tells the lead about each task whose worker is gone.
 
-If the main agent's session ended, sfy resumes the main agent's last Claude conversation. It records the conversation id in `sessions/main/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the main agent's session still runs, `sfy` runs the `show_main` template again, so the main agent appears in your terminal. Workers and reviewers always start new conversations.
+If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Workers and reviewers always start new conversations.
+
+## Old names of the lead
+
+An older sfy called the lead `main`. sfy still reads each old name as the new one, and prints a warning on stderr:
+
+| Old name | New name |
+|---|---|
+| `sfy send main <text>` | `sfy send lead <text>` |
+| `models.main` | `models.lead` |
+| `[session_rules.main]` | `[session_rules.lead]` |
+| `[session_settings.main]` | `[session_settings.lead]` |
+| `show_main` in a template set | `show_lead` |
+| `prompts/main.md` | `prompts/lead.md` |
+| `prompts/main.d/` | `prompts/lead.d/` |
+
+A config file that sets both names of one key fails to load. A `lead.d` file wins over a `main.d` file of the same name in the same folder. Run `sfy config` to list each old name that the factory still uses, under "Old names", and rename them. A later release removes the old names.
+
+To upgrade a running factory, install the new release and run `sfy restart` in each factory, one at a time. The first start moves `sessions/main/`, `inbox/main/` and `main-prompt.md` to their new names, and leaves a link with each old name. When the lead still runs in its old terminal, `<prefix>main`, sfy records that terminal in `sessions/lead/address` and keeps using it. The lead keeps its conversation, and its old `SFY_AGENT=main` still works. When that terminal ends, the next start runs the lead as `<prefix>lead`.
+
+To roll back, first check whether the lead runs as `<prefix>lead`. If it does, stop it with `sfy down`, because an older sfy would not find it and would start a second lead. Then install the older release and run `sfy restart`, or a plain `sfy` after `sfy down`. SPEC.md, section Old names of the lead, gives the full rules.
 
 ## Run headless
 
@@ -40,7 +60,7 @@ By default `sfy up` runs the sfy process in a window of your terminal tool, and 
 headless = true
 ```
 
-The key is global, and it defaults to `false`. With it, `sfy up` starts `sfy serve` as a detached process. The process leads its own session, reads stdin from `/dev/null`, runs in the factory folder and gets the same environment as a windowed process. Its stdout and stderr go to `sfy.log` in the factory folder, so `tail -f ~/.sfy/sfy.log` shows what the window showed. The main agent, the workers and the reviewers keep their windows. This works on Linux and macOS and needs no systemd or launchd.
+The key is global, and it defaults to `false`. With it, `sfy up` starts `sfy serve` as a detached process. The process leads its own session, reads stdin from `/dev/null`, runs in the factory folder and gets the same environment as a windowed process. Its stdout and stderr go to `sfy.log` in the factory folder, so `tail -f ~/.sfy/sfy.log` shows what the window showed. The lead, the workers and the reviewers keep their windows. This works on Linux and macOS and needs no systemd or launchd.
 
 - `sfy down` stops the agents and the sfy process, as without the setting.
 - To stop the sfy process alone, run `kill $(cat ~/.sfy/sfy.pid)`. The process handles `SIGTERM` by removing its socket and lock file. The agents keep running, and the next `sfy` starts the sfy process again.
@@ -50,20 +70,20 @@ The key is global, and it defaults to `false`. With it, `sfy up` starts `sfy ser
 
 ## Register a running agent
 
-A Claude Code session that already runs can become the main agent. This needs a template set with a `whoami` template, such as the tmux set. Do these steps once and then each time:
+A Claude Code session that already runs can become the lead. This needs a template set with a `whoami` template, such as the tmux set. Do these steps once and then each time:
 
 1. Run `sfy hooks install` once from a terminal outside the agent sessions. It adds sfy's idle, permission request and turn end hooks to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json`. It keeps every other setting, changes nothing when you run it again, and prints what it changed. The hooks run `sfy hook --user <event>`. They act only for the registered session and exit at once for every other session.
-2. In the session, ask the agent to run `sfy register`. It refuses when a main agent runs or when the set has no `whoami` template. Otherwise it starts the sfy process, records the address and the session id in `sessions/main/` in the factory folder, and prints the main prompt, with the additions from `prompts/main.d/`. The agent reads the prompt as its role.
+2. In the session, ask the agent to run `sfy register`. It refuses when a lead runs or when the set has no `whoami` template. Otherwise it starts the sfy process, records the address and the session id in `sessions/lead/` in the factory folder, and prints the lead's prompt, with the additions from `prompts/lead.d/`. The agent reads the prompt as its role.
 
-From then on the agent's own `sfy` commands run as `main`, and the operator-only commands `sfy`, `sfy up`, `sfy down` and `sfy hooks install` refuse for it. The prompt arrives as a tool result and not as a system prompt, so a long conversation may drop it. If the agent forgets the role, tell it to read `main-prompt.md` in the factory folder. A registered agent gets typed notes and not delivered ones, because its hooks come from the user settings and not from a session folder. `sfy restart` keeps the registered agent and sends it the restart note. When the address is gone, sfy clears the registration, and the next `sfy` starts a main agent as usual. It does not resume the registered conversation.
+From then on the agent's own `sfy` commands run as `lead`, and the operator-only commands `sfy`, `sfy up`, `sfy down` and `sfy hooks install` refuse for it. The prompt arrives as a tool result and not as a system prompt, so a long conversation may drop it. If the agent forgets the role, tell it to read `lead-prompt.md` in the factory folder. A registered agent gets typed notes and not delivered ones, because its hooks come from the user settings and not from a session folder. `sfy restart` keeps the registered agent and sends it the restart note. When the address is gone, sfy clears the registration, and the next `sfy` starts a lead as usual. It does not resume the registered conversation.
 
 `docs/register-main.md` holds the design notes.
 
 ## Prompts
 
-sfy reads prompts from two places: the machine layer `~/.sfy/prompts/`, which reaches every factory, and `prompts/` in the factory folder. A file `prompts/<kind>.md` replaces the default prompt of a kind of agent, and the factory's file wins over the machine's. The kinds are `main`, `worker`, `reviewer` and `worker-repo`.
+sfy reads prompts from two places: the machine layer `~/.sfy/prompts/`, which reaches every factory, and `prompts/` in the factory folder. A file `prompts/<kind>.md` replaces the default prompt of a kind of agent, and the factory's file wins over the machine's. The kinds are `lead`, `worker`, `reviewer` and `worker-repo`.
 
-To add lines without a copy of the whole prompt, put files that end in `.md` in `prompts/<kind>.d/` of either place. sfy merges the two folders by file name. A factory file replaces the machine file with the same name, and an empty factory file removes it. sfy appends the result in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the main agent when an addition to its prompt changed.
+To add lines without a copy of the whole prompt, put files that end in `.md` in `prompts/<kind>.d/` of either place. sfy merges the two folders by file name. A factory file replaces the machine file with the same name, and an empty factory file removes it. sfy appends the result in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the lead when an addition to its prompt changed.
 
 For example, a writing rule for every factory goes in `~/.sfy/prompts/worker.d/writing.md`. A factory that needs another rule puts its own `writing.md` in `~/.sfy/factories/acme/prompts/worker.d/`. A factory that needs no rule puts an empty `writing.md` there.
 
@@ -75,13 +95,13 @@ To give the sessions of one factory their own skills, put skill folders in `skil
 ~/.sfy/factories/acme/skills/release-notes/SKILL.md
 ```
 
-The main agent, the workers and the reviewers of that factory all get the skills. Claude Code shows each one as `factory:<skill>`, as in `factory:release-notes`. A skill for every session on the machine belongs in `~/.claude/skills` instead, so the machine layer `~/.sfy` has no `skills/` for other factories. The default factory reads `~/.sfy/skills/`, because `~/.sfy` is its factory folder.
+The lead, the workers and the reviewers of that factory all get the skills. Claude Code shows each one as `factory:<skill>`, as in `factory:release-notes`. A skill for every session on the machine belongs in `~/.claude/skills` instead, so the machine layer `~/.sfy` has no `skills/` for other factories. The default factory reads `~/.sfy/skills/`, because `~/.sfy` is its factory folder.
 
 At each session start, sfy writes a small plugin into `sessions/<name>/plugin/` of the factory folder and passes it to claude with `--plugin-dir`. The plugin holds a manifest and a link to `skills/`, so an edit to a skill applies at the next session start. A plugin folder gives a session no edit rights, so no session can change the skills without a permission grant. A link in `skills/` is fine. Run `sfy config` to see the skills that sfy found.
 
 ## A factory per folder
 
-A factory has a factory folder with its own tasks, notes, sfy process and main agent. It also has a working folder, which you work in and the main agent runs in. Stand in a folder and run `sfy up` to get the factory of that working folder. For example, `sfy up` in `~/Developer/acme` creates the factory `acme` and starts its main agent with `~/Developer/acme` as its working directory.
+A factory has a factory folder with its own tasks, notes, sfy process and lead. It also has a working folder, which you work in and the lead runs in. Stand in a folder and run `sfy up` to get the factory of that working folder. For example, `sfy up` in `~/Developer/acme` creates the factory `acme` and starts its lead with `~/Developer/acme` as its working directory.
 
 sfy writes no file in the working folder. It keeps the factory folder in `~/.sfy/factories/<name>/`. The name is the base name of the working folder in lower case, with each character outside `a-z0-9-` replaced by `-`. A second working folder with the same base name gets a suffix, as in `web-2`. The file `folder` in the factory folder records the absolute path of the working folder.
 
@@ -114,7 +134,7 @@ review_rounds = 3 # default
 ...
 
 # Prompts
-# main: base default
+# lead: base default
 # worker: base default
 #   writing.md: /home/you/.sfy/prompts/worker.d/writing.md
 ...
@@ -124,9 +144,11 @@ review_rounds = 3 # default
 
 # Factory files
 # checks
+
+# Old names
 ```
 
-Each settings line names the file that set it last, or `default`. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The skills part lists each folder in `skills/` that holds a `SKILL.md`. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
+Each settings line names the file that set it last, or `default`. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The skills part lists each folder in `skills/` that holds a `SKILL.md`. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
 
 To pick any other folder as a factory folder, set `SFY_HOME`:
 
@@ -138,11 +160,11 @@ Use the same `SFY_HOME` for every other sfy command that targets that folder, su
 
 The folder name sets a prefix. The default folder `~/.sfy` has an empty prefix. Any other folder gets its base name without a leading dot, in lower case, with each character outside `a-z0-9-` replaced by `-`, and a final `-`. The folder `~/.sfy-work` gives `sfy-work-`, and the factory `~/.sfy/factories/work` gives `work-`.
 
-The prefix goes in front of every terminal session name, so the main agent of `~/.sfy-work` runs as `sfy-work-main` and its first worker as `sfy-work-worker-t1`. It also goes in the branch of a task that started before branches took the form `<type>/<slug>`, so that task is `sfy/sfy-work-t1`. New branches carry no prefix. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
+The prefix goes in front of every terminal session name, so the lead of `~/.sfy-work` runs as `sfy-work-lead` and its first worker as `sfy-work-worker-t1`. It also goes in the branch of a task that started before branches took the form `<type>/<slug>`, so that task is `sfy/sfy-work-t1`. New branches carry no prefix. Agent names in messages, notes, `sfy send` and `status.md` stay as they are.
 
 ## Session settings
 
-sfy writes a settings file for each agent session. To add keys to the file of one kind of session, use a `[session_settings.<kind>]` table in `~/.sfy/config.toml` or in the factory's `config.toml`. The kinds are `main`, `worker` and `reviewer`. sfy copies the keys to the top level of that kind's file, and the provider decides what they mean. This example stops notifications from workers and reviewers:
+sfy writes a settings file for each agent session. To add keys to the file of one kind of session, use a `[session_settings.<kind>]` table in `~/.sfy/config.toml` or in the factory's `config.toml`. The kinds are `lead`, `worker` and `reviewer`. sfy copies the keys to the top level of that kind's file, and the provider decides what they mean. This example stops notifications from workers and reviewers:
 
 ```toml
 [session_settings.worker]
@@ -152,10 +174,10 @@ preferredNotifChannel = "notifications_disabled"
 preferredNotifChannel = "notifications_disabled"
 ```
 
-A value can be any TOML value, including an array or a table. sfy writes it unchanged as JSON. This example sets Claude Code's `attribution` object for the main agent:
+A value can be any TOML value, including an array or a table. sfy writes it unchanged as JSON. This example sets Claude Code's `attribution` object for the lead:
 
 ```toml
-[session_settings.main]
+[session_settings.lead]
 attribution = { commit = "", pr = "" }
 ```
 
@@ -171,7 +193,7 @@ allowedDomains = ["example.com"]
 
 An unknown kind is a config error.
 
-Worker and reviewer files set `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. To turn them back on, set `promptSuggestionEnabled = true` in `[session_settings.worker]` or `[session_settings.reviewer]`. The main agent keeps Claude Code's default.
+Worker and reviewer files set `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. To turn them back on, set `promptSuggestionEnabled = true` in `[session_settings.worker]` or `[session_settings.reviewer]`. The lead keeps Claude Code's default.
 
 ## Per-repo config
 
@@ -186,14 +208,14 @@ Key by key, the first file that sets a key wins. The order is `.sfy/config.toml`
 
 The keys are `no_merge` and `draft_pr`. With `draft_pr = true`, the note that asks the worker to push also says that any PR must be a draft, with `gh pr create --draft`. sfy opens no PR itself. The default is `false`.
 
-With `no_merge = true`, `sfy task integrate` refuses, and the approval note tells the main agent to leave the branch for you. You merge it by hand, then the main agent runs `sfy task complete`. One file covers every work repo below its folder:
+With `no_merge = true`, `sfy task integrate` refuses, and the approval note tells the lead to leave the branch for you. You merge it by hand, then the lead runs `sfy task complete`. One file covers every work repo below its folder:
 
 ```toml
 # ~/Developer/work/.sfy.toml
 no_merge = true
 ```
 
-A key that sfy does not know, and a global-only key such as `max_workers` or `multiplexer`, is an error that names the file. In a no-merge repo, a hook in the main agent's settings also blocks a hand `git push`, `git merge`, `git rebase` and `gh pr merge`. Other repos get no extra rule. To let the main agent run `gh pr merge` where it may merge, add `allow = ["Bash(gh pr merge *)"]` to `[session_rules.main]`. The hook does not follow a subshell, a script, `eval`, `bash -c`, an alias or `gh --repo`. SPEC.md lists what it misses.
+A key that sfy does not know, and a global-only key such as `max_workers` or `multiplexer`, is an error that names the file. In a no-merge repo, a hook in the lead's settings also blocks a hand `git push`, `git merge`, `git rebase` and `gh pr merge`. Other repos get no extra rule. To let the lead run `gh pr merge` where it may merge, add `allow = ["Bash(gh pr merge *)"]` to `[session_rules.lead]`. The hook does not follow a subshell, a script, `eval`, `bash -c`, an alias or `gh --repo`. SPEC.md lists what it misses.
 
 ## Hold the push of a task
 
@@ -208,17 +230,17 @@ hold
 The value `hold` is the only one. Any other value is a task file error. Other tasks of the same repo push as usual.
 
 - A held task's worker has no push allow rule, and its settings deny every `git push`. The hold does not rely on the prompt.
-- When the review passes, the task moves to the state `held`. sfy ends the sessions, keeps the workspace, and tells the main agent the branch name, the repo folder, and that the push waits for you.
-- Tell the main agent to push. It runs `sfy task push <id>`, and sfy starts a worker that pushes the branch. The task then moves to `approved`, and integrate or no-merge works as usual.
+- When the review passes, the task moves to the state `held`. sfy ends the sessions, keeps the workspace, and tells the lead the branch name, the repo folder, and that the push waits for you.
+- Tell the lead to push. It runs `sfy task push <id>`, and sfy starts a worker that pushes the branch. The task then moves to `approved`, and integrate or no-merge works as usual.
 - `sfy task feedback <id> <text>` on a held task keeps the hold. Feedback after the release also restores it.
 - A repo with no remote has nothing to push, so the hold changes nothing there.
 - The hold works with a `## Branch` section too. The released worker then pushes to the existing branch with its lease.
 
 ## Session rules
 
-A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `main`, `worker` and `reviewer`. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.
+A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `lead`, `worker` and `reviewer`. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.
 
-For example, a setup can let workers open a pull request and let the main agent merge it. Put the rules in the config and the instructions in two prompt additions:
+For example, a setup can let workers open a pull request and let the lead merge it. Put the rules in the config and the instructions in two prompt additions:
 
 ```toml
 [session_rules.worker]
@@ -226,7 +248,7 @@ allow = ["Bash(<tool> pr create *)"]
 excluded_commands = ["<tool> *"]
 ```
 
-The worker instructions go in `prompts/worker-repo.d/pr.md`. They tell the worker to open the pull request after `git push`. The main agent instructions go in `prompts/main.d/pr.md`. They tell it to merge the pull request instead of running `sfy task integrate`. Replace `<tool>` with the command that talks to your hosting service. The main agent's settings deny `gh pr merge`, so the tool must be another command, or you merge the pull request yourself.
+The worker instructions go in `prompts/worker-repo.d/pr.md`. They tell the worker to open the pull request after `git push`. The lead instructions go in `prompts/lead.d/pr.md`. They tell it to merge the pull request instead of running `sfy task integrate`. Replace `<tool>` with the command that talks to your hosting service. The lead's settings deny `gh pr merge`, so the tool must be another command, or you merge the pull request yourself.
 
 ## Note delivery
 
@@ -254,10 +276,10 @@ check_timeout = "40m"
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`. `docs/herdr.md` and `docs/rex.md` hold example sets. SPEC.md lists every template.
 
-The `show_main` template makes the main agent's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_main`, the main agent uses `show`. When sfy starts the main agent in place, it runs `show_main` after it records the address and before it hands the terminal to the main agent, so a template set can arrange the terminal around it, for example to open side panes. A failed `show_main` prints a warning and the main agent still starts.
+The `show_lead` template makes the lead's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_lead`, the lead uses `show`. When sfy starts the lead in place, it runs `show_lead` after it records the address and before it hands the terminal to the lead, so a template set can arrange the terminal around it, for example to open side panes. A failed `show_lead` prints a warning and the lead still starts.
 
-Every template can use `{home}`, the absolute path of the factory folder of the running factory. A `show_main` template can use it to open `notes.md` and `status.md` of the right factory. sfy also sets `SFY_HOME` to that folder in the environment of every template command, so a script that reads `SFY_HOME` finds the right factory, also when `sfy up` picks the factory from the folder rules.
+Every template can use `{home}`, the absolute path of the factory folder of the running factory. A `show_lead` template can use it to open `notes.md` and `status.md` of the right factory. sfy also sets `SFY_HOME` to that folder in the environment of every template command, so a script that reads `SFY_HOME` finds the right factory, also when `sfy up` picks the factory from the folder rules.
 
-The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the main agent in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the main agent through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
+The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the lead in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the lead through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
 
-In that case sfy records the address in `sessions/main/address` in the factory folder. It then uses the address as `{name}` for the main agent in the `send`, `notify`, `alive`, `stop`, `show` and `show_main` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the main agent in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session.
+In that case sfy records the address in `sessions/lead/address` in the factory folder. It then uses the address as `{name}` for the lead in the `send`, `notify`, `alive`, `stop`, `show` and `show_lead` templates. When `alive` reports the address gone, sfy removes the record, so the next `sfy` runs the lead in place again. `sfy down` runs `stop` on the address, so it ends that terminal or session.
