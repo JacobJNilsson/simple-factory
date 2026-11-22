@@ -52,7 +52,7 @@ A file `<home>/prompts/<kind>.md` replaces the default prompt of a kind of agent
 
 ## A factory per folder
 
-A factory is a state folder with its own tasks, notes, sfy process and main agent. Stand in a folder and run `sfy up` to get the factory of that folder. For example, `sfy up` in `~/Developer/carboncloud` creates the factory `carboncloud` and starts its main agent with `~/Developer/carboncloud` as its working directory.
+A factory is a state folder with its own tasks, notes, sfy process and main agent. Stand in a folder and run `sfy up` to get the factory of that folder. For example, `sfy up` in `~/Developer/acme` creates the factory `acme` and starts its main agent with `~/Developer/acme` as its working directory.
 
 sfy writes no file in that folder. It keeps the state in `~/.sfy/factories/<name>/`. The name is the base name of the folder in lower case, with each character outside `a-z0-9-` replaced by `-`. A second folder with the same base name gets a suffix, as in `web-2`. The file `folder` in the state folder records the absolute path of the folder.
 
@@ -62,7 +62,7 @@ Each command picks its state folder in this order:
 2. The nearest registered factory folder at or above the current folder. The home folder is never a factory folder.
 3. The default factory, `~/.sfy`.
 
-So `sfy status` in `~/Developer/carboncloud/luigi/src` shows `carboncloud`, and `sfy up` in `~/Developer/carboncloud/luigi` joins `carboncloud` without a new factory. In the home folder or in an unrelated folder, a command uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
+So `sfy status` in `~/Developer/acme/web/src` shows `acme`, and `sfy up` in `~/Developer/acme/web` joins `acme` without a new factory. In the home folder or in an unrelated folder, a command uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
 
 Every factory reads `~/.sfy/config.toml`. A `config.toml` in the factory's own state folder is optional. It overrides the shared file key by key.
 

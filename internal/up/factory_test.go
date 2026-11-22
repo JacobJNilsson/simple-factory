@@ -22,8 +22,8 @@ func factoryTestEnv(home, sfyHome string) func(string) string {
 
 func TestFactoryEnvCreatesAFactoryAndJoinsItFromASubfolder(t *testing.T) {
 	home, _ := filepath.EvalSymlinks(t.TempDir())
-	dir := filepath.Join(home, "Developer", "carboncloud")
-	sub := filepath.Join(dir, "luigi")
+	dir := filepath.Join(home, "Developer", "acme")
+	sub := filepath.Join(dir, "web")
 	if err := os.MkdirAll(sub, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -32,12 +32,12 @@ func TestFactoryEnvCreatesAFactoryAndJoinsItFromASubfolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(home, ".sfy", "factories", "carboncloud")
+	want := filepath.Join(home, ".sfy", "factories", "acme")
 	if got := env("SFY_HOME"); got != want {
 		t.Fatalf("SFY_HOME %q, want %q", got, want)
 	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 1 || entries[0].Name() != "luigi" {
-		t.Errorf("the folder holds %v, want only luigi", entries)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 || entries[0].Name() != "web" {
+		t.Errorf("the folder holds %v, want only web", entries)
 	}
 
 	env, err = factoryEnv(factoryTestEnv(home, ""), func() (string, error) { return sub, nil })
@@ -88,7 +88,7 @@ func TestSocketPathOfALongNamedFactoryStaysWithinTheLimit(t *testing.T) {
 
 func TestShowMainGetsTheFolderRulesFactory(t *testing.T) {
 	home, _ := filepath.EvalSymlinks(t.TempDir())
-	dir := filepath.Join(home, "Developer", "carboncloud")
+	dir := filepath.Join(home, "Developer", "acme")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

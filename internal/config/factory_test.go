@@ -29,11 +29,11 @@ func mkdir(t *testing.T, parts ...string) string {
 
 func TestFactoryNameUsesTheBaseNameInLowerCase(t *testing.T) {
 	cases := map[string]string{
-		"/h/carboncloud":  "carboncloud",
-		"/h/Carbon Cloud": "carbon-cloud",
-		"/h/team_A.b":     "team-a-b",
-		"/h/.hidden":      "hidden",
-		"/":               "factory",
+		"/h/acme":       "acme",
+		"/h/Acme Works": "acme-works",
+		"/h/team_A.b":   "team-a-b",
+		"/h/.hidden":    "hidden",
+		"/":             "factory",
 	}
 	for folder, want := range cases {
 		if got := config.FactoryName(folder); got != want {
@@ -44,14 +44,14 @@ func TestFactoryNameUsesTheBaseNameInLowerCase(t *testing.T) {
 
 func TestCreateFactoryRecordsTheFolderAndWritesNothingThere(t *testing.T) {
 	home := userHome(t)
-	dir := mkdir(t, home, "Developer", "carboncloud")
+	dir := mkdir(t, home, "Developer", "acme")
 
 	state, err := config.CreateFactory(home, dir)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(home, ".sfy", "factories", "carboncloud"); state != want {
+	if want := filepath.Join(home, ".sfy", "factories", "acme"); state != want {
 		t.Errorf("state folder %q, want %q", state, want)
 	}
 	if got := config.FactoryFolder(state); got != dir {
@@ -99,8 +99,8 @@ func equal(a, b []string) bool {
 
 func TestFindFactoryTakesTheNearestFolderAbove(t *testing.T) {
 	home := userHome(t)
-	outer := mkdir(t, home, "Developer", "carboncloud")
-	inner := mkdir(t, outer, "luigi")
+	outer := mkdir(t, home, "Developer", "acme")
+	inner := mkdir(t, outer, "web")
 	deep := mkdir(t, inner, "src")
 	outerState, _ := config.CreateFactory(home, outer)
 
