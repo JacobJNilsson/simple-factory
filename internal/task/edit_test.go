@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
@@ -59,6 +60,7 @@ type taskFields struct {
 	Existing      string
 	Model         string
 	ReviewerModel string
+	List          string
 	Extra         string
 
 	State    task.State
@@ -77,6 +79,7 @@ type taskFields struct {
 	Dir      string
 	Updated  time.Time
 	Checking bool
+	At       process.Position
 }
 
 var _ = taskFields(task.Task{})
@@ -85,24 +88,27 @@ func TestWithFileFieldsOfReplacesExactlyTheFileFields(t *testing.T) {
 	stored := task.Task{
 		ID: "s-ID", Title: "s-Title", Description: "s-Description", Goal: "s-Goal", Repo: "s-Repo",
 		Check: "s-Check", Type: "s-Type", Protected: []string{"s-Protected"}, After: []string{"s-After"},
-		Existing: "s-Existing", Model: "s-Model", ReviewerModel: "s-RModel", Extra: "s-Extra", State: "s-State", Before: "s-Before", Round: 3,
+		Existing: "s-Existing", Model: "s-Model", ReviewerModel: "s-RModel", List: "s-List", Extra: "s-Extra", State: "s-State", Before: "s-Before", Round: 3,
 		Archived: true, Source: "s-Source", SourceID: "s-SourceID", Progress: "s-Progress", Pending: []string{"s-Pending"},
 		Reopened: true, Pushing: true, Released: true, Branch: "s-Branch", Lease: "s-Lease", Dir: "s-Dir", Updated: time.Unix(1000, 0),
+		At: process.Position{List: "s-list", Agent: "s-agent"},
 	}
 	edited := task.Task{
 		ID: "e-ID", Title: "e-Title", Description: "e-Description", Goal: "e-Goal", Repo: "e-Repo",
 		Check: "e-Check", Type: "e-Type", Protected: []string{"e-Protected"}, After: []string{"e-After"}, Hold: true,
-		Existing: "e-Existing", Model: "e-Model", ReviewerModel: "e-RModel", Extra: "e-Extra", State: "e-State", Before: "e-Before", Round: 9,
+		Existing: "e-Existing", Model: "e-Model", ReviewerModel: "e-RModel", List: "e-List", Extra: "e-Extra", State: "e-State", Before: "e-Before", Round: 9,
 		Archived: false, Source: "e-Source", SourceID: "e-SourceID", Progress: "e-Progress", Pending: []string{"e-Pending"},
 		Reopened: false, Pushing: false, Released: false, Branch: "e-Branch", Lease: "e-Lease", Dir: "e-Dir", Updated: time.Unix(2000, 0),
+		At: process.Position{List: "e-list", Agent: "e-agent"},
 	}
 	// File fields come from edited, and every other field comes from stored.
 	want := task.Task{
 		ID: "s-ID", Title: "e-Title", Description: "e-Description", Goal: "e-Goal", Repo: "e-Repo",
 		Check: "e-Check", Type: "e-Type", Protected: []string{"e-Protected"}, After: []string{"e-After"}, Hold: true,
-		Existing: "e-Existing", Model: "e-Model", ReviewerModel: "e-RModel", Extra: "e-Extra", State: "s-State", Before: "s-Before", Round: 3,
+		Existing: "e-Existing", Model: "e-Model", ReviewerModel: "e-RModel", List: "e-List", Extra: "e-Extra", State: "s-State", Before: "s-Before", Round: 3,
 		Archived: true, Source: "s-Source", SourceID: "s-SourceID", Progress: "s-Progress", Pending: []string{"s-Pending"},
 		Reopened: true, Pushing: true, Released: true, Branch: "s-Branch", Lease: "s-Lease", Dir: "s-Dir", Updated: time.Unix(1000, 0),
+		At: process.Position{List: "s-list", Agent: "s-agent"},
 	}
 
 	got := stored.WithFileFieldsOf(edited)

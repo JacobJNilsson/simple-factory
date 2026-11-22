@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/JacobJNilsson/simple-factory/internal/drop"
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 )
 
 // State is a step in a task's life.
@@ -52,6 +53,8 @@ type Task struct {
 	Model string
 	// ReviewerModel is the optional model name of the task's reviewer from the Reviewer model section. It overrides the configured reviewer model.
 	ReviewerModel string
+	// List is the optional name of the list that the task starts in, from the List section. An empty name means the process's start list.
+	List string
 	// Extra holds the sections that sfy does not know, verbatim, so an extension can add its own.
 	Extra string
 
@@ -84,6 +87,8 @@ type Task struct {
 	Updated time.Time
 	// Checking is true while sfy runs the task's check. The engine sets it on the copies it shows, and no file holds it.
 	Checking bool
+	// At is the position that sfy moved the task to, or zero for a task whose state fields give its position.
+	At process.Position
 }
 
 // MissingError reports a required part of a task file that is absent or empty.
@@ -150,7 +155,7 @@ func Parse(md string) (Task, error) {
 		}
 		body := strings.Trim(strings.Join(buf, "\n"), "\n")
 		switch name {
-		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push", "Branch", "Model", "Reviewer model":
+		case "Description", "Goal", "Repo", "Check", "Type", "Protected", "After", "Push", "Branch", "Model", "Reviewer model", "List":
 			if _, seen := sections[name]; seen && dup == "" {
 				dup = name
 			}
@@ -249,6 +254,12 @@ func Parse(md string) (Task, error) {
 	}
 	if t.ReviewerModel, err = modelName("Reviewer model", sections["Reviewer model"]); err != nil {
 		return Task{}, err
+	}
+	if t.List, err = oneLine("List", sections["List"]); err != nil {
+		return Task{}, err
+	}
+	if t.List != "" && !process.ValidName(t.List) {
+		return Task{}, &FormatError{Problem: "invalid section", Section: "List"}
 	}
 	for _, line := range strings.Split(sections["Protected"], "\n") {
 		p := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "- "))
@@ -360,7 +371,7 @@ func (t Task) WithFileFieldsOf(edited Task) Task {
 	t.Title, t.Description, t.Goal = edited.Title, edited.Description, edited.Goal
 	t.Repo, t.Check, t.Protected = edited.Repo, edited.Check, edited.Protected
 	t.After, t.Type, t.Extra, t.Hold = edited.After, edited.Type, edited.Extra, edited.Hold
-	t.Existing, t.Model, t.ReviewerModel = edited.Existing, edited.Model, edited.ReviewerModel
+	t.Existing, t.Model, t.ReviewerModel, t.List = edited.Existing, edited.Model, edited.ReviewerModel, edited.List
 	return t
 }
 
@@ -385,6 +396,9 @@ func (t Task) Markdown() string {
 	}
 	if t.Type != "" {
 		fmt.Fprintf(&b, "\n## Type\n\n%s\n", t.Type)
+	}
+	if t.List != "" {
+		fmt.Fprintf(&b, "\n## List\n\n%s\n", t.List)
 	}
 	if t.Hold {
 		b.WriteString("\n## Push\n\nhold\n")
