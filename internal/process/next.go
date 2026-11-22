@@ -94,7 +94,7 @@ func (p Process) Next(at Position, outcome Outcome, facts Facts, output string) 
 	case outcome == Pass:
 		target = l.Then.pass(facts, output)
 	default:
-		target = l.Then.fail(at.Agent)
+		target = l.Then.FailTarget(at.Agent)
 	}
 	if target.End() {
 		return Position{}, target, nil
@@ -113,7 +113,7 @@ func (t Then) pass(facts Facts, output string) Target {
 		if target, ok := b.Shell.Pick(output); ok {
 			return target
 		}
-		return t.fail(b.Shell.Agent)
+		return t.FailTarget(b.Shell.Agent)
 	}
 	for _, c := range b.Cases {
 		if c.holds(facts) {
@@ -133,11 +133,8 @@ func (b ShellBranch) Pick(output string) (Target, bool) {
 	return Target{}, false
 }
 
-// FailTarget returns the target of a list that failed at agent.
-func (t Then) FailTarget(agent string) Target { return t.fail(agent) }
-
-// fail picks the target of a list that failed at agent.
-func (t Then) fail(agent string) Target {
+// FailTarget picks the target of a list that failed at agent.
+func (t Then) FailTarget(agent string) Target {
 	if target, ok := t.FailBy[agent]; ok {
 		return target
 	}
