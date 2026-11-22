@@ -169,7 +169,7 @@ func TestAProcessChangeAppliesAtTheNextAgent(t *testing.T) {
 	}
 }
 
-func TestTaskPushStaysTheOldNameOfTaskRelease(t *testing.T) {
+func TestTaskReleaseOfAHeldReviewStartsThePush(t *testing.T) {
 	v := newEnv(t)
 	v.heldReview(t)
 
