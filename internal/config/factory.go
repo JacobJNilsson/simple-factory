@@ -86,8 +86,8 @@ func FactoriesDir(userHome string) string {
 // DefaultHome returns the factory folder of the default factory, which is also the machine layer.
 func DefaultHome(userHome string) string { return filepath.Join(userHome, ".sfy") }
 
-// DefaultName is the name of the default factory, whose factory folder is DefaultHome.
-const DefaultName = "default"
+// defaultName is the name of the default factory, whose factory folder is DefaultHome.
+const defaultName = "default"
 
 // factoryAddress matches a factory name in an address. It holds no dot and no slash, so it never leaves the factories folder.
 var factoryAddress = regexp.MustCompile(`^[a-z0-9-]+$`)
@@ -95,7 +95,7 @@ var factoryAddress = regexp.MustCompile(`^[a-z0-9-]+$`)
 // FactoryHome returns the factory folder of the factory with the given name, as Describe names it.
 // The name default gives DefaultHome. It reports false for a name that no factory folder on this machine has.
 func FactoryHome(userHome, name string) (string, bool) {
-	if name == DefaultName {
+	if name == defaultName {
 		return DefaultHome(userHome), true
 	}
 	if !factoryAddress.MatchString(name) {
@@ -230,7 +230,7 @@ func Describe(home string, env func(string) string) (name, folder string) {
 		return filepath.Base(filepath.Clean(home)), folder
 	}
 	if filepath.Clean(home) == DefaultHome(env("HOME")) {
-		return DefaultName, home
+		return defaultName, home
 	}
 	return filepath.Base(filepath.Clean(home)), home
 }

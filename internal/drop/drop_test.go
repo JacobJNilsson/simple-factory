@@ -51,7 +51,7 @@ func TestParseRefusesABadDrop(t *testing.T) {
 		"empty body":     "To: lead\nFrom: alerts\nId: a1\n\n \n",
 		"two from lines": "To: lead\nFrom: alerts\nFrom: other\nId: a1\n\nx",
 		"not utf-8":      "To: lead\nFrom: alerts\nId: a1\n\n\xff",
-		"too large":      "To: lead\nFrom: alerts\nId: a1\n\n" + strings.Repeat("x", drop.MaxSize),
+		"too large":      "To: lead\nFrom: alerts\nId: a1\n\n" + strings.Repeat("x", 1<<20),
 	}
 	for name, raw := range cases {
 		if d, err := drop.Parse([]byte(raw)); err == nil {

@@ -17,8 +17,8 @@ import (
 	"unicode/utf8"
 )
 
-// MaxSize is the largest drop file in bytes.
-const MaxSize = 1 << 20
+// maxSize is the largest drop file in bytes.
+const maxSize = 1 << 20
 
 // The kinds of a drop.
 const (
@@ -59,16 +59,16 @@ type Drop struct {
 // Sender returns the name that sfy shows for the drop's sender.
 func (d Drop) Sender() string { return SenderPrefix + d.From }
 
-// ValidFrom reports whether name may be the stated name of a sender.
-func ValidFrom(name string) bool {
+// validFrom reports whether name may be the stated name of a sender.
+func validFrom(name string) bool {
 	return fromName.MatchString(name) && !slices.Contains(refused, name)
 }
 
 // Parse checks a drop file and returns its parts.
 // On an error, the returned drop still holds From and ID when they passed their checks, so sfy can reply to the sender.
 func Parse(raw []byte) (Drop, error) {
-	if len(raw) > MaxSize {
-		return Drop{}, fmt.Errorf("the drop has more than %d bytes", MaxSize)
+	if len(raw) > maxSize {
+		return Drop{}, fmt.Errorf("the drop has more than %d bytes", maxSize)
 	}
 	if !utf8.Valid(raw) {
 		return Drop{}, errors.New("the drop is not UTF-8")
@@ -88,7 +88,7 @@ func Parse(raw []byte) (Drop, error) {
 	}
 	var d Drop
 	var errs []error
-	if from := fields["From"]; ValidFrom(from) {
+	if from := fields["From"]; validFrom(from) {
 		d.From = from
 	} else {
 		errs = append(errs, fmt.Errorf("the From name %q is not allowed. A name has 1 to 32 characters from a-z, 0-9 and -, and is not operator, sfy, lead or main", from))
@@ -173,14 +173,14 @@ func (f Folder) New() ([]string, error) {
 	return out, nil
 }
 
-// Read returns the contents of a drop file. A file over MaxSize returns MaxSize+1 bytes, so Parse refuses it.
+// Read returns the contents of a drop file. A file over maxSize returns maxSize+1 bytes, so Parse refuses it.
 func (f Folder) Read(path string) ([]byte, error) {
 	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("drop: %w", err)
 	}
 	defer func() { _ = file.Close() }()
-	return io.ReadAll(io.LimitReader(file, MaxSize+1))
+	return io.ReadAll(io.LimitReader(file, maxSize+1))
 }
 
 func (f Folder) donePath(from, id string) string { return f.dir("done", from, id+".md") }
@@ -193,7 +193,7 @@ func (f Folder) Seen(from, id string) bool {
 
 // Known reports whether sfy took a drop of this sender, so the sender reads its replies.
 func (f Folder) Known(from string) bool {
-	if !ValidFrom(from) {
+	if !validFrom(from) {
 		return false
 	}
 	st, err := os.Stat(f.dir("done", from))
@@ -234,7 +234,7 @@ func (f Folder) Reject(path, why string) error {
 
 // Reply writes replies/<to>/<id>.md through a temporary name that starts with a dot, and a rename.
 func (f Folder) Reply(to string, r Reply) error {
-	if !ValidFrom(to) {
+	if !validFrom(to) {
 		return fmt.Errorf("drop: no reply to the name %q", to)
 	}
 	if !idName.MatchString(r.ID) {

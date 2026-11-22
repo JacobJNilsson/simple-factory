@@ -100,8 +100,8 @@ func (e *Engine) createTask(t task.Task, source string) (task.Task, string, erro
 	}
 	if t.State == task.New {
 		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID)
-		if stated(source) {
-			note += fmt.Sprintf(" It comes from %s, a name that the sender stated and nothing checked.", source)
+		if s := t.StatedSource(); s != "" {
+			note += fmt.Sprintf(" It comes from %s, a name that the sender stated and nothing checked.", s)
 		}
 		if warning != "" {
 			note += " " + warning
@@ -112,9 +112,6 @@ func (e *Engine) createTask(t task.Task, source string) (task.Task, string, erro
 	}
 	return t, warning, nil
 }
-
-// stated reports whether a task source is a name that a drop stated, which nothing checked.
-func stated(source string) bool { return strings.HasPrefix(source, drop.SenderPrefix) }
 
 func (e *Engine) taskList(req protocol.Request) (string, error) {
 	tasks, err := e.shownTasks()

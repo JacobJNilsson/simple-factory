@@ -189,7 +189,13 @@ func startDrops(eng *engine.Engine, f drop.Folder, log io.Writer) error {
 // checker returns the runner of task checks. It has the sandbox paths of a worker, and it also hides the sfy socket.
 // It hides the sessions folder of every factory, because each holds tokens.
 func checker(ctx context.Context, p parts, userHome string) taskcheck.Runner {
-	deny := append([]string{filepath.Join(p.home, "sessions"), socket(p.home)}, config.SessionFolders(userHome)...)
+	own := filepath.Join(p.home, "sessions")
+	deny := []string{own, socket(p.home)}
+	for _, f := range config.SessionFolders(userHome) {
+		if filepath.Clean(f) != filepath.Clean(own) {
+			deny = append(deny, f)
+		}
+	}
 	deny = append(deny, p.cfg.DenyRead...)
 	return taskcheck.Runner{
 		Ctx: ctx, Timeout: p.cfg.CheckTimeout,
