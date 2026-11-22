@@ -104,6 +104,16 @@ type options struct {
 	session func() string
 	// spawn starts a detached process and returns at once. Only headless mode uses it.
 	spawn func(dir string, env, argv []string, logPath string) (detached, error)
+	// move moves the factory folder from the old name of the lead to the new one. A nil move moves nothing.
+	move func() error
+}
+
+// moveToLead runs o.move. It runs before each check of whether the lead runs, because a lead that an older sfy started runs under the old name.
+func (o options) moveToLead() error {
+	if o.move == nil {
+		return nil
+	}
+	return o.move()
 }
 
 // mainDir returns the working directory of the main agent.
@@ -153,6 +163,9 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 		return nil, false, err
 	}
 	if err := ensureNotes(filepath.Join(o.home, "notes.md")); err != nil {
+		return nil, false, err
+	}
+	if err := o.moveToLead(); err != nil {
 		return nil, false, err
 	}
 	serveStarted := false

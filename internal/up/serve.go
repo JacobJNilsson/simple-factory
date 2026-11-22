@@ -53,6 +53,8 @@ type parts struct {
 	launcher launcher.Launcher
 	// agent is the provider that the launcher runs, kept for the check at start-up.
 	agent provider.Provider
+	// move moves the factory folder from the old name of the lead to the new one, as moveToLead does.
+	move func() error
 }
 
 // execInPlace changes into dir and replaces the sfy process with argv. It returns only when one of the two fails.
@@ -79,11 +81,13 @@ func newParts(env func(string) string) (parts, error) {
 	}
 	// Registered sits inside Prefixed, so a recorded address stays as the terminal tool printed it.
 	prefix := config.Prefix(home, env)
+	// The move asks the plain set, because the old terminal name has the prefix and no recorded address.
+	move := func() error { return moveToLead(home, prefix, m.Alive) }
 	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home), registration.Path(home)), prefix)
 	who, _ := m.(mux.Whoamier)
 	layers := config.Layers(home, env("HOME"))
 	agent := claude.New(cfg, home, bin, layers)
-	return parts{home: home, layers: layers, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, agent: agent, launcher: launcher.New(m, agent, logAppender{path: filepath.Join(home, logName)})}, nil
+	return parts{home: home, layers: layers, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, agent: agent, move: move, launcher: launcher.New(m, agent, logAppender{path: filepath.Join(home, logName)})}, nil
 }
 
 // logAppender appends to sfy.log on each write, so a plain sfy and sfy serve both log without holding the file open.
@@ -126,6 +130,10 @@ func Serve(ctx context.Context, env func(string) string, stderr io.Writer) error
 func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	p, err := newParts(env)
 	if err != nil {
+		return err
+	}
+	// The move comes before the socket listens, so no command finds the lead under a half-moved name.
+	if err := p.move(); err != nil {
 		return err
 	}
 	if err := checkSocketPath(socket(p.home)); err != nil {
@@ -284,7 +292,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 	}
 	return options{
 		home: p.home, layers: p.layers, dir: config.WorkFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
-		mux: p.mux, launcher: p.launcher, warn: stderr, spawn: spawnDetached, brew: runBrew, whoami: p.whoami, exec: execInPlace,
+		mux: p.mux, launcher: p.launcher, move: p.move, warn: stderr, spawn: spawnDetached, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
 		call:    func(req protocol.Request) (protocol.Answer, error) { return server.Call(sock, req) },

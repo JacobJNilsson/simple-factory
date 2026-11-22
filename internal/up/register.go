@@ -41,6 +41,9 @@ func register(o options) error {
 	if id == "" {
 		return ErrNoSession
 	}
+	if err := o.moveToLead(); err != nil {
+		return err
+	}
 	alive, err := o.launcher.Alive(mainSession)
 	if err != nil {
 		return err

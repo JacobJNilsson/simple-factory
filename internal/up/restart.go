@@ -58,6 +58,10 @@ func restart(o options) error {
 		}
 		stopped = append(stopped, "the sfy process")
 	}
+	// The check below must find a lead that an older sfy started under the old name.
+	if err := o.moveToLead(); err != nil {
+		return err
+	}
 	mainAlive, err := o.launcher.Alive(mainSession)
 	if err != nil {
 		return err
