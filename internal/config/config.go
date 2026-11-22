@@ -184,26 +184,55 @@ func Load(home string) (Config, error) {
 	return load(getconfTempDir, filepath.Join(home, "config.toml"))
 }
 
-// LoadFactory reads the operator's config.toml in the default state folder, then the factory's own config.toml on top of it.
-// Either file may be missing. A setting that the factory's file leaves out keeps the value of the operator's file.
-func LoadFactory(home, userHome string) (Config, error) {
-	paths := []string{filepath.Join(DefaultHome(userHome), "config.toml")}
-	if own := filepath.Join(home, "config.toml"); own != paths[0] {
-		paths = append(paths, own)
+// Layers returns the folders that hold a factory's definition, lowest first: the machine layer ~/.sfy, then the factory folder.
+// The default factory's folder is ~/.sfy, so it gets one folder.
+func Layers(home, userHome string) []string {
+	machine := DefaultHome(userHome)
+	if filepath.Clean(home) == filepath.Clean(machine) {
+		return []string{machine}
 	}
-	return load(getconfTempDir, paths...)
+	return []string{machine, home}
 }
 
+// configFiles returns the config.toml of each layer, lowest first.
+func configFiles(home, userHome string) []string {
+	var paths []string
+	for _, dir := range Layers(home, userHome) {
+		paths = append(paths, filepath.Join(dir, "config.toml"))
+	}
+	return paths
+}
+
+// LoadFactory merges the config.toml of each folder from Layers onto the defaults.
+// Either file may be missing. A setting that the factory's file leaves out keeps the value of the machine file.
+func LoadFactory(home, userHome string) (Config, error) {
+	return load(getconfTempDir, configFiles(home, userHome)...)
+}
+
+// load merges the files with mergeTables, decodes the result onto the defaults once, and then checks the values once.
 func load(userTempDir func() (string, error), paths ...string) (Config, error) {
-	c := defaults(userTempDir)
+	merged := rawTable{}
 	for _, path := range paths {
-		md, err := toml.DecodeFile(path, &c)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return Config{}, fmt.Errorf("config: %w", err)
+		raw, err := readTable(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
 		}
-		if key, ok := firstUnknown(md); ok {
-			return Config{}, &SettingError{Setting: key, Unknown: true}
+		if err != nil {
+			return Config{}, err
 		}
+		merged = mergeTables(merged, raw)
+	}
+	c := defaults(userTempDir)
+	var text strings.Builder
+	if err := toml.NewEncoder(&text).Encode(merged); err != nil {
+		return Config{}, fmt.Errorf("config: %w", err)
+	}
+	md, err := toml.Decode(text.String(), &c)
+	if err != nil {
+		return Config{}, fmt.Errorf("config: %w", err)
+	}
+	if key, ok := firstUnknown(md); ok {
+		return Config{}, &SettingError{Setting: key, Unknown: true}
 	}
 	if c.ReviewRounds < 1 {
 		return Config{}, &SettingError{Setting: "review_rounds"}
