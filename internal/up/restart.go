@@ -69,7 +69,7 @@ func restart(o options) error {
 // noteMain tells the running main agent that sfy restarted, and where to read a changed prompt.
 // The note is one line, because a multiplexer sends a new line as Enter.
 func (o options) noteMain() error {
-	changed, err := recordMainPrompt(o.home)
+	changed, err := recordMainPrompt(o.home, o.layers)
 	if err != nil {
 		return err
 	}

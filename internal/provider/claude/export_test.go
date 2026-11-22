@@ -9,7 +9,7 @@ import (
 
 // NewForOS returns the adapter as if it ran on goos.
 func NewForOS(cfg config.Config, home, sfyBin, goos string, uid int) adapter {
-	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: goos, uid: uid, sys: realSystem()}
+	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, layers: []string{home}, goos: goos, uid: uid, sys: realSystem()}
 }
 
 // Machine describes a fake machine for the preflight check.

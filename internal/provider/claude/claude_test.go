@@ -57,7 +57,7 @@ type settings struct {
 func setup(t *testing.T, sfyBin string) (provider.Provider, string) {
 	t.Helper()
 	home := t.TempDir()
-	return claude.New(config.Config{Allow: []string{"git", "make"}}, home, sfyBin), home
+	return claude.New(config.Config{Allow: []string{"git", "make"}}, home, sfyBin, []string{home}), home
 }
 
 // setupSandbox gives the adapter sandbox lists and a fresh HOME that holds the allow_write folders.
@@ -70,7 +70,7 @@ func setupSandbox(t *testing.T) (provider.Provider, string) {
 		DenyRead:   []string{"~/.ssh", "~/.aws"},
 		AllowWrite: []string{"~/Library/Caches", "~/go/pkg/mod"},
 	}
-	return claude.New(cfg, home, bin), home
+	return claude.New(cfg, home, bin, []string{home}), home
 }
 
 func command(t *testing.T, p provider.Provider, spec engine.SessionSpec) []string {
@@ -273,7 +273,7 @@ func TestMainSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
 func TestMainSessionRulesAllowAddsMergeRules(t *testing.T) {
 	home := t.TempDir()
 	cfg := config.Config{SessionRules: map[string]config.SessionRule{"main": {Allow: []string{"Bash(gh pr merge *)"}}}}
-	p := claude.New(cfg, home, bin)
+	p := claude.New(cfg, home, bin, []string{home})
 	command(t, p, mainSpec())
 
 	s := readSettings(t, home, "main")
@@ -323,7 +323,7 @@ func TestWorkerEnvKeepsListedVariablesAndDropsSecrets(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", "/cfg")
 	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
 	t.Setenv("HOME", "/h")
-	p := claude.New(config.Config{PassEnv: []string{"MY_PASS"}}, t.TempDir(), bin)
+	p := claude.New(config.Config{PassEnv: []string{"MY_PASS"}}, t.TempDir(), bin, nil)
 
 	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
 		c := envruntest.Parse(t, command(t, p, spec))
@@ -836,7 +836,7 @@ func TestWorkerAndReviewerBashRulesAreExact(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("HOME", t.TempDir())
 			home := t.TempDir()
-			p := claude.New(config.Config{Allow: []string{"git", "make"}}, home, bin)
+			p := claude.New(config.Config{Allow: []string{"git", "make"}}, home, bin, []string{home})
 			command(t, p, c.spec)
 
 			got := bashRules(readSettings(t, home, c.spec.Name).Permissions.Allow)
@@ -884,7 +884,7 @@ func TestSessionRulesAddAllowRulesAndExcludedCommandsForOneKind(t *testing.T) {
 	cfg := config.Config{SessionRules: map[string]config.SessionRule{
 		"worker": {Allow: []string{"Bash(tool open *)"}, ExcludedCommands: []string{"tool *"}},
 	}}
-	p := claude.New(cfg, home, bin)
+	p := claude.New(cfg, home, bin, []string{home})
 	w, r := worker(), reviewerSpec()
 	command(t, p, w)
 	command(t, p, r)
@@ -928,7 +928,7 @@ func TestReviewerHasNoPushAllowRule(t *testing.T) {
 func extraSettings(t *testing.T, kind string, cfg config.Config) config.SessionValues {
 	t.Helper()
 	home := t.TempDir()
-	p := claude.New(cfg, home, bin)
+	p := claude.New(cfg, home, bin, []string{home})
 	spec := map[string]engine.SessionSpec{"main": mainSpec(), "worker": worker(), "reviewer": reviewerSpec()}[kind]
 	command(t, p, spec)
 	b, err := os.ReadFile(settingsPath(home, spec.Name))
@@ -982,7 +982,7 @@ func TestSessionSettingsWriteNestedValuesAsJSON(t *testing.T) {
 func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
 	home := t.TempDir()
 	read := func(cfg config.Config) []byte {
-		command(t, claude.New(cfg, home, bin), worker())
+		command(t, claude.New(cfg, home, bin, []string{home}), worker())
 		b, err := os.ReadFile(settingsPath(home, worker().Name))
 		if err != nil {
 			t.Fatal(err)
@@ -999,7 +999,7 @@ func TestSessionSettingsLeaveTheFileUnchangedWithoutTables(t *testing.T) {
 
 func TestMainSettingsKeepTheFieldOrderAndNoSuggestionKey(t *testing.T) {
 	home := t.TempDir()
-	command(t, claude.New(config.Config{}, home, bin), mainSpec())
+	command(t, claude.New(config.Config{}, home, bin, []string{home}), mainSpec())
 	b, err := os.ReadFile(settingsPath(home, mainSpec().Name))
 	if err != nil {
 		t.Fatal(err)
@@ -1025,7 +1025,7 @@ func settingsWith(t *testing.T, table config.SessionValues) (settings, config.Se
 	t.Helper()
 	home := t.TempDir()
 	cfg := config.Config{SessionSettings: map[string]config.SessionValues{"worker": table}}
-	command(t, claude.New(cfg, home, bin), worker())
+	command(t, claude.New(cfg, home, bin, []string{home}), worker())
 	b, err := os.ReadFile(settingsPath(home, "worker-t1"))
 	if err != nil {
 		t.Fatal(err)

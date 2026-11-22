@@ -24,15 +24,17 @@ type adapter struct {
 	cfg    config.Config
 	home   string
 	sfyBin string
+	// layers are the folders that the role prompts come from, lowest first, as config.Layers returns them.
+	layers []string
 	goos   string
 	uid    int
 	sys    system
 }
 
-// New returns the adapter for Claude Code. The hooks in each session run sfyBin.
+// New returns the adapter for Claude Code. The hooks in each session run sfyBin, and the role prompts come from layers.
 // CONTRACT: the sfy process picks an adapter by the provider setting, so New returns the interface.
-func New(cfg config.Config, home, sfyBin string) provider.Provider {
-	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, goos: runtime.GOOS, uid: os.Getuid(), sys: realSystem()}
+func New(cfg config.Config, home, sfyBin string, layers []string) provider.Provider {
+	return adapter{cfg: cfg, home: home, sfyBin: sfyBin, layers: layers, goos: runtime.GOOS, uid: os.Getuid(), sys: realSystem()}
 }
 
 type hook struct {
@@ -99,7 +101,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if !sessionName.MatchString(spec.Name) {
 		return nil, fmt.Errorf("claude: bad session name %q", spec.Name)
 	}
-	role, err := prompts.Role(spec.Kind, a.home, spec.HasRepo)
+	role, err := prompts.Role(spec.Kind, a.layers, spec.HasRepo)
 	if err != nil {
 		return nil, err
 	}

@@ -53,8 +53,8 @@ func mainPromptPath(home string) string { return filepath.Join(home, "main-promp
 
 // recordMainPrompt saves the main prompt that a build uses now, and reports whether it differs from the saved one.
 // A missing file counts as a change, because the main agent may predate the file.
-func recordMainPrompt(home string) (changed bool, err error) {
-	text, err := prompts.For("main", home)
+func recordMainPrompt(home string, layers []string) (changed bool, err error) {
+	text, err := prompts.For("main", layers)
 	if err != nil {
 		return false, err
 	}
@@ -72,6 +72,8 @@ func recordMainPrompt(home string) (changed bool, err error) {
 // options holds what run needs, so tests can replace each part.
 type options struct {
 	home string
+	// layers are the folders that the main prompt comes from, lowest first.
+	layers []string
 	// dir is the folder of the factory. The main agent works there. It is empty for the default factory, whose main agent works in home.
 	dir    string
 	config config.Config
@@ -169,7 +171,7 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 		if w := o.launcher.TrustWarning(o.mainDir()); w != "" {
 			_, _ = fmt.Fprintln(o.warn, "sfy: warning: "+w)
 		}
-		if _, err := recordMainPrompt(o.home); err != nil {
+		if _, err := recordMainPrompt(o.home, o.layers); err != nil {
 			return nil, false, err
 		}
 		spec := engine.SessionSpec{

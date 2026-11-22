@@ -11,7 +11,7 @@ import (
 )
 
 func TestForReturnsTheEmbeddedWorkerPrompt(t *testing.T) {
-	got, err := prompts.For("worker", t.TempDir())
+	got, err := prompts.For("worker", []string{t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestForReturnsTheEmbeddedWorkerPrompt(t *testing.T) {
 
 func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
 	for _, kind := range []string{"main", "worker", "reviewer"} {
-		got, err := prompts.For(kind, t.TempDir())
+		got, err := prompts.For(kind, []string{t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -36,7 +36,7 @@ func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
 
 func TestWorkerAndReviewerPromptsKeepBackticksOutOfSfyCommands(t *testing.T) {
 	for _, kind := range []string{"worker", "reviewer"} {
-		got, err := prompts.Role(kind, t.TempDir(), false)
+		got, err := prompts.Role(kind, []string{t.TempDir()}, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,7 +55,7 @@ func TestForPrefersAFileInTheHomePromptsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := prompts.For("worker", home)
+	got, err := prompts.For("worker", []string{home})
 
 	if err != nil || got != "custom" {
 		t.Fatalf("got %q, %v", got, err)
@@ -78,8 +78,8 @@ func TestForWithoutAdditionsFolderReturnsTheDefault(t *testing.T) {
 	home := t.TempDir()
 	writePrompt(t, home, "other.d/x.md", "unrelated")
 
-	got, err := prompts.For("worker", home)
-	want, _ := prompts.For("worker", t.TempDir())
+	got, err := prompts.For("worker", []string{home})
+	want, _ := prompts.For("worker", []string{t.TempDir()})
 
 	if err != nil || got != want {
 		t.Fatalf("got %q, %v", got, err)
@@ -90,9 +90,9 @@ func TestForAppendsAdditionsInNameOrder(t *testing.T) {
 	home := t.TempDir()
 	writePrompt(t, home, "worker.d/20-b.md", "second")
 	writePrompt(t, home, "worker.d/10-a.md", "first\n")
-	base, _ := prompts.For("worker", t.TempDir())
+	base, _ := prompts.For("worker", []string{t.TempDir()})
 
-	got, err := prompts.For("worker", home)
+	got, err := prompts.For("worker", []string{home})
 
 	want := strings.TrimRight(base, "\n") + "\n\nfirst\n\nsecond"
 	if err != nil || got != want {
@@ -106,7 +106,7 @@ func TestForSkipsFilesWithoutTheMdSuffix(t *testing.T) {
 	writePrompt(t, home, "worker.d/b.md.bak", "backup")
 	writePrompt(t, home, "worker.d/c.md", "kept")
 
-	got, err := prompts.For("worker", home)
+	got, err := prompts.For("worker", []string{home})
 
 	if err != nil || !strings.HasSuffix(got, "\n\nkept") || strings.Contains(got, "skipped-txt") || strings.Contains(got, "backup") {
 		t.Fatalf("got %q, %v", got, err)
@@ -118,7 +118,7 @@ func TestForAppendsAdditionsAfterAReplacingPrompt(t *testing.T) {
 	writePrompt(t, home, "reviewer.md", "custom\n")
 	writePrompt(t, home, "reviewer.d/a.md", "extra")
 
-	got, err := prompts.For("reviewer", home)
+	got, err := prompts.For("reviewer", []string{home})
 
 	if err != nil || got != "custom\n\nextra" {
 		t.Fatalf("got %q, %v", got, err)
@@ -132,11 +132,11 @@ func TestRoleAppendsAdditionsToTheWorkerRepoPart(t *testing.T) {
 	writePrompt(t, home, "worker.d/a.md", "A")
 	writePrompt(t, home, "worker-repo.d/a.md", "R")
 
-	with, err := prompts.Role("worker", home, true)
+	with, err := prompts.Role("worker", []string{home}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	without, _ := prompts.Role("worker", home, false)
+	without, _ := prompts.Role("worker", []string{home}, false)
 
 	if with != "common\n\nA\n\nrepo\n\nR" || without != "common\n\nA" {
 		t.Fatalf("with %q, without %q", with, without)
@@ -150,13 +150,13 @@ func TestForFailsOnAnUnreadableAddition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := prompts.For("main", home); err == nil {
+	if _, err := prompts.For("main", []string{home}); err == nil {
 		t.Fatal("want an error")
 	}
 }
 
 func TestForRejectsAnUnknownKind(t *testing.T) {
-	if _, err := prompts.For("../x", t.TempDir()); err == nil {
+	if _, err := prompts.For("../x", []string{t.TempDir()}); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -173,7 +173,7 @@ var command = regexp.MustCompile("`sfy ([^`]*)`")
 
 func TestEachPromptNamesOnlyCommandsOfItsKind(t *testing.T) {
 	for kind, cmds := range allowed {
-		text, err := prompts.Role(kind, t.TempDir(), true)
+		text, err := prompts.Role(kind, []string{t.TempDir()}, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -205,7 +205,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 		"main":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "task integrate", "send", "escalate", "inbox", "restart"},
 	}
 	for kind, cmds := range required {
-		text, err := prompts.Role(kind, t.TempDir(), true)
+		text, err := prompts.Role(kind, []string{t.TempDir()}, true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -218,7 +218,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 }
 
 func TestReviewerPromptGivesTheVerdictAsAnArgument(t *testing.T) {
-	text, err := prompts.For("reviewer", t.TempDir())
+	text, err := prompts.For("reviewer", []string{t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestReviewerPromptGivesTheVerdictAsAnArgument(t *testing.T) {
 }
 
 func TestWorkerPromptWithoutARepoHasNoGitSteps(t *testing.T) {
-	text, err := prompts.Role("worker", t.TempDir(), false)
+	text, err := prompts.Role("worker", []string{t.TempDir()}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,12 +252,12 @@ func TestWorkerPromptWithoutARepoHasNoGitSteps(t *testing.T) {
 
 func TestWorkerPromptWithARepoHasBothParts(t *testing.T) {
 	home := t.TempDir()
-	base, err := prompts.Role("worker", home, false)
+	base, err := prompts.Role("worker", []string{home}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	text, err := prompts.Role("worker", home, true)
+	text, err := prompts.Role("worker", []string{home}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestWorkerPromptWithARepoHasBothParts(t *testing.T) {
 
 func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
 	for _, kind := range []string{"main", "worker", "reviewer", prompts.WorkerRepoPart} {
-		text, err := prompts.For(kind, t.TempDir())
+		text, err := prompts.For(kind, []string{t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -285,7 +285,7 @@ func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
 }
 
 func TestMainPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
-	text, err := prompts.For("main", t.TempDir())
+	text, err := prompts.For("main", []string{t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,11 +298,11 @@ func TestMainPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
 
 func TestOnlyTheWorkerGetsTheRepoPart(t *testing.T) {
 	for _, kind := range []string{"main", "reviewer"} {
-		withRepo, err := prompts.Role(kind, t.TempDir(), true)
+		withRepo, err := prompts.Role(kind, []string{t.TempDir()}, true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		plain, _ := prompts.For(kind, t.TempDir())
+		plain, _ := prompts.For(kind, []string{t.TempDir()})
 		if withRepo != plain {
 			t.Errorf("%s prompt changes with a repo", kind)
 		}
@@ -320,8 +320,8 @@ func TestEachWorkerPartCanBeOverridden(t *testing.T) {
 		}
 	}
 
-	with, _ := prompts.Role("worker", home, true)
-	without, _ := prompts.Role("worker", home, false)
+	with, _ := prompts.Role("worker", []string{home}, true)
+	without, _ := prompts.Role("worker", []string{home}, false)
 
 	if with != "common\n\nrepo" || without != "common" {
 		t.Fatalf("with %q, without %q", with, without)

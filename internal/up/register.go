@@ -66,7 +66,7 @@ func register(o options) error {
 			return err
 		}
 	}
-	if _, err := recordMainPrompt(o.home); err != nil {
+	if _, err := recordMainPrompt(o.home, o.layers); err != nil {
 		return err
 	}
 	if _, err := (identity.Folder{Home: o.home}).Issue(mainSession); err != nil {
@@ -75,7 +75,7 @@ func register(o options) error {
 	if err := o.record(address, registration.Record{ID: id, Dir: dir}); err != nil {
 		return err
 	}
-	text, err := prompts.For("main", o.home)
+	text, err := prompts.For("main", o.layers)
 	if err != nil {
 		return err
 	}

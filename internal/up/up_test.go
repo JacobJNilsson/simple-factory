@@ -137,8 +137,9 @@ func newRig(t *testing.T) *rig {
 	l := &fakeLauncher{fakeMux: m}
 	out := &bytes.Buffer{}
 	errb := &bytes.Buffer{}
+	home := t.TempDir()
 	r := &rig{m: m, l: l, out: out, err: errb, o: options{
-		home: t.TempDir(), config: config.Config{Models: config.Models{Main: "opus"}},
+		home: home, layers: []string{home}, config: config.Config{Models: config.Models{Main: "opus"}},
 		bin: "/bin/sfy", environ: []string{"PATH=/usr/bin"},
 		mux: m, launcher: l, answers: m.probe,
 		wait: time.Second, poll: time.Millisecond, out: out, warn: errb,

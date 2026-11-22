@@ -1,4 +1,5 @@
 // Package prompts holds the default agent prompts and finds the one to use.
+// A prompt comes from a list of layer folders, lowest first, such as the machine layer ~/.sfy and then the factory folder.
 package prompts
 
 import (
@@ -6,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -15,17 +18,30 @@ import (
 var defaults embed.FS
 
 // WorkerRepoPart is the kind of the worker prompt part that only a task with a repo gets.
-// A file <home>/prompts/worker-repo.md replaces its default.
+// A file prompts/worker-repo.md in a layer replaces its default.
 const WorkerRepoPart = "worker-repo"
+
+// DefaultBase is the base source that Sources names when no layer has a <kind>.md file.
+const DefaultBase = "default"
+
+// Addition is one file of a kind's additions, in the order that sfy appends them.
+type Addition struct {
+	// Name is the file name, which decides the order and which file replaces which.
+	Name string
+	// File is the path of the file that wins for Name.
+	File string
+	// Removed is true when File is empty, so the addition of that name drops out of the prompt.
+	Removed bool
+}
 
 // Role returns the prompt for a session of kind. A worker on a task with a repo gets the
 // worker prompt followed by the repo part. Any other session gets the prompt of its kind only.
-func Role(kind, home string, hasRepo bool) (string, error) {
-	base, err := For(kind, home)
+func Role(kind string, layers []string, hasRepo bool) (string, error) {
+	base, err := For(kind, layers)
 	if err != nil || kind != "worker" || !hasRepo {
 		return base, err
 	}
-	part, err := For(WorkerRepoPart, home)
+	part, err := For(WorkerRepoPart, layers)
 	if err != nil {
 		return "", err
 	}
@@ -33,29 +49,83 @@ func Role(kind, home string, hasRepo bool) (string, error) {
 }
 
 // For returns the prompt for a kind of agent: "main", "worker", "reviewer" or WorkerRepoPart.
-// A file <home>/prompts/<kind>.md replaces the default.
-// The files ending in .md in <home>/prompts/<kind>.d/ follow in name order, each after a blank line.
-func For(kind, home string) (string, error) {
-	switch kind {
-	case "main", "worker", "reviewer", WorkerRepoPart:
-	default:
-		return "", fmt.Errorf("prompts: unknown kind %q", kind)
+// The last layer with prompts/<kind>.md gives the base, else the embedded default does.
+// The .md files of prompts/<kind>.d/ in all layers follow in name order, each after a blank line, as appendAdditions merges them.
+func For(kind string, layers []string) (string, error) {
+	if err := checkKind(kind); err != nil {
+		return "", err
 	}
-	text, err := base(kind, home)
+	text, err := base(kind, layers)
 	if err != nil {
 		return "", err
 	}
-	return appendAdditions(text, filepath.Join(home, "prompts", kind+".d"))
+	return appendAdditions(text, additionDirs(kind, layers))
 }
 
-// base returns the replacing file of a kind, or the embedded default.
-func base(kind, home string) (string, error) {
-	b, err := os.ReadFile(filepath.Join(home, "prompts", kind+".md"))
-	if err == nil {
-		return string(b), nil
+// Sources returns the file of a kind's base prompt, or DefaultBase, and its additions in the order that sfy appends them.
+func Sources(kind string, layers []string) (base string, additions []Addition, err error) {
+	if err := checkKind(kind); err != nil {
+		return "", nil, err
 	}
-	if !errors.Is(err, fs.ErrNotExist) {
-		return "", fmt.Errorf("prompts: %w", err)
+	base = DefaultBase
+	if path, ok, err := lastBase(kind, layers); err != nil {
+		return "", nil, err
+	} else if ok {
+		base = path
+	}
+	merged, err := mergeAdditions(additionDirs(kind, layers))
+	if err != nil {
+		return "", nil, err
+	}
+	for _, m := range merged {
+		additions = append(additions, m.Addition)
+	}
+	return base, additions, nil
+}
+
+func checkKind(kind string) error {
+	switch kind {
+	case "main", "worker", "reviewer", WorkerRepoPart:
+		return nil
+	}
+	return fmt.Errorf("prompts: unknown kind %q", kind)
+}
+
+func additionDirs(kind string, layers []string) []string {
+	dirs := make([]string, 0, len(layers))
+	for _, l := range layers {
+		dirs = append(dirs, filepath.Join(l, "prompts", kind+".d"))
+	}
+	return dirs
+}
+
+// lastBase returns the <kind>.md file of the last layer that has one.
+func lastBase(kind string, layers []string) (string, bool, error) {
+	for _, l := range slices.Backward(layers) {
+		path := filepath.Join(l, "prompts", kind+".md")
+		_, err := os.Stat(path)
+		if err == nil {
+			return path, true, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", false, fmt.Errorf("prompts: %w", err)
+		}
+	}
+	return "", false, nil
+}
+
+// base returns the text of the last layer's replacing file of a kind, or the embedded default.
+func base(kind string, layers []string) (string, error) {
+	path, ok, err := lastBase(kind, layers)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("prompts: %w", err)
+		}
+		return string(b), nil
 	}
 	d, err := defaults.ReadFile("defaults/" + kind + ".md")
 	if err != nil {
@@ -64,24 +134,57 @@ func base(kind, home string) (string, error) {
 	return string(d), nil
 }
 
-// appendAdditions appends each .md file of dir to text, in name order. A missing dir adds nothing.
-func appendAdditions(text, dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return text, nil
-	}
+// appendAdditions appends the additions of dirs to text, in name order.
+// A file in a later dir replaces the file of the same name in an earlier dir, and an empty file removes it.
+func appendAdditions(text string, dirs []string) (string, error) {
+	merged, err := mergeAdditions(dirs)
 	if err != nil {
-		return "", fmt.Errorf("prompts: %w", err)
+		return "", err
 	}
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
-			continue
+	for _, m := range merged {
+		if !m.Removed {
+			text = strings.TrimRight(text, "\n") + "\n\n" + m.text
 		}
-		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			return "", fmt.Errorf("prompts: %w", err)
-		}
-		text = strings.TrimRight(text, "\n") + "\n\n" + string(b)
 	}
 	return text, nil
+}
+
+// addition is an Addition with the text of its file.
+type addition struct {
+	Addition
+	text string
+}
+
+// mergeAdditions collects the .md files of dirs by name, where a later dir wins, and returns them in name order.
+// A missing dir adds nothing. A file that holds only white space counts as empty.
+func mergeAdditions(dirs []string) ([]addition, error) {
+	winners := map[string]string{}
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("prompts: %w", err)
+		}
+		for _, e := range entries {
+			if e.IsDir() || filepath.Ext(e.Name()) != ".md" {
+				continue
+			}
+			winners[e.Name()] = filepath.Join(dir, e.Name())
+		}
+	}
+	var out []addition
+	for _, name := range slices.Sorted(maps.Keys(winners)) {
+		b, err := os.ReadFile(winners[name])
+		if err != nil {
+			return nil, fmt.Errorf("prompts: %w", err)
+		}
+		text := string(b)
+		out = append(out, addition{
+			Addition: Addition{Name: name, File: winners[name], Removed: strings.TrimSpace(text) == ""},
+			text:     text,
+		})
+	}
+	return out, nil
 }

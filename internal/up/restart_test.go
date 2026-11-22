@@ -22,7 +22,7 @@ func runningRig(t *testing.T) *rig {
 	r.m.alive["sfy"] = true
 	r.m.alive["main"] = true
 	r.m.alive["worker-t1"] = true
-	if _, err := recordMainPrompt(r.o.home); err != nil {
+	if _, err := recordMainPrompt(r.o.home, r.o.layers); err != nil {
 		t.Fatal(err)
 	}
 	return r

@@ -43,7 +43,9 @@ func socket(home string) string { return filepath.Join(home, "sfy.sock") }
 
 // parts is what Serve and Command both build from the config.
 type parts struct {
-	home     string
+	home string
+	// layers are the folders of the factory's definition, lowest first, as config.Layers returns them.
+	layers   []string
 	cfg      config.Config
 	bin      string
 	mux      mux.Mux
@@ -79,8 +81,9 @@ func newParts(env func(string) string) (parts, error) {
 	prefix := config.Prefix(home, env)
 	m = mux.Prefixed(mux.Registered(m, prefix+mainSession, mainAddressPath(home), registration.Path(home)), prefix)
 	who, _ := m.(mux.Whoamier)
-	agent := claude.New(cfg, home, bin)
-	return parts{home: home, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, agent: agent, launcher: launcher.New(m, agent, logAppender{path: filepath.Join(home, logName)})}, nil
+	layers := config.Layers(home, env("HOME"))
+	agent := claude.New(cfg, home, bin, layers)
+	return parts{home: home, layers: layers, cfg: cfg, bin: bin, mux: m, whoami: who.Whoami, agent: agent, launcher: launcher.New(m, agent, logAppender{path: filepath.Join(home, logName)})}, nil
 }
 
 // logAppender appends to sfy.log on each write, so a plain sfy and sfy serve both log without holding the file open.
@@ -260,7 +263,7 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 		return options{}, err
 	}
 	return options{
-		home: p.home, dir: config.FactoryFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
+		home: p.home, layers: p.layers, dir: config.FactoryFolder(p.home), config: p.cfg, bin: p.bin, environ: environ,
 		mux: p.mux, launcher: p.launcher, warn: stderr, spawn: spawnDetached, brew: runBrew, whoami: p.whoami, exec: execInPlace,
 		session: func() string { return claude.CurrentSession(env) },
 		answers: func() bool { return server.Ping(sock, probeTimeout) == nil },
