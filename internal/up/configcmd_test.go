@@ -62,6 +62,21 @@ func TestShowConfigNamesTheSourceOfEachKeyAndListsTheFactoryFiles(t *testing.T) 
 	}
 }
 
+func TestShowConfigListsTheSkillsAndNotTheSkillsFolderAsAFactoryFile(t *testing.T) {
+	env, _, home := configFactory(t)
+	writeTestFile(t, filepath.Join(home, "skills", "review", "SKILL.md"), "---\nname: review\n---\n")
+	writeTestFile(t, filepath.Join(home, "skills", "draft", "notes.txt"), "no skill file\n")
+
+	got := showConfig(t, env)
+
+	if want := "\n# Skills\n# review\n\n# Factory files\n"; !strings.Contains(got, want) {
+		t.Errorf("output lacks %q:\n%s", want, got)
+	}
+	if strings.Contains(got, "# draft") || strings.Contains(got, "# skills\n") {
+		t.Errorf("output lists a folder without a skill file or the skills folder:\n%s", got)
+	}
+}
+
 func TestShowConfigNamesTheConfigDFileBehindAKey(t *testing.T) {
 	env, _, home := configFactory(t)
 	part := filepath.Join(home, "config.d", "50-shared.toml")

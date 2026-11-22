@@ -24,7 +24,7 @@ var promptKinds = []string{"main", "worker", prompts.WorkerRepoPart, "reviewer"}
 const hiddenValue = "<set>"
 
 // ShowConfig prints the flat result of the factory that config.Home finds: the settings with the file behind each key,
-// the prompt files of each kind in append order, and the factory files. It reads files only and creates no factory.
+// the prompt files of each kind in append order, the skills, and the factory files. It reads files only and creates no factory.
 func ShowConfig(env func(string) string, stdout io.Writer) error {
 	home, userHome := config.Home(env), env("HOME")
 	cfg, err := config.LoadFactory(home, userHome)
@@ -46,6 +46,14 @@ func ShowConfig(env func(string) string, stdout io.Writer) error {
 		if err := writePrompts(&out, kind, layers); err != nil {
 			return err
 		}
+	}
+	skills, err := config.Skills(home)
+	if err != nil {
+		return err
+	}
+	out.WriteString("\n# Skills\n")
+	for _, name := range skills {
+		fmt.Fprintf(&out, "# %s\n", name)
 	}
 	files, err := config.FactoryFiles(home, userHome)
 	if err != nil {

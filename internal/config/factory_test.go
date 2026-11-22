@@ -239,6 +239,28 @@ func TestFactoryFilesOfTheDefaultFactoryLeaveOutStateDefinitionAndFactories(t *t
 	}
 }
 
+func TestSkillsListsTheFoldersWithASkillFileAndFollowsLinks(t *testing.T) {
+	home := t.TempDir()
+	if got, err := config.Skills(home); err != nil || got != nil {
+		t.Fatalf("no skills folder: got %v, %v", got, err)
+	}
+	shared := mkdir(t, t.TempDir(), "shared")
+	if err := os.WriteFile(filepath.Join(shared, "SKILL.md"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	skills := mkdir(t, home, "skills")
+	mkdir(t, skills, "empty")
+	if err := os.Symlink(shared, filepath.Join(skills, "linked")); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := config.Skills(home)
+
+	if err != nil || !equal(got, []string{"linked"}) {
+		t.Fatalf("got %v, %v, want linked", got, err)
+	}
+}
+
 func TestHeaderNamesTheFactoryAndItsFolder(t *testing.T) {
 	home := userHome(t)
 	dir := mkdir(t, home, "work")

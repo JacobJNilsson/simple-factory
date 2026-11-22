@@ -21,7 +21,33 @@ var StateNames = []string{
 }
 
 // definitionNames are the names in a factory folder that say how sfy behaves.
-var definitionNames = []string{"config.toml", "config.d", "prompts"}
+var definitionNames = []string{"config.toml", "config.d", "prompts", skillsName}
+
+// skillsName is the folder in a factory folder that holds the skills of the factory's sessions.
+const skillsName = "skills"
+
+// SkillsDir returns the skills folder of the factory folder home. The machine layer has none of its own.
+func SkillsDir(home string) string { return filepath.Join(home, skillsName) }
+
+// Skills lists the names of the folders in the skills folder of home that hold a SKILL.md, in name order.
+// It follows links, and a missing skills folder gives no names.
+func Skills(home string) ([]string, error) {
+	entries, err := os.ReadDir(SkillsDir(home))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		st, err := os.Stat(filepath.Join(SkillsDir(home), e.Name(), "SKILL.md"))
+		if err == nil && st.Mode().IsRegular() {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
+}
 
 // FactoryFiles lists the names in the factory folder home that are neither state nor definition, such as a checks folder that a factory repo installed.
 // It leaves out the folder file, the main agent's notes.md, and the factories folder of the default factory.
