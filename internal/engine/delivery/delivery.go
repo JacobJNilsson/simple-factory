@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/drop"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 )
 
@@ -453,9 +454,17 @@ func (d *Delivery) reachable(name string) bool {
 func formatMessages(msgs []store.Message) string {
 	var b strings.Builder
 	for _, m := range msgs {
-		fmt.Fprintf(&b, "From %s:\n%s\n\n", m.From, m.Body)
+		fmt.Fprintf(&b, "From %s:\n%s\n\n", sender(m.From), m.Body)
 	}
 	return b.String()
+}
+
+// sender returns how a note names the sender. A stated name says that nothing checked it, so it never reads as a checked sender.
+func sender(from string) string {
+	if strings.HasPrefix(from, drop.SenderPrefix) {
+		return from + ", a name that the sender stated and nothing checked"
+	}
+	return from
 }
 
 func messageIDs(msgs []store.Message) []string {

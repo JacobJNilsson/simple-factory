@@ -94,6 +94,7 @@ sfy keeps its state in `~/.sfy`:
 - `notes.md` holds the lead's notes.
 - `status.md` holds the current state of all tasks.
 - `sessions/<name>/note.md` holds the notes and messages that sfy delivers to a Claude Code session, until the session's hook reads them.
+- `drop/` holds the files that programs drop for the lead, as the section Send from a program describes.
 - `config.toml` holds your settings.
 
 ## Everyday commands
@@ -108,6 +109,53 @@ sfy keeps its state in `~/.sfy`:
 | `sfy config` | Prints the factory's merged settings and prompt files, with the file behind each. |
 | `sfy send lead <text>` | Sends a message to the lead. The operator may send only to `lead`. The lead may send to any agent, and to `<factory>/lead`, the lead of another factory on the machine. That message names its sender as `<factory>/lead`. |
 | `sfy help` | Lists every command. |
+
+## Send from a program
+
+A program with no sfy session, such as a poller, a timer or a script, sends to the lead of a factory with a file. It needs no sfy binary, and the factory may be down. sfy shows the sender as `drop:<name>`, a name that nothing checks, and never as the operator.
+
+A drop is a UTF-8 file of at most 1 MiB, with header lines, a blank line and the body:
+
+```
+To: lead
+From: alerts
+Id: alert-4711
+Kind: task
+
+# Disk full on db-2
+
+## Description
+
+The disk of db-2 is 95% full.
+
+## Goal
+
+The disk has 20% free space.
+```
+
+- `To` is `lead`.
+- `From` is your program's name: 1 to 32 characters from `a-z`, `0-9` and `-`. sfy refuses `operator`, `sfy`, `lead` and `main`.
+- `Id` is your id for this item, such as the id of the source item. It has 1 to 64 characters from `A-Z`, `a-z`, `0-9`, `.`, `_` and `-`.
+- `Kind` is `message`, the default, or `task`. For `task`, the body is a task file. The task starts in `new`, and the lead prepares it.
+
+To drop a file:
+
+1. Pick the factory folder, such as `~/.sfy/factories/web`, or `~/.sfy` for the default factory. Never create `drop/` yourself. A missing folder means that the factory does not exist on this machine.
+2. Name the file `<time>-<from>-<id>.md`, where `<time>` sorts, such as the output of `date +%s%N`.
+3. Write the file to `drop/tmp/` under that name.
+4. Rename it into `drop/new/` with `mv`. When the rename succeeds, the drop is delivered. sfy takes it at once, or at its next start, in name order.
+5. To send the same item again, reuse its `Id`. sfy skips a second drop with the same `From` and `Id` for 30 days.
+
+In shell:
+
+```sh
+dir=~/.sfy/factories/web/drop
+file="$(date +%s%N)-alerts-$id.md"
+printf 'To: lead\nFrom: alerts\nId: %s\nKind: task\n\n%s\n' "$id" "$body" > "$dir/tmp/$file"
+mv "$dir/tmp/$file" "$dir/new/$file"
+```
+
+sfy moves a drop that fails a check to `drop/rejected/`, with the reason in a file beside it that ends in `.why`. SPEC.md, section Dropped messages, holds the full rules.
 
 ## Configure
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/JacobJNilsson/simple-factory/internal/drop"
 )
 
 // State is a step in a task's life.
@@ -59,7 +61,7 @@ type Task struct {
 	Round  int
 	// Archived hides a done or cancelled task from the default views. The task keeps its state.
 	Archived bool
-	// Source is "lead" for the lead, otherwise the creator's name.
+	// Source is "lead" for the lead, otherwise the creator's name. A drop's stated name has the form drop:<name>.
 	Source string
 	// Progress is the worker's latest progress report.
 	Progress string
@@ -304,6 +306,22 @@ func (t Task) WaitingOn(all []Task) []string {
 		}
 	}
 	return waiting
+}
+
+// StatedSource returns the source of a task that a drop created, such as drop:alerts, and an empty string for any other task.
+func (t Task) StatedSource() string {
+	if strings.HasPrefix(t.Source, drop.SenderPrefix) {
+		return t.Source
+	}
+	return ""
+}
+
+// ShownTitle returns the title for a list or a table. A task that a drop created names its source, as in "Disk full (from drop:alerts)".
+func (t Task) ShownTitle() string {
+	if s := t.StatedSource(); s != "" {
+		return t.Title + " (from " + s + ")"
+	}
+	return t.Title
 }
 
 // Label returns the state for a list or a table. A queued task that waits on others shows them, as in "queued (after t6, t8)".

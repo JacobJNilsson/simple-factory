@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/drop"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/launcher"
@@ -164,7 +165,25 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng.SetRegistration(registration.Folder{Home: p.home})
 	eng.SetAuth(identity.Folder{Home: p.home})
 	eng.SetFactories(machine{home: p.home, env: env})
+	if err := startDrops(eng, drop.Folder{Home: p.home}, log); err != nil {
+		return err
+	}
 	return server.Serve(ctx, socket(p.home), eng, tickEvery, log)
+}
+
+// startDrops creates the folders that senders write, removes old records, and takes the drops that arrived while sfy was down.
+// Only a folder that cannot be created stops the start. Any other failure goes to the log, and the next tick tries again.
+func startDrops(eng *engine.Engine, f drop.Folder, log io.Writer) error {
+	if err := f.Prepare(); err != nil {
+		return err
+	}
+	eng.SetDrops(f)
+	for _, err := range []error{f.Prune(time.Now()), eng.PickUpDrops()} {
+		if err != nil {
+			_, _ = fmt.Fprintf(log, "%s drops: %v\n", time.Now().Format(time.RFC3339), err)
+		}
+	}
+	return nil
 }
 
 // checker returns the runner of task checks. It has the sandbox paths of a worker, and it also hides the sfy socket.

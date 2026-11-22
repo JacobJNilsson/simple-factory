@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/JacobJNilsson/simple-factory/internal/drop"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
@@ -52,44 +53,68 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	t.State, t.Source = task.New, "operator"
+	source := "operator"
 	if req.Caller.Agent == "lead" {
-		t.State, t.Source = task.Queued, "lead"
+		source = "lead"
+	}
+	t, warning, err := e.createTask(t, source)
+	if err != nil {
+		return "", err
+	}
+	if warning != "" {
+		// The id stays alone on the first line, so a program that reads the id still works.
+		return t.ID + "\n" + warning, nil
+	}
+	return t.ID, nil
+}
+
+// createTask gives a parsed task its id and stores it. A task of the lead starts in queued, and any other in new, with a note to the lead.
+// It returns the stored task and a warning about an untrusted repo folder, which is empty when the folder is trusted.
+func (e *Engine) createTask(t task.Task, source string) (task.Task, string, error) {
+	var err error
+	t.State, t.Source = task.New, source
+	if source == "lead" {
+		t.State = task.Queued
 	}
 	if t.ID, err = e.st.NextID(); err != nil {
-		return "", err
+		return t, "", err
 	}
 	if err := e.checkAfter(t); err != nil {
-		return "", err
+		return t, "", err
 	}
 	if err := e.checkExisting(t); err != nil {
-		return "", err
+		return t, "", err
 	}
 	t.Updated = e.c.Now()
 	if err := e.st.Create(t); err != nil {
-		return "", err
+		return t, "", err
 	}
 	if err := e.refreshStatus(); err != nil {
-		return "", err
+		return t, "", err
 	}
 	warning := ""
 	if t.Repo != "" {
 		if w := e.l.TrustWarning(e.w.RepoFolder(t.Repo)); w != "" {
-			warning = " Warning: " + w
+			warning = "Warning: " + w
 		}
 	}
 	if t.State == task.New {
-		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID) + warning
+		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID)
+		if stated(source) {
+			note += fmt.Sprintf(" It comes from %s, a name that the sender stated and nothing checked.", source)
+		}
+		if warning != "" {
+			note += " " + warning
+		}
 		if err := e.message("lead", "sfy", note); err != nil {
-			return "", err
+			return t, warning, err
 		}
 	}
-	if warning != "" {
-		// The id stays alone on the first line, so a program that reads the id still works.
-		return t.ID + "\n" + strings.TrimSpace(warning), nil
-	}
-	return t.ID, nil
+	return t, warning, nil
 }
+
+// stated reports whether a task source is a name that a drop stated, which nothing checked.
+func stated(source string) bool { return strings.HasPrefix(source, drop.SenderPrefix) }
 
 func (e *Engine) taskList(req protocol.Request) (string, error) {
 	tasks, err := e.shownTasks()
@@ -102,7 +127,7 @@ func (e *Engine) taskList(req protocol.Request) (string, error) {
 		if t.Archived != archived {
 			continue
 		}
-		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, t.Label(tasks), t.Title)
+		fmt.Fprintf(&b, "%s\t%s\t%s\n", t.ID, t.Label(tasks), t.ShownTitle())
 	}
 	return b.String(), nil
 }
@@ -127,6 +152,9 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 		b.WriteString("Archived: yes\n")
 	}
 	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n", t.Round, t.Progress)
+	if s := t.StatedSource(); s != "" {
+		fmt.Fprintf(&b, "Source: %s, a name that the sender stated and nothing checked\n", s)
+	}
 	if branch := e.w.BranchOf(t); branch != "" {
 		fmt.Fprintf(&b, "Branch: %s\n", branch)
 	}

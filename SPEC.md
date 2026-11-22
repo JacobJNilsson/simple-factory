@@ -132,7 +132,7 @@ A task moves through these states:
   |---|---|---|
   | `config.d/`, `config.toml`, `prompts/`, `skills/` | the factory, through a factory repo or by hand | yes, they are the definition |
   | `folder` | `sfy up`, or a factory repo's install script | yes, to find the working folder |
-  | `tasks/`, `work/`, `repos/`, `sessions/`, `inbox/`, `next-id`, `status.md`, `lead-prompt.md`, the link `main-prompt.md`, `definition.toml`, `sfy.log`, `sfy.sock`, `sfy.lock`, `sfy.pid`, `drop/` | sfy | no, they are state |
+  | `tasks/`, `work/`, `repos/`, `sessions/`, `inbox/`, `next-id`, `status.md`, `lead-prompt.md`, the link `main-prompt.md`, `definition.toml`, `sfy.log`, `sfy.sock`, `sfy.lock`, `sfy.pid`, `drop/` | sfy, and programs write drops into `drop/` as the section Dropped messages describes | no, they are state |
   | `notes.md` | the lead | no, the lead reads it |
   | any other name, such as `checks/` | the factory | no |
 
@@ -178,9 +178,35 @@ A task moves through these states:
 - The relay keeps workers and reviewers out: they may not run `sfy send`, and their sandbox hides the `sessions` folder of every factory, as the Permissions section says. A command in `excluded_commands` runs outside the sandbox and can read every token file, as it can read any file of the operator. A lead runs as the operator's user with no sandbox, so a lead could read the token of another factory's lead. The relay trusts leads as the operator does.
 - Factories on other machines are out of scope. A Unix socket and a token file reach one machine only.
 
+### Dropped messages
+
+A program with no sfy session, such as a poller, a timer or a script, has no token. It sends to the lead of a factory by dropping a file into the factory's drop folder. A file needs no sfy binary, no socket and no running sfy process. A drop states the sender's name, and nothing checks it.
+
+- **The folder.** The drop folder is `drop/` in the factory folder: `~/.sfy/drop/` for the default factory and `~/.sfy/factories/<name>/drop/` for any other. The sfy process creates `drop/tmp/` and `drop/new/` at start. Only sfy writes `drop/done/`, `drop/rejected/` and `drop/replies/`. A program never creates `drop/`, because a missing folder means that the factory does not exist.
+- **The format.** A drop is a UTF-8 file of at most 1 MiB. It holds header lines of the form `Key: value`, a blank line and the body, like a message file in an inbox. sfy ignores other header lines.
+
+  | Header | Meaning | Required |
+  |---|---|---|
+  | `To` | `lead`, or the old name `main`. Any other name rejects the drop. | yes |
+  | `From` | The stated name of the sender. It matches `[a-z0-9][a-z0-9-]{0,31}`, and sfy refuses `operator`, `sfy`, `lead` and `main`. | yes |
+  | `Id` | The sender's id for this drop, with 1 to 64 characters from `A-Z`, `a-z`, `0-9`, `.`, `_` and `-`, starting with a letter or a digit. | yes |
+  | `Kind` | `message` or `task`. For `task`, the body is a task file, as `sfy task new` takes it. | no, `message` by default |
+
+- **The steps of a sender.** The sender names the file `<time>-<from>-<id>.md`, where `<time>` sorts, such as the output of `date +%s%N`. It writes the file to `drop/tmp/` and renames it into `drop/new/`. The drop is delivered when the rename succeeds. Two senders with the same `Id` then still use two file names. To send the same item again, the sender reuses its `Id`.
+- **What sfy does.** On each tick, and once at start before the socket listens, sfy reads `drop/new/` in name order. sfy takes `From` and `Id` from the headers, never from the file name. For each file:
+  1. It checks the size, the headers and the stated name. A failed check moves the file to `drop/rejected/`, writes the reason to a file beside it with the extra suffix `.why`, and logs it in `sfy.log`.
+  2. When `drop/done/<from>/<id>.md` exists, the drop is a duplicate. sfy logs it and removes the file.
+  3. For `Kind: message`, sfy stores the body in the lead's inbox with `From: drop:<from>`, and the lead gets it through the note path.
+  4. For `Kind: task`, sfy creates a task as for `sfy task new` from the operator. The task starts in `new` with the source `drop:<from>`, and the lead gets the "New task" note. A body that is no valid task file rejects the drop.
+  5. sfy moves the file to `drop/done/<from>/<id>.md`, which records the sender and the id.
+- **Cleanup.** At start, sfy removes the files in `drop/done/` that are older than 30 days, so a duplicate after that time delivers again. It also removes files in `drop/tmp/` that are older than one day, which a sender left after a crash. sfy never reads `drop/tmp/` otherwise. A stopped factory leaves drops in `drop/new/` until it starts.
+- **The stated name.** sfy shows the sender as `drop:<from>`. No factory name and no session name holds a colon, so a stated name never looks like a checked sender, and a drop never shows as the operator. The note says "From drop:<from>, a name that the sender stated and nothing checked". `sfy task show` prints the line `Source: drop:<from>`, and `sfy task list` and `status.md` add "(from drop:<from>)" after the title.
+- **What a drop may do.** A drop creates a message for the lead or a task in `new`, and nothing more. It never runs a command, never reaches a worker or a reviewer, and never queues, cancels or changes a task. Only the lead queues a task that a drop created. The lead's default prompt says that a drop is data from an unknown program, even when its name looks familiar.
+- **The risk of a false name.** Any process of the operator's user can write a drop with any stated name. Workers, reviewers and checks cannot, because their sandboxes write only the workspace and `allow_write`, unless a factory adds a `drop/` folder to `allow_write`. A command in `excluded_commands` runs outside the sandbox and can write a drop.
+
 ## Commands
 
-The CLI is the interface for agents, for the operator and for other programs. A program such as a Jira watcher creates tasks with `sfy task new`, the same way the lead does. Its tasks start in `new`.
+The CLI is the interface for agents and for the operator. A program such as a ticket watcher sends to the lead through the drop folder, as the section Dropped messages describes. Its tasks start in `new` and show the source `drop:<name>`. A program that runs `sfy task new` with no token counts as the operator.
 
 | Command | Used by | What it does |
 |---|---|---|
@@ -342,7 +368,7 @@ A use of sfy extends it at these points, without changes to the core:
 - **Prompts.** A prompt file in `prompts/` of the machine layer `~/.sfy` or of the factory folder replaces the default prompt for that kind of agent, and the factory's file wins. For a worker, `worker.md` replaces the common part and `worker-repo.md` replaces the repo part. The kinds are `lead`, `worker`, `reviewer` and `worker-repo`. The files that end in `.md` in `prompts/<kind>.d/` of both places append to that kind's prompt in name order, each after a blank line, to the default and to a replacing file alike. A factory file replaces the machine file of the same name, and an empty one removes it. A missing folder adds nothing, a file that cannot be read is an error, and other files are skipped. The lead's recorded prompt includes the additions.
 - **Skills.** A skill folder in `skills/` of the factory folder reaches the lead, the workers and the reviewers of that factory. The Claude adapter writes a plugin into `sessions/<name>/plugin/` at each session start. The plugin holds the manifest `.claude-plugin/plugin.json` with the name `factory`, and a link `skills` to the factory's `skills/`. The adapter passes the folder to claude with `--plugin-dir`, so a skill shows as `factory:<skill>`. A plugin folder grants no edit rights, so a session cannot edit the skills without a permission grant. The lead gets the skills too, because it runs in the working folder and sees nothing in the factory folder. Without `skills/`, the adapter writes no plugin, removes an earlier one, and adds no flag.
 - **Task files.** A task file may carry extra sections. sfy passes the whole file to the worker and the reviewer.
-- **Programs.** Any program can create, list and cancel tasks through the CLI.
+- **Programs.** A program sends a message or a task to the lead with a file in the drop folder, as the section Dropped messages describes. A program that runs the CLI with no token acts as the operator.
 - **Providers.** A new provider is a new adapter that implements the Go interface.
 - **Multiplexers.** A new multiplexer is a new template set in `config.toml`.
 - **Configuration.** `config.toml` in the machine layer and in the factory folder sets the models, the limits, the allow list and the sandbox paths.

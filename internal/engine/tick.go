@@ -15,7 +15,7 @@ func (e *Engine) Tick() error {
 		return nil
 	}
 	var errs []error
-	for _, step := range []func() error{e.startQueued, e.resendNotes, e.retryCleanup, e.checkWorkers} {
+	for _, step := range []func() error{e.pickUpDrops, e.startQueued, e.resendNotes, e.retryCleanup, e.checkWorkers} {
 		errs = append(errs, step())
 	}
 	return errors.Join(errs...)

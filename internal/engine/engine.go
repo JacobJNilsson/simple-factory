@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/drop"
 	"github.com/JacobJNilsson/simple-factory/internal/engine/delivery"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
@@ -121,6 +122,8 @@ type Engine struct {
 	down atomic.Bool
 	// factories reaches the other factories on this machine. Without it, sends to other factories and relays fail.
 	factories Factories
+	// drops is the drop folder that programs with no session write to. Without it, the engine reads no drops.
+	drops *drop.Folder
 }
 
 // SetLog makes the engine write one line to w for each note it types and for each unread agent it skips as not alive.
