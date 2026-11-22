@@ -132,7 +132,7 @@ A task moves through these states:
   |---|---|---|
   | `config.d/`, `config.toml`, `prompts/`, `skills/` | the factory, through a factory repo or by hand | yes, they are the definition |
   | `folder` | `sfy up`, or a factory repo's install script | yes, to find the working folder |
-  | `tasks/`, `work/`, `repos/`, `sessions/`, `inbox/`, `next-id`, `status.md`, `lead-prompt.md`, the link `main-prompt.md`, `definition.toml`, `sfy.log`, `sfy.sock`, `sfy.lock`, `sfy.pid` | sfy | no, they are state |
+  | `tasks/`, `work/`, `repos/`, `sessions/`, `inbox/`, `next-id`, `status.md`, `lead-prompt.md`, the link `main-prompt.md`, `definition.toml`, `sfy.log`, `sfy.sock`, `sfy.lock`, `sfy.pid`, `drop/` | sfy | no, they are state |
   | `notes.md` | the lead | no, the lead reads it |
   | any other name, such as `checks/` | the factory | no |
 
