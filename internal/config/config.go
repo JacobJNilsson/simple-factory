@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/JacobJNilsson/simple-factory/internal/process"
 )
 
 // Models names the model of each kind of agent.
@@ -79,14 +81,41 @@ func (e *SessionSettingsError) Error() string {
 	return fmt.Sprintf("config: unknown session kind %q", e.Kind)
 }
 
-// sessionKinds lists the kinds that session_settings accepts.
-var sessionKinds = []string{"lead", "worker", "reviewer"}
+// sessionKinds lists the kinds that session_settings and session_rules accept: the lead and each claude agent of the process.
+func sessionKinds(p process.Process) []string {
+	kinds := []string{"lead"}
+	for _, name := range slices.Sorted(maps.Keys(p.Agents)) {
+		if p.Agents[name].Harness == process.Claude {
+			kinds = append(kinds, name)
+		}
+	}
+	return kinds
+}
+
+// withAgentRules adds the allow and excluded_commands permissions of each claude agent to the session rules of its name.
+// The session rules and the agent's permissions then form one list, so a file with either keeps its meaning.
+func withAgentRules(rules map[string]SessionRule, p process.Process) map[string]SessionRule {
+	for _, name := range slices.Sorted(maps.Keys(p.Agents)) {
+		perm := p.Agents[name].Permissions
+		if len(perm.Allow) == 0 && len(perm.ExcludedCommands) == 0 {
+			continue
+		}
+		if rules == nil {
+			rules = map[string]SessionRule{}
+		}
+		r := rules[name]
+		r.Allow = append(slices.Clone(r.Allow), perm.Allow...)
+		r.ExcludedCommands = append(slices.Clone(r.ExcludedCommands), perm.ExcludedCommands...)
+		rules[name] = r
+	}
+	return rules
+}
 
 // validateSessionSettings refuses an unknown kind.
 // A key that sfy writes itself, such as permissions, is fine, because the provider merges it with sfy's own value.
-func validateSessionSettings(tables map[string]SessionValues) error {
+func validateSessionSettings(tables map[string]SessionValues, kinds []string) error {
 	for _, kind := range slices.Sorted(maps.Keys(tables)) {
-		if !slices.Contains(sessionKinds, kind) {
+		if !slices.Contains(kinds, kind) {
 			return &SessionSettingsError{Kind: kind}
 		}
 	}
@@ -232,8 +261,24 @@ func LoadFactory(home, userHome string) (Config, error) {
 	return load(getconfTempDir, paths...)
 }
 
-// load merges the files with mergeTables, decodes the result onto the defaults once, and then checks the values once.
+// LoadProcess returns the settings of LoadFactory and the factory's task process, which the agents, lists and start keys change.
+func LoadProcess(home, userHome string) (Config, process.Process, error) {
+	paths, err := configFiles(home, userHome)
+	if err != nil {
+		return Config{}, process.Process{}, err
+	}
+	return loadWithProcess(getconfTempDir, paths...)
+}
+
+// load is loadWithProcess for a caller that needs only the settings.
 func load(userTempDir func() (string, error), paths ...string) (Config, error) {
+	c, _, err := loadWithProcess(userTempDir, paths...)
+	return c, err
+}
+
+// loadWithProcess merges the files with mergeTables, decodes the result onto the defaults once, and then checks the values once.
+func loadWithProcess(userTempDir func() (string, error), paths ...string) (Config, process.Process, error) {
+	var none process.Process
 	merged := rawTable{}
 	for _, path := range paths {
 		raw, err := readTable(path)
@@ -241,46 +286,60 @@ func load(userTempDir func() (string, error), paths ...string) (Config, error) {
 			continue
 		}
 		if err != nil {
-			return Config{}, err
+			return Config{}, none, err
 		}
 		merged = mergeTables(merged, raw)
 	}
 	c := defaults(userTempDir)
 	var text strings.Builder
 	if err := toml.NewEncoder(&text).Encode(merged); err != nil {
-		return Config{}, fmt.Errorf("config: %w", err)
+		return Config{}, none, fmt.Errorf("config: %w", err)
 	}
 	md, err := toml.Decode(text.String(), &c)
 	if err != nil {
-		return Config{}, fmt.Errorf("config: %w", err)
+		return Config{}, none, fmt.Errorf("config: %w", err)
 	}
 	if key, ok := firstUnknown(md); ok {
-		return Config{}, &SettingError{Setting: key, Unknown: true}
+		return Config{}, none, &SettingError{Setting: key, Unknown: true}
 	}
-	if c.ReviewRounds < 1 {
-		return Config{}, &SettingError{Setting: "review_rounds"}
+	if err := checkValues(c); err != nil {
+		return Config{}, none, err
 	}
-	if c.MaxWorkers < 1 {
-		return Config{}, &SettingError{Setting: "max_workers"}
+	p, err := process.Parse(c.Provider, text.String())
+	if err != nil {
+		return Config{}, none, err
 	}
-	if c.ResendMinutes < 1 {
-		return Config{}, &SettingError{Setting: "resend_minutes"}
+	if err := p.Validate(nil); err != nil {
+		return Config{}, none, err
 	}
-	if c.NoteFallbackAfter <= 0 {
-		return Config{}, &SettingError{Setting: "note_fallback_after", Duration: true}
-	}
-	if c.CheckTimeout <= 0 {
-		return Config{}, &SettingError{Setting: "check_timeout", Duration: true}
-	}
-	if err := validateSessionSettings(c.SessionSettings); err != nil {
-		return Config{}, err
+	kinds := sessionKinds(p)
+	if err := validateSessionSettings(c.SessionSettings, kinds); err != nil {
+		return Config{}, none, err
 	}
 	for _, kind := range slices.Sorted(maps.Keys(c.SessionRules)) {
-		if !slices.Contains(sessionKinds, kind) {
-			return Config{}, &SessionSettingsError{Kind: kind}
+		if !slices.Contains(kinds, kind) {
+			return Config{}, none, &SessionSettingsError{Kind: kind}
 		}
 	}
-	return c, nil
+	c.SessionRules = withAgentRules(c.SessionRules, p)
+	return c, p, nil
+}
+
+// checkValues refuses a number or a duration that is too low.
+func checkValues(c Config) error {
+	switch {
+	case c.ReviewRounds < 1:
+		return &SettingError{Setting: "review_rounds"}
+	case c.MaxWorkers < 1:
+		return &SettingError{Setting: "max_workers"}
+	case c.ResendMinutes < 1:
+		return &SettingError{Setting: "resend_minutes"}
+	case c.NoteFallbackAfter <= 0:
+		return &SettingError{Setting: "note_fallback_after", Duration: true}
+	case c.CheckTimeout <= 0:
+		return &SettingError{Setting: "check_timeout", Duration: true}
+	}
+	return nil
 }
 
 // firstUnknown returns the first key that no field took.
@@ -288,6 +347,10 @@ func load(userTempDir func() (string, error), paths ...string) (Config, error) {
 func firstUnknown(md toml.MetaData) (string, bool) {
 	for _, key := range md.Undecoded() {
 		if len(key) > 3 && key[0] == "session_settings" {
+			continue
+		}
+		// The process package decodes and checks these keys itself.
+		if key[0] == "agents" || key[0] == "lists" || key[0] == "start" {
 			continue
 		}
 		return key.String(), true
