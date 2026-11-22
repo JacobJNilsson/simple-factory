@@ -9,7 +9,7 @@ import "fmt"
 //  2. Pushing holds only in review, or in escalated with Before set to review.
 //  3. No transition clears Reopened.
 //  4. A transition that starts or resumes a worker empties Pending. Every other transition keeps or extends it.
-//  5. Round grows only in StartReview and FailCheck.
+//  5. Round grows only in StartReview, FailCheck and CountRound.
 //
 // The methods do no I/O and do not check the source state. The engine guards each command before it calls one.
 func (s State) Active() bool {
@@ -38,6 +38,12 @@ func (t *Task) StartReview() {
 	t.State = Review
 	t.Round++
 }
+
+// EnterReview moves a task to review without a new round, for a reviewer that counts no round.
+func (t *Task) EnterReview() { t.State = Review }
+
+// CountRound counts a round for a branch or an agent of the process that counts one. The state stays.
+func (t *Task) CountRound() { t.Round++ }
 
 // FailCheck moves a working or feedback task to feedback after a failed check, and counts the failure as a round.
 func (t *Task) FailCheck() {
@@ -131,5 +137,49 @@ func (t *Task) TakeFeedback(body string) FeedbackEffect {
 		t.State, t.Archived, t.Reopened, t.Pushing, t.Released = Queued, false, true, false, false
 	}
 	t.Pending = append(t.Pending, body)
+	return FeedbackKept
+}
+
+// FeedbackMode is what the feedback key of the agent at a task's position asks for.
+type FeedbackMode int
+
+// The feedback modes of an agent.
+const (
+	// ModeMessage gives the feedback to the running worker.
+	ModeMessage FeedbackMode = iota
+	// ModeStop ends the agent's session and sends the task back to its worker in feedback.
+	ModeStop
+	// ModeReopen moves the task to queued, so a new worker starts.
+	ModeReopen
+)
+
+// TakeFeedbackAs applies feedback as the agent at the task's position asks, and returns what the engine must do.
+// A task in new, queued or escalated keeps the state, and a done or cancelled task reopens, whatever the mode.
+// A task whose hold the operator released reopens too, so the new worker starts without push permission and the hold returns.
+func (t *Task) TakeFeedbackAs(body string, mode FeedbackMode) FeedbackEffect {
+	switch {
+	case t.State == New || t.State == Queued || t.State == Escalated:
+		t.Pending = append(t.Pending, body)
+		return FeedbackKept
+	case t.State == Done || t.State == Cancelled:
+		mode = ModeReopen
+	case t.State == Review && t.Released:
+		t.State, t.Pushing, t.Released, t.Reopened = Queued, false, false, true
+		t.Pending = append(t.Pending, body)
+		return FeedbackEndsSessions
+	}
+	switch mode {
+	case ModeMessage:
+		return FeedbackToWorker
+	case ModeStop:
+		t.State, t.Pushing = Feedback, false
+		return FeedbackStopsReviewer
+	}
+	active := t.State.Active()
+	t.State, t.Archived, t.Reopened, t.Pushing, t.Released = Queued, false, true, false, false
+	t.Pending = append(t.Pending, body)
+	if active {
+		return FeedbackEndsSessions
+	}
 	return FeedbackKept
 }
