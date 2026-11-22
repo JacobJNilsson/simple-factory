@@ -61,16 +61,8 @@ func ShowConfig(env func(string) string, stdout io.Writer) error {
 
 // writeSettings writes each setting of cfg as a TOML line with a dotted key, followed by the file that set it last or default.
 func writeSettings(out *strings.Builder, cfg config.Config, sources map[string]string) error {
-	var text bytes.Buffer
-	if err := toml.NewEncoder(&text).Encode(cfg); err != nil {
-		return err
-	}
-	flat := map[string]string{}
-	var raw decodedTable
-	if _, err := toml.Decode(text.String(), &raw); err != nil {
-		return err
-	}
-	if err := flatten(raw, nil, flat); err != nil {
+	flat, err := flatSettings(cfg)
+	if err != nil {
 		return err
 	}
 	for _, key := range slices.Sorted(maps.Keys(flat)) {
@@ -81,6 +73,23 @@ func writeSettings(out *strings.Builder, cfg config.Config, sources map[string]s
 		fmt.Fprintf(out, "%s = %s # %s\n", key, flat[key], source)
 	}
 	return nil
+}
+
+// flatSettings maps the dotted key of each setting of cfg to its inline TOML value, with each session_settings env value hidden.
+func flatSettings(cfg config.Config) (map[string]string, error) {
+	var text bytes.Buffer
+	if err := toml.NewEncoder(&text).Encode(cfg); err != nil {
+		return nil, err
+	}
+	var raw decodedTable
+	if _, err := toml.Decode(text.String(), &raw); err != nil {
+		return nil, err
+	}
+	flat := map[string]string{}
+	if err := flatten(raw, nil, flat); err != nil {
+		return nil, err
+	}
+	return flat, nil
 }
 
 // decodedTable is a TOML table as toml.Decode gives it. A nested table is a map[string]any.

@@ -16,7 +16,7 @@ const folderFile = "folder"
 
 // StateNames are the names that sfy owns in a factory folder. A factory repo's install must not write them.
 var StateNames = []string{
-	"tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "main-prompt.md",
+	"tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "main-prompt.md", "definition.toml",
 	"sfy.log", "sfy.sock", "sfy.lock", "sfy.pid",
 }
 

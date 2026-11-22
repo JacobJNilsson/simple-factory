@@ -131,6 +131,13 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	if err := checkSocketPath(socket(p.home)); err != nil {
 		return err
 	}
+	d, err := buildDefinition(p.cfg, p.layers)
+	if err != nil {
+		return err
+	}
+	if err := writeDefinition(p.home, d); err != nil {
+		return err
+	}
 	// A failed check does not stop sfy. Each session start repeats it and reports the cause.
 	// It runs in the background, because the trial run of bwrap may be slow.
 	go func() {

@@ -6,6 +6,19 @@ This page holds the details of running sfy. SPEC.md holds the full behaviour. Th
 
 Run `sfy restart` from a terminal outside the agent sessions, or ask the main agent to run it. It stops the sfy process and starts it from the installed binary. The main agent, workers and reviewers keep running, and their tasks stay on disk. The main agent gets a note, which says when its prompt changed. `sfy restart` does not build or install sfy.
 
+At each start, the sfy process writes the flat result of the definition to `definition.toml` in the factory folder. Before it stops the old process, `sfy restart` compares the new definition with that file and prints each change. The main agent's note holds the same lines:
+
+```
+$ sfy restart
+Setting models.worker changed from "sonnet" to "opus".
+The worker prompt file worker.d/writing.md was added.
+Stopped the sfy process.
+Started the sfy process.
+Told the main agent.
+```
+
+When nothing changed, it prints "The definition did not change since the last start." The first start writes the file and reports nothing. The file and the report show the values of `session_settings.<kind>.env` as `<set>`.
+
 `sfy restart --update` first upgrades sfy and restarts only when that succeeds. When Homebrew installed the running binary, it updates the tap and runs `brew upgrade sfy`. Otherwise it downloads the newest release from GitHub, checks the SHA-256 sum, writes the binary next to the running one and renames it over the running one. It never calls sudo. If the folder is not writable, such as a root-owned `/usr/local/bin`, it prints a `sudo install` command with the path of the downloaded file and exits with an error. A user-writable location such as `~/.local/bin/sfy` avoids this.
 
 The new sfy process gets the environment of the shell that ran `sfy restart`, including its `PATH`. A restart from a login shell therefore gives the workers the same `PATH`, so they find `claude`.

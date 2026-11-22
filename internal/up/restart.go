@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
@@ -25,7 +26,18 @@ func mayRestart(agent string) bool { return agent == "" || agent == mainSession 
 // restart stops the sfy process and starts it again as a plain sfy does.
 // The multiplexer ends the sfy session with a hangup, which the sfy process handles by removing its socket and lock file.
 // A running main agent keeps its session and chat, and gets a note. Workers and reviewers keep their sessions, and their tasks stay on disk.
+// Before it stops anything, it prints what changed in the definition since the last start, and the note repeats those lines.
 func restart(o options) error {
+	// The report only informs, so a broken state file must not keep the factory from a restart.
+	changes, err := definitionReport(o.home, o.config, o.layers)
+	if err != nil {
+		_, _ = fmt.Fprintln(o.warn, "sfy: warning: no definition report: "+err.Error())
+	}
+	for _, line := range changes {
+		if _, err := fmt.Fprintln(o.out, line); err != nil {
+			return err
+		}
+	}
 	var stopped []string
 	serveAlive, err := o.mux.Alive(serveSession)
 	if err != nil {
@@ -63,17 +75,17 @@ func restart(o options) error {
 	if !mainAlive {
 		return nil
 	}
-	return o.noteMain()
+	return o.noteMain(changes)
 }
 
-// noteMain tells the running main agent that sfy restarted, and where to read a changed prompt.
+// noteMain tells the running main agent that sfy restarted, what changed in the definition, and where to read a changed prompt.
 // The note is one line, because a multiplexer sends a new line as Enter.
-func (o options) noteMain() error {
+func (o options) noteMain(changes []string) error {
 	changed, err := recordMainPrompt(o.home, o.layers)
 	if err != nil {
 		return err
 	}
-	note := "sfy restarted."
+	note := strings.Join(append([]string{"sfy restarted."}, changes...), " ")
 	if changed {
 		note += " Your prompt changed. Read the new text in " + mainPromptPath(o.home) + " with the Read tool."
 	}
