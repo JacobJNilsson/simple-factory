@@ -106,7 +106,7 @@ sfy keeps its state in `~/.sfy`:
 | `sfy status` | Prints `status.md`. |
 | `sfy task list` | Lists the tasks. |
 | `sfy config` | Prints the factory's merged settings and prompt files, with the file behind each. |
-| `sfy send lead <text>` | Sends a message to the lead. The operator may send only to `lead`. The lead may send to any agent. |
+| `sfy send lead <text>` | Sends a message to the lead. The operator may send only to `lead`. The lead may send to any agent, and to `<factory>/lead`, the lead of another factory on the machine. That message names its sender as `<factory>/lead`. |
 | `sfy help` | Lists every command. |
 
 ## Configure

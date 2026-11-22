@@ -685,6 +685,25 @@ func TestWorkerAndReviewerKeepSecretsHiddenFromRead(t *testing.T) {
 	}
 }
 
+func TestWorkerAndReviewerSandboxHidesTheSessionsOfEveryFactory(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		p, home := setupSandbox(t)
+		userHome := os.Getenv("HOME")
+		other := filepath.Join(userHome, ".sfy", "factories", "other")
+		if err := os.MkdirAll(other, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		command(t, p, spec)
+
+		deny := readSettings(t, home, spec.Name).Sandbox.Filesystem.DenyRead
+		for _, want := range []string{filepath.Join(other, "sessions"), filepath.Join(userHome, ".sfy", "sessions")} {
+			if !slices.Contains(deny, want) {
+				t.Errorf("%s denyRead %v lacks %s", spec.Name, deny, want)
+			}
+		}
+	}
+}
+
 func TestCommandRefusesAWorkerOrReviewerWithoutATaskFile(t *testing.T) {
 	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
 		spec.TaskFile = ""
@@ -726,7 +745,7 @@ func TestWorkerAndReviewerSandboxPathsComeFromConfig(t *testing.T) {
 	for name, s := range sandboxed(t) {
 		// The first entry hides the session folders, which hold every session's token.
 		deny := s.Sandbox.Filesystem.DenyRead
-		if len(deny) == 0 || filepath.Base(deny[0]) != "sessions" || !slices.Equal(deny[1:], []string{"~/.ssh", "~/.aws"}) {
+		if len(deny) < 2 || filepath.Base(deny[0]) != "sessions" || !slices.Equal(deny[len(deny)-2:], []string{"~/.ssh", "~/.aws"}) {
 			t.Errorf("%s denyRead = %v", name, s.Sandbox.Filesystem.DenyRead)
 		}
 		if !slices.Equal(s.Sandbox.Filesystem.AllowWrite, []string{"~/Library/Caches", "~/go/pkg/mod"}) {

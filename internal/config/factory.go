@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -84,6 +85,45 @@ func FactoriesDir(userHome string) string {
 
 // DefaultHome returns the factory folder of the default factory, which is also the machine layer.
 func DefaultHome(userHome string) string { return filepath.Join(userHome, ".sfy") }
+
+// DefaultName is the name of the default factory, whose factory folder is DefaultHome.
+const DefaultName = "default"
+
+// factoryAddress matches a factory name in an address. It holds no dot and no slash, so it never leaves the factories folder.
+var factoryAddress = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+// FactoryHome returns the factory folder of the factory with the given name, as Describe names it.
+// The name default gives DefaultHome. It reports false for a name that no factory folder on this machine has.
+func FactoryHome(userHome, name string) (string, bool) {
+	if name == DefaultName {
+		return DefaultHome(userHome), true
+	}
+	if !factoryAddress.MatchString(name) {
+		return "", false
+	}
+	home := filepath.Join(FactoriesDir(userHome), name)
+	st, err := os.Stat(home)
+	if err != nil || !st.IsDir() {
+		return "", false
+	}
+	return home, true
+}
+
+// SessionFolders returns the sessions folder of the default factory and of each factory in the factories folder.
+// Each holds the token files of its sessions, so a sandbox hides them all.
+func SessionFolders(userHome string) []string {
+	out := []string{filepath.Join(DefaultHome(userHome), "sessions")}
+	entries, err := os.ReadDir(FactoriesDir(userHome))
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			out = append(out, filepath.Join(FactoriesDir(userHome), e.Name(), "sessions"))
+		}
+	}
+	return out
+}
 
 // FactoryName returns the name that a folder gets: its base name in lower case, with each character outside a-z0-9- replaced by -.
 func FactoryName(folder string) string {
@@ -190,7 +230,7 @@ func Describe(home string, env func(string) string) (name, folder string) {
 		return filepath.Base(filepath.Clean(home)), folder
 	}
 	if filepath.Clean(home) == DefaultHome(env("HOME")) {
-		return "default", home
+		return DefaultName, home
 	}
 	return filepath.Base(filepath.Clean(home)), home
 }

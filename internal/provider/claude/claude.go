@@ -310,10 +310,14 @@ func (a adapter) sandboxFor(s *settings, kind string, excluded []string) error {
 			return fmt.Errorf("claude: %w", err)
 		}
 	}
+	deny, err := a.sessionFolders()
+	if err != nil {
+		return err
+	}
 	s.Sandbox = &sandbox{
 		Enabled: true, FailIfUnavailable: true, AutoAllowBashIfSandboxed: true,
 		Filesystem: filesystem{
-			DenyRead:   append([]string{filepath.Join(a.home, "sessions")}, a.cfg.DenyRead...),
+			DenyRead:   append(deny, a.cfg.DenyRead...),
 			AllowWrite: append([]string{}, a.cfg.AllowWrite...),
 		},
 	}
@@ -329,6 +333,23 @@ func (a adapter) sandboxFor(s *settings, kind string, excluded []string) error {
 	s.Permissions.DefaultMode = "acceptEdits"
 	s.Permissions.Allow = append(s.Permissions.Allow, "WebFetch(domain:*)")
 	return nil
+}
+
+// sessionFolders lists the sessions folder of the session's own factory first, then that of every other factory on the machine.
+// Each holds session tokens, and a token of another factory's lead would let a session send as that lead.
+func (a adapter) sessionFolders() ([]string, error) {
+	own := filepath.Join(a.home, "sessions")
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("claude: %w", err)
+	}
+	out := []string{own}
+	for _, f := range config.SessionFolders(userHome) {
+		if filepath.Clean(f) != filepath.Clean(own) {
+			out = append(out, f)
+		}
+	}
+	return out, nil
 }
 
 func expandHome(p string) (string, error) {

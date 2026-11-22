@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
@@ -278,5 +279,39 @@ func TestHeaderNamesTheFactoryAndItsFolder(t *testing.T) {
 	def := filepath.Join(home, ".sfy")
 	if got, want := config.Header(def, env), "Factory: default ("+def+")"; got != want {
 		t.Errorf("default header %q, want %q", got, want)
+	}
+}
+
+func TestFactoryHomeFindsAFactoryByTheNameThatDescribeGives(t *testing.T) {
+	home := userHome(t)
+	web := mkdir(t, config.FactoriesDir(home), "web")
+
+	if got, ok := config.FactoryHome(home, "web"); !ok || got != web {
+		t.Errorf("FactoryHome(web) = %q, %v, want %q", got, ok, web)
+	}
+	if got, ok := config.FactoryHome(home, "default"); !ok || got != config.DefaultHome(home) {
+		t.Errorf("FactoryHome(default) = %q, %v", got, ok)
+	}
+	for _, name := range []string{"api", "..", "../web", "web/x", "Web", ""} {
+		if got, ok := config.FactoryHome(home, name); ok {
+			t.Errorf("FactoryHome(%q) = %q, want no factory", name, got)
+		}
+	}
+}
+
+func TestSessionFoldersNamesTheDefaultFactoryAndEveryCreatedFactory(t *testing.T) {
+	home := userHome(t)
+	mkdir(t, config.FactoriesDir(home), "web")
+	mkdir(t, config.FactoriesDir(home), "api")
+
+	got := config.SessionFolders(home)
+
+	want := []string{
+		filepath.Join(home, ".sfy", "sessions"),
+		filepath.Join(config.FactoriesDir(home), "api", "sessions"),
+		filepath.Join(config.FactoriesDir(home), "web", "sessions"),
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("SessionFolders = %v, want %v", got, want)
 	}
 }

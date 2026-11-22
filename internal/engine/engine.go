@@ -119,6 +119,8 @@ type Engine struct {
 	checkSeq int
 	// down is true after sfy down stopped the sessions. The server then ends the sfy process.
 	down atomic.Bool
+	// factories reaches the other factories on this machine. Without it, sends to other factories and relays fail.
+	factories Factories
 }
 
 // SetLog makes the engine write one line to w for each note it types and for each unread agent it skips as not alive.
@@ -287,35 +289,75 @@ var commands = map[string]command{
 	"hook idle":       {(*Engine).hookIdle, agents},
 	"hook busy":       {(*Engine).hookBusy, agents},
 	"restarted":       {(*Engine).restarted, []kind{operator, lead}},
+	// A relay comes from another factory's sfy process. It has no kind here, because relay checks the token against that factory.
+	protocol.RelayCommand: {(*Engine).relay, nil},
 }
 
 // Handle runs one command and returns its answer.
+// A send to another factory leaves the lock before it calls that factory's sfy process.
 func (e *Engine) Handle(req protocol.Request) protocol.Answer {
+	ans, out := e.handleLocked(req)
+	if out != nil {
+		return relayOut(*out)
+	}
+	return ans
+}
+
+// handleLocked runs handle under the lock. The deferred unlock frees the lock also when a command panics.
+func (e *Engine) handleLocked(req protocol.Request) (protocol.Answer, *outgoing) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.handle(req)
+}
+
+// handle runs one command under the lock. It returns an outgoing message instead of an answer for a send to another factory.
+func (e *Engine) handle(req protocol.Request) (protocol.Answer, *outgoing) {
 	cmd, ok := commands[req.Command]
 	if !ok {
-		return protocol.Answer{Error: fmt.Sprintf("unknown command %q", req.Command)}
+		return protocol.Answer{Error: fmt.Sprintf("unknown command %q", req.Command)}, nil
 	}
+	if cmd.kind == nil {
+		// The command checks its caller itself, against the factory that the caller names.
+		text, err := cmd.run(e, req)
+		if err != nil {
+			return protocol.Answer{Error: err.Error()}, nil
+		}
+		return protocol.Answer{OK: true, Text: text}, nil
+	}
+	if req.Caller.Factory != "" {
+		return protocol.Answer{Error: fmt.Sprintf("%q takes no caller from another factory", req.Command)}, nil
+	}
+	return e.handleLocal(req, cmd)
+}
+
+// handleLocal runs a command of a caller of this factory. A send to another factory passes the same checks first.
+func (e *Engine) handleLocal(req protocol.Request, cmd command) (protocol.Answer, *outgoing) {
 	req, err := e.authenticate(req)
 	if err != nil {
-		return protocol.Answer{Error: err.Error()}
+		return protocol.Answer{Error: err.Error()}, nil
 	}
 	req.Caller.Agent = protocol.AgentName(req.Caller.Agent)
 	k, known := kindOf(req.Caller.Agent)
 	if !known {
-		return protocol.Answer{Error: fmt.Sprintf("unknown caller %q. Agent names are lead, worker-<id> and review-<id>-<round>", req.Caller.Agent)}
+		return protocol.Answer{Error: fmt.Sprintf("unknown caller %q. Agent names are lead, worker-<id> and review-<id>-<round>", req.Caller.Agent)}, nil
 	}
 	if !allowed(cmd.kind, k) {
-		return protocol.Answer{Error: fmt.Sprintf("%q is not for %s. You may run: %s", req.Command, k.label(), allowedBy(k))}
+		return protocol.Answer{Error: fmt.Sprintf("%q is not for %s. You may run: %s", req.Command, k.label(), allowedBy(k))}, nil
+	}
+	if factory, agent, ok := relayTarget(req); ok {
+		out, err := e.prepareRelay(req, factory, agent)
+		if err != nil {
+			return protocol.Answer{Error: err.Error()}, nil
+		}
+		return protocol.Answer{}, out
 	}
 	req, warning := oldTarget(req)
 	text, err := cmd.run(e, req)
 	if err != nil {
-		return protocol.Answer{Error: err.Error(), Warning: warning}
+		return protocol.Answer{Error: err.Error(), Warning: warning}, nil
 	}
 	e.noteCommand(req)
-	return protocol.Answer{OK: true, Text: text, Warning: warning}
+	return protocol.Answer{OK: true, Text: text, Warning: warning}, nil
 }
 
 // oldTarget reads the old name of the lead as the target of send, and returns the warning for it.

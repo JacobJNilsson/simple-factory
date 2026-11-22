@@ -9,7 +9,12 @@ type Caller struct {
 	Task string
 	// Token is the secret of the session that runs the command. The operator has none.
 	Token string
+	// Factory names the factory of a caller that another factory's sfy process relays. It is empty for a caller of this factory.
+	Factory string
 }
+
+// RelayCommand is the request that one factory's sfy process sends to another, to pass on a message of its lead.
+const RelayCommand = "relay"
 
 // Request is one command from the CLI.
 type Request struct {
