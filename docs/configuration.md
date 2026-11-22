@@ -238,14 +238,14 @@ The value `hold` is the only one. Any other value is a task file error. Other ta
 
 - A held task's worker has no push allow rule, and its settings deny every `git push`. The hold does not rely on the prompt.
 - When the review passes, the task moves to the state `held`. sfy ends the sessions, keeps the workspace, and tells the lead the branch name, the repo folder, and that the push waits for you.
-- Tell the lead to push. It runs `sfy task push <id>`, and sfy starts a worker that pushes the branch. The task then moves to `approved`, and integrate or no-merge works as usual.
+- Tell the lead to push. It runs `sfy task release <id>`, or its old name `sfy task push <id>`, and sfy starts a worker that pushes the branch. The task then moves to `approved`, and integrate or no-merge works as usual.
 - `sfy task feedback <id> <text>` on a held task keeps the hold. Feedback after the release also restores it.
 - A repo with no remote has nothing to push, so the hold changes nothing there.
 - The hold works with a `## Branch` section too. The released worker then pushes to the existing branch with its lease.
 
 ## Session rules
 
-A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `lead`, `worker` and `reviewer`. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.
+A `[session_rules.<kind>]` table adds rules to the settings file of one kind of session. The kinds are `lead`, `worker`, `reviewer` and the name of each `claude` agent of the task process. Its `allow` list adds permission rules. Its `excluded_commands` list adds command patterns that the session runs outside the sandbox. sfy adds no rule for any tool beyond git by itself.
 
 For example, a setup can let workers open a pull request and let the lead merge it. Put the rules in the config and the instructions in two prompt additions:
 
@@ -303,7 +303,36 @@ The gate runs in the check sandbox after `sfy report done`. When it exits with a
 
 A shell agent can write a note for the lead into the folder that `{drop}` names, in the format of a drop file. The lead gets it from `gate@<task id>`. Each agent's result lands in `tasks/<id>/results/`, and `{result}` names the file of the result before.
 
-This release runs a narrow part of the process schema. A shell agent runs only between `worker` and `reviewer` of a list that starts with `worker`. A `claude`, `lead` or `operator` agent keeps its default name and keys, except `model` of `worker` and `reviewer` and the permissions `allow` and `excluded_commands`. `sfy up`, `sfy restart` and `sfy config` refuse anything else with an error that names the key. SPEC.md, section The task process, lists the rules.
+## Define your own agents, lists and branches
+
+A factory may define agents and lists of any name. A name matches `[a-z][a-z0-9-]*` and is neither `lead` nor `main`. A `claude` agent reads its prompt from `prompts/<prompt>.md`, which defaults to the agent's name, and its model from `model` or `models.<name>`. Its session is named `<session_name>-<id>`, or `<session_name>-<id>-<round>` for `session = "round"`.
+
+A task picks its start list with a `## List` section. This list drafts text and lands without a push:
+
+```toml
+[lists.draft]
+agents = ["build"]
+
+[lists.draft.then]
+fail.check = { list = "draft", round = true }
+fail.reviewer = "draft"
+pass = "land"
+```
+
+A shell agent may pick the next list. sfy runs it after the list passes, and the last line of its output names the target:
+
+```toml
+[agents.route]
+harness = "shell"
+run = ["sh {factory}/checks/route.sh {task_file}"]
+
+[lists.load.then]
+pass = { agent = "route", to = ["production", "other"] }
+```
+
+An `operator` agent may stand anywhere in a list. The task then waits in `held` until the lead runs `sfy task release <id>` on your word. `sfy task push <id>` is the old name of that command.
+
+A process change reaches a running task at its next agent. `sfy restart` refuses a change that removes the position of an open task. `sfy up`, `sfy restart` and `sfy config` also refuse the few keys that the engine cannot run yet, with an error that names the key. SPEC.md, section The task process, lists every key and rule.
 
 ## Terminal tools
 
