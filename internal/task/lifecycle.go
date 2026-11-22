@@ -121,23 +121,16 @@ const (
 
 // TakeFeedback applies the feedback table of the spec for the state of the task and returns what the engine must do.
 // A task in new, queued or escalated keeps the state. A task in held, approved, done or cancelled reopens as queued.
+// It takes the mode of the agent of the default process that the state is at.
 func (t *Task) TakeFeedback(body string) FeedbackEffect {
+	mode := ModeReopen
 	switch t.State {
 	case Working, Feedback:
-		return FeedbackToWorker
+		mode = ModeMessage
 	case Review:
-		if t.Released {
-			t.State, t.Pushing, t.Released, t.Reopened = Queued, false, false, true
-			t.Pending = append(t.Pending, body)
-			return FeedbackEndsSessions
-		}
-		t.State, t.Pushing = Feedback, false
-		return FeedbackStopsReviewer
-	case Held, Approved, Done, Cancelled:
-		t.State, t.Archived, t.Reopened, t.Pushing, t.Released = Queued, false, true, false, false
+		mode = ModeStop
 	}
-	t.Pending = append(t.Pending, body)
-	return FeedbackKept
+	return t.TakeFeedbackAs(body, mode)
 }
 
 // FeedbackMode is what the feedback key of the agent at a task's position asks for.
