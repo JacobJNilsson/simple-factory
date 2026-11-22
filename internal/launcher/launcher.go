@@ -26,19 +26,56 @@ type Launcher interface {
 
 type launcher struct {
 	mux.Mux
-	p   provider.Provider
-	log io.Writer
+	// adapters holds the provider of each session harness. fallback names the one for a spec with no harness.
+	adapters map[string]provider.Provider
+	fallback string
+	log      io.Writer
 }
 
 // resumeGrace is how long a resumed lead must run before sfy counts the resume as working.
 // It is long enough for a failed resume to exit. Tests shorten it.
 var resumeGrace = 2 * time.Second
 
-// New returns a Launcher that starts the provider's command in a multiplexer session.
+// New returns a Launcher that starts the provider's command in a multiplexer session, with p as the claude harness.
 // A failed show goes to log, which may be nil.
 // CONTRACT: callers take an interface, so New returns it.
 func New(m mux.Mux, p provider.Provider, log io.Writer) Launcher {
-	return launcher{Mux: m, p: p, log: log}
+	return WithAdapters(m, map[string]provider.Provider{"claude": p}, "claude", log)
+}
+
+// WithAdapters returns a Launcher that starts each session through the adapter of its harness.
+// fallback names the adapter of a spec with no harness, such as the lead. A harness with no adapter fails to start.
+// CONTRACT: callers take an interface, so WithAdapters returns it.
+func WithAdapters(m mux.Mux, adapters map[string]provider.Provider, fallback string, log io.Writer) Launcher {
+	return launcher{Mux: m, adapters: adapters, fallback: fallback, log: log}
+}
+
+// UnknownHarnessError reports a session harness that the launcher has no adapter for.
+type UnknownHarnessError struct{ Harness string }
+
+func (e *UnknownHarnessError) Error() string {
+	return fmt.Sprintf("no adapter for the session harness %q", e.Harness)
+}
+
+// adapter returns the provider of a harness. An empty harness gets the fallback.
+func (l launcher) adapter(harness string) (provider.Provider, error) {
+	if harness == "" {
+		harness = l.fallback
+	}
+	p, ok := l.adapters[harness]
+	if !ok {
+		return nil, &UnknownHarnessError{Harness: harness}
+	}
+	return p, nil
+}
+
+// Preflight checks that a session of the kind can start through the harness's adapter.
+func (l launcher) Preflight(harness, kind string) error {
+	p, err := l.adapter(harness)
+	if err != nil {
+		return err
+	}
+	return p.Preflight(kind)
 }
 
 // Start asks the provider for the session's command, runs it in a new session, and shows the session.
@@ -55,7 +92,11 @@ func (l launcher) Start(spec engine.SessionSpec) error {
 // StartLead starts the lead and resumes its last conversation when the provider can.
 // When the resumed session ends within the grace time, it starts a new conversation instead.
 func (l launcher) StartLead(spec engine.SessionSpec) (bool, error) {
-	if spec.Fresh || !l.p.Resumes(spec) {
+	p, err := l.adapter(spec.Harness)
+	if err != nil {
+		return false, err
+	}
+	if spec.Fresh || !p.Resumes(spec) {
 		return false, l.begin(spec)
 	}
 	if err := l.begin(spec); err != nil {
@@ -77,20 +118,28 @@ func (l launcher) StartLead(spec engine.SessionSpec) (bool, error) {
 // It starts no session and runs no show template.
 func (l launcher) LeadCommand(spec engine.SessionSpec) ([]string, bool, error) {
 	// The provider records a new conversation in Command, so it must answer Resumes first.
-	if err := l.p.Preflight(spec.Kind); err != nil {
+	p, err := l.adapter(spec.Harness)
+	if err != nil {
 		return nil, false, err
 	}
-	resumed := !spec.Fresh && l.p.Resumes(spec)
-	argv, err := l.p.Command(spec)
+	if err := p.Preflight(spec.Kind); err != nil {
+		return nil, false, err
+	}
+	resumed := !spec.Fresh && p.Resumes(spec)
+	argv, err := p.Command(spec)
 	return argv, resumed, err
 }
 
 // begin runs the provider's command in a new session and shows the session.
 func (l launcher) begin(spec engine.SessionSpec) error {
-	if err := l.p.Preflight(spec.Kind); err != nil {
+	p, err := l.adapter(spec.Harness)
+	if err != nil {
 		return err
 	}
-	argv, err := l.p.Command(spec)
+	if err := p.Preflight(spec.Kind); err != nil {
+		return err
+	}
+	argv, err := p.Command(spec)
 	if err != nil {
 		return err
 	}
@@ -108,7 +157,7 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 }
 
 // TrustWarning asks the provider whether it would stop at a trust prompt for dir.
-func (l launcher) TrustWarning(dir string) string { return l.p.TrustWarning(dir) }
+func (l launcher) TrustWarning(dir string) string { return l.adapters[l.fallback].TrustWarning(dir) }
 
 // unknownError reports a multiplexer name with no config set and no built-in set.
 type unknownError struct{ Name string }
