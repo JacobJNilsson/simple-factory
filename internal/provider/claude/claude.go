@@ -486,6 +486,10 @@ func deny(spec engine.SessionSpec) []string {
 	rules := []string{}
 	switch spec.Kind {
 	case "reviewer":
+		// A reviewer agent of the process whose permissions keep edit may edit, and any other reviewer may not.
+		if spec.Agent != "" && !spec.ReadOnly {
+			return []string{"AskUserQuestion", pushWithGitOptions}
+		}
 		return []string{"AskUserQuestion", "Edit", "Write", "NotebookEdit", pushWithGitOptions}
 	case "worker":
 		rules = append(rules, "AskUserQuestion", pushWithGitOptions)

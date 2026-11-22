@@ -74,6 +74,18 @@ func TestAReadOnlyAgentGetsNoEditTools(t *testing.T) {
 	}
 }
 
+func TestAReviewerAgentThatKeepsEditMayEdit(t *testing.T) {
+	p, home := setup(t, bin)
+	spec := reviewerSpec()
+	spec.Agent, spec.Role = "auditor", "reviewer"
+
+	command(t, p, spec)
+
+	if deny := readSettings(t, home, spec.Name).Permissions.Deny; slices.Contains(deny, "Edit") || !slices.Contains(deny, "AskUserQuestion") {
+		t.Fatalf("deny = %v, want questions denied and edits allowed", deny)
+	}
+}
+
 func TestAnAgentsOwnListsReplaceTheFactoryLists(t *testing.T) {
 	p, home := setupSandbox(t)
 	spec := worker()
