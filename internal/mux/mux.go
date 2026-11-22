@@ -34,7 +34,7 @@ type Mux interface {
 func FromMap(m map[string]string) (Templates, error) {
 	var t Templates
 	fields := map[string]*string{
-		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_main": &t.ShowMain, "whoami": &t.Whoami,
+		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_lead": &t.ShowMain, "whoami": &t.Whoami,
 	}
 	for key, value := range m {
 		field, ok := fields[key]
@@ -150,7 +150,7 @@ func (r runner) ShowMain(name string) error {
 	if r.t.ShowMain == "" {
 		return r.Show(name)
 	}
-	_, err := r.run(r.t.ShowMain, "show_main", name, "", "", "")
+	_, err := r.run(r.t.ShowMain, "show_lead", name, "", "", "")
 	return err
 }
 

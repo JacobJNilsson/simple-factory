@@ -9,6 +9,7 @@ import (
 
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
@@ -75,7 +76,7 @@ func register(o options) error {
 	if err := o.record(address, registration.Record{ID: id, Dir: dir}); err != nil {
 		return err
 	}
-	text, err := prompts.For("main", o.layers)
+	text, err := prompts.For(protocol.Lead, o.layers)
 	if err != nil {
 		return err
 	}

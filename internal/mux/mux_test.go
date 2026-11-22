@@ -53,7 +53,7 @@ func TestFromMapAcceptsOptionalShow(t *testing.T) {
 }
 
 func TestFromMapAcceptsOptionalShowMain(t *testing.T) {
-	got, err := FromMap(map[string]string{"start": "a", "send": "b", "alive": "c", "stop": "d", "show_main": "e"})
+	got, err := FromMap(map[string]string{"start": "a", "send": "b", "alive": "c", "stop": "d", "show_lead": "e"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func showSet(show, showMain string) Templates {
 func TestShowMainRunsTheShowMainTemplate(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	m := Runner(showSet("echo show >> "+shellQuote(out), "echo show_main >> "+shellQuote(out)))
-	if err := m.ShowMain("main"); err != nil {
+	if err := m.ShowMain("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -263,7 +263,7 @@ func TestShowMainRunsTheShowMainTemplate(t *testing.T) {
 func TestShowMainFallsBackToShow(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	m := Runner(showSet("echo show >> "+shellQuote(out), ""))
-	if err := m.ShowMain("main"); err != nil {
+	if err := m.ShowMain("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -302,7 +302,7 @@ func TestHerdrShowPassesTheAddressToHerdrApp(t *testing.T) {
 	stub("hc", `echo '{"address":"t6z","agent":"sleep","name":"main","state":"live","turn":0}'`)
 	stub("herdr-app", `echo "$@" > `+shellQuote(out))
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	if err := Runner(set).ShowMain("main"); err != nil {
+	if err := Runner(set).ShowMain("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)
@@ -332,7 +332,7 @@ func TestHerdrShowRetriesUntilTheTerminalIsKnown(t *testing.T) {
 	herdrStubs(t, `echo x >> `+shellQuote(count)+`
 if [ $(wc -l < `+shellQuote(count)+`) -le 2 ]; then echo '{"error":"no running terminal"}'; exit 1; fi
 echo '{"pending": true}'`)
-	if err := Runner(set).ShowMain("main"); err != nil {
+	if err := Runner(set).ShowMain("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(count)
@@ -346,7 +346,7 @@ func TestHerdrShowFailureCarriesHerdrAppOutput(t *testing.T) {
 	count := filepath.Join(t.TempDir(), "count")
 	herdrStubs(t, `echo x >> `+shellQuote(count)+`
 echo '{"error":"no running terminal \"main\""}'; exit 1`)
-	err := Runner(set).ShowMain("main")
+	err := Runner(set).ShowMain("lead")
 	var ce *commandError
 	if !errors.As(err, &ce) || !strings.Contains(ce.stderr, "no running terminal") {
 		t.Fatalf("want herdr-app's message in the error, got %v", err)
@@ -364,7 +364,7 @@ func TestHerdrShowFailsWithoutAnAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	if err := Runner(set).ShowMain("main"); err == nil {
+	if err := Runner(set).ShowMain("lead"); err == nil {
 		t.Fatal("want an error")
 	}
 }

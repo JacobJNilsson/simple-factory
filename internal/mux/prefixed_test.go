@@ -21,17 +21,17 @@ func TestPrefixedPutsThePrefixInFrontOfEverySessionName(t *testing.T) {
 	r := &recordingMux{}
 	m := Prefixed(r, "sfy-work-")
 
-	_ = m.Start("main", "/d", []string{"x"})
-	_ = m.Send("main", "hi")
+	_ = m.Start("lead", "/d", []string{"x"})
+	_ = m.Send("lead", "hi")
 	_, _ = m.Alive("worker-t1")
 	_ = m.Notify("sfy", "n")
 	_ = m.Show("worker-t1")
-	_ = m.ShowMain("main")
-	_ = m.Stop("main")
+	_ = m.ShowMain("lead")
+	_ = m.Stop("lead")
 
 	want := []string{
-		"start sfy-work-main", "send sfy-work-main", "alive sfy-work-worker-t1", "notify sfy-work-sfy",
-		"show sfy-work-worker-t1", "showmain sfy-work-main", "stop sfy-work-main",
+		"start sfy-work-lead", "send sfy-work-lead", "alive sfy-work-worker-t1", "notify sfy-work-sfy",
+		"show sfy-work-worker-t1", "showmain sfy-work-lead", "stop sfy-work-lead",
 	}
 	if !slices.Equal(r.calls, want) {
 		t.Fatalf("got %q, want %q", r.calls, want)

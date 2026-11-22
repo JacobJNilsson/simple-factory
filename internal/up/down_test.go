@@ -58,7 +58,7 @@ func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
 
 	ans, err := server.Call(socket(home), protocol.Request{Command: "down"})
 
-	if err != nil || !ans.OK || !strings.Contains(ans.Text, "Stopped main") {
+	if err != nil || !ans.OK || !strings.Contains(ans.Text, "Stopped lead") {
 		t.Fatalf("answer %+v, %v", ans, err)
 	}
 	select {
@@ -69,10 +69,10 @@ func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the sfy process did not exit")
 	}
-	if _, err := os.Stat(filepath.Join(home, "stopped-sfy-work-main")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, "stopped-sfy-work-lead")); err != nil {
 		t.Errorf("the start-time stop template did not run with the prefixed name: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, "changed-sfy-work-main")); err == nil {
+	if _, err := os.Stat(filepath.Join(home, "changed-sfy-work-lead")); err == nil {
 		t.Error("the changed config's stop template ran")
 	}
 	if _, err := os.Lstat(socket(home)); err == nil {

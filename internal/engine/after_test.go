@@ -30,7 +30,7 @@ func (v env) startedNames() []string {
 func TestTickKeepsATaskWaitingUntilItsDependencyIsDone(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 1)
-	mustOK(t, v.run("main", "", "task new", withAfter("t1")))
+	mustOK(t, v.run("lead", "", "task new", withAfter("t1")))
 	v.setState(t, "t1", task.Review)
 
 	v.tick(t)
@@ -47,9 +47,9 @@ func TestTickKeepsATaskWaitingUntilItsDependencyIsDone(t *testing.T) {
 
 func TestTickStartsAnotherQueuedTaskAheadOfAWaitingOne(t *testing.T) {
 	v := newEnv(t)
-	mustOK(t, v.run("main", "", "task new", taskFile))
-	mustOK(t, v.run("main", "", "task new", withAfter("t1")))
-	mustOK(t, v.run("main", "", "task new", taskFile))
+	mustOK(t, v.run("lead", "", "task new", taskFile))
+	mustOK(t, v.run("lead", "", "task new", withAfter("t1")))
+	mustOK(t, v.run("lead", "", "task new", taskFile))
 	v.setState(t, "t1", task.Escalated)
 
 	v.tick(t)
@@ -63,8 +63,8 @@ func TestTickCountsAnArchivedDoneDependencyAsDone(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 1)
 	v.setState(t, "t1", task.Done)
-	mustOK(t, v.run("main", "", "task archive", "", "t1"))
-	mustOK(t, v.run("main", "", "task new", withAfter("t1")))
+	mustOK(t, v.run("lead", "", "task archive", "", "t1"))
+	mustOK(t, v.run("lead", "", "task new", withAfter("t1")))
 
 	v.tick(t)
 
@@ -76,7 +76,7 @@ func TestTickCountsAnArchivedDoneDependencyAsDone(t *testing.T) {
 func TestTaskNewRejectsAnAfterIdThatNamesNoTask(t *testing.T) {
 	v := newEnv(t)
 
-	mustFail(t, v.run("main", "", "task new", withAfter("t7")), "t7")
+	mustFail(t, v.run("lead", "", "task new", withAfter("t7")), "t7")
 
 	if tasks, _ := v.st.Tasks(); len(tasks) != 0 {
 		t.Fatalf("stored %+v", tasks)
@@ -86,16 +86,16 @@ func TestTaskNewRejectsAnAfterIdThatNamesNoTask(t *testing.T) {
 func TestTaskNewRejectsTheTasksOwnId(t *testing.T) {
 	v := newEnv(t)
 
-	mustFail(t, v.run("main", "", "task new", withAfter("t1")), "t1")
+	mustFail(t, v.run("lead", "", "task new", withAfter("t1")), "t1")
 }
 
 func TestTaskEditRejectsOwnUnknownAndNewerAfterIds(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 3)
 
-	mustFail(t, v.run("main", "", "task edit", withAfter("t1"), "t1"), "itself")
-	mustFail(t, v.run("main", "", "task edit", withAfter("t9"), "t1"), "no task")
-	mustFail(t, v.run("main", "", "task edit", withAfter("t3"), "t1"), "newer")
+	mustFail(t, v.run("lead", "", "task edit", withAfter("t1"), "t1"), "itself")
+	mustFail(t, v.run("lead", "", "task edit", withAfter("t9"), "t1"), "no task")
+	mustFail(t, v.run("lead", "", "task edit", withAfter("t3"), "t1"), "newer")
 	if after := v.state(t, "t1").After; len(after) != 0 {
 		t.Fatalf("a rejected edit stored %v", after)
 	}
@@ -105,12 +105,12 @@ func TestTaskEditAcceptsAnOlderAfterIdInSeveralForms(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 3)
 
-	mustOK(t, v.run("main", "", "task edit", withAfter("t1, t2"), "t3"))
+	mustOK(t, v.run("lead", "", "task edit", withAfter("t1, t2"), "t3"))
 	if got := v.state(t, "t3").After; !slices.Equal(got, []string{"t1", "t2"}) {
 		t.Fatalf("got %v", got)
 	}
-	mustOK(t, v.run("main", "", "task edit", withAfter("- t1\n- t2"), "t3"))
-	mustOK(t, v.run("main", "", "task edit", withAfter("t1 t2"), "t3"))
+	mustOK(t, v.run("lead", "", "task edit", withAfter("- t1\n- t2"), "t3"))
+	mustOK(t, v.run("lead", "", "task edit", withAfter("t1 t2"), "t3"))
 	if got := v.state(t, "t3").After; !slices.Equal(got, []string{"t1", "t2"}) {
 		t.Fatalf("got %v", got)
 	}
@@ -119,14 +119,14 @@ func TestTaskEditAcceptsAnOlderAfterIdInSeveralForms(t *testing.T) {
 func TestTickTellsMainOnceThatADependencyIsCancelled(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 1)
-	mustOK(t, v.run("main", "", "task new", withAfter("t1")))
-	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+	mustOK(t, v.run("lead", "", "task new", withAfter("t1")))
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
 
 	v.tick(t)
 	v.tick(t)
 
 	var notes []string
-	for _, m := range v.inbox(t, "main") {
+	for _, m := range v.inbox(t, "lead") {
 		if strings.Contains(m.Body, "Task t2 waits for t1, which is cancelled") {
 			notes = append(notes, m.Body)
 		}
@@ -145,12 +145,12 @@ func TestTickTellsMainOnceThatADependencyIsCancelled(t *testing.T) {
 func TestTaskListShowAndStatusShowWhatAQueuedTaskWaitsFor(t *testing.T) {
 	v := newEnv(t)
 	v.queue(t, 2)
-	mustOK(t, v.run("main", "", "task new", withAfter("t1, t2")))
+	mustOK(t, v.run("lead", "", "task new", withAfter("t1, t2")))
 	v.setState(t, "t2", task.Done)
 	v.tick(t)
 
-	list := v.run("main", "", "task list", "")
-	show := v.run("main", "", "task show", "", "t3")
+	list := v.run("lead", "", "task list", "")
+	show := v.run("lead", "", "task show", "", "t3")
 
 	mustOK(t, list)
 	mustOK(t, show)

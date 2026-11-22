@@ -17,7 +17,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	names := []string{"main"}
+	names := []string{"lead"}
 	for _, t := range tasks {
 		if t.Dir == "" {
 			continue
@@ -40,7 +40,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 			continue
 		}
 		// sfy did not start a registered agent, so it ends only the registration.
-		if name == "main" && e.registeredMain() {
+		if name == "lead" && e.registeredMain() {
 			if err := e.reg.Clear(); err != nil {
 				errs = append(errs, err)
 				continue
@@ -66,7 +66,7 @@ func (e *Engine) downCommand(protocol.Request) (string, error) {
 		text = "Stopped the sfy process."
 	}
 	if left {
-		text += " Left main running and cleared its registration, because sfy did not start it."
+		text += " Left lead running and cleared its registration, because sfy did not start it."
 	}
 	return text, nil
 }

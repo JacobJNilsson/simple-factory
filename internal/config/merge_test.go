@@ -30,7 +30,7 @@ func loadTwo(t *testing.T, machine, factory string) (config.Config, error) {
 
 func TestLoadFactoryMergesSessionRulesAcrossTwoFiles(t *testing.T) {
 	got, err := loadTwo(t,
-		"[session_rules.worker]\nallow = [\"Bash(a *)\"]\nexcluded_commands = [\"a *\"]\n[session_rules.main]\nallow = [\"Bash(m *)\"]\n",
+		"[session_rules.worker]\nallow = [\"Bash(a *)\"]\nexcluded_commands = [\"a *\"]\n[session_rules.lead]\nallow = [\"Bash(m *)\"]\n",
 		"[session_rules.worker]\nallow = [\"Bash(b *)\"]\n[session_rules.reviewer]\nallow = [\"Bash(r *)\"]\n",
 	)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestLoadFactoryMergesSessionRulesAcrossTwoFiles(t *testing.T) {
 	}
 
 	want := map[string]config.SessionRule{
-		"main":     {Allow: []string{"Bash(m *)"}},
+		"lead":     {Allow: []string{"Bash(m *)"}},
 		"worker":   {Allow: []string{"Bash(b *)"}, ExcludedCommands: []string{"a *"}},
 		"reviewer": {Allow: []string{"Bash(r *)"}},
 	}
@@ -49,7 +49,7 @@ func TestLoadFactoryMergesSessionRulesAcrossTwoFiles(t *testing.T) {
 
 func TestLoadFactoryMergesSessionSettingsAcrossTwoFiles(t *testing.T) {
 	got, err := loadTwo(t,
-		"[session_settings.worker]\nflag = \"machine\"\nlevel = 1\n[session_settings.worker.deep]\nx = 1\ny = 2\n[session_settings.main]\nkeep = true\n",
+		"[session_settings.worker]\nflag = \"machine\"\nlevel = 1\n[session_settings.worker.deep]\nx = 1\ny = 2\n[session_settings.lead]\nkeep = true\n",
 		"[session_settings.worker]\nflag = \"factory\"\n[session_settings.worker.deep]\nx = 3\n",
 	)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestLoadFactoryMergesSessionSettingsAcrossTwoFiles(t *testing.T) {
 	}
 
 	want := map[string]config.SessionValues{
-		"main":   {"keep": true},
+		"lead":   {"keep": true},
 		"worker": {"flag": "factory", "level": int64(1), "deep": map[string]any{"x": int64(3), "y": int64(2)}},
 	}
 	if !reflect.DeepEqual(got.SessionSettings, want) {
@@ -84,7 +84,7 @@ func TestLoadFactoryMergesMultiplexersAcrossTwoFiles(t *testing.T) {
 }
 
 func TestLoadFactoryChangesANestedKeyAndKeepsItsSiblings(t *testing.T) {
-	got, err := loadTwo(t, "[models]\nmain = \"m\"\nworker = \"w\"\n", "[models]\nworker = \"f\"\n")
+	got, err := loadTwo(t, "[models]\nlead = \"m\"\nworker = \"w\"\n", "[models]\nworker = \"f\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}

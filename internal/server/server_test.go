@@ -319,7 +319,7 @@ func TestCallWhenNothingListens(t *testing.T) {
 
 func TestServeTicks(t *testing.T) {
 	eng, l, st := newEngine(t)
-	if err := st.Create(task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Queued, Source: "main"}); err != nil {
+	if err := st.Create(task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Queued, Source: "lead"}); err != nil {
 		t.Fatal(err)
 	}
 	start(t, newSocket(t), eng, 10*time.Millisecond, io.Discard)

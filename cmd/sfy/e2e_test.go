@@ -150,7 +150,7 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	if out, err := sfy("", task, "task", "new", "-"); err != nil {
 		t.Fatalf("task new: %v\n%s", err, out)
 	}
-	if out, err := sfy("main", "", "task", "queue", "t1"); err != nil {
+	if out, err := sfy("lead", "", "task", "queue", "t1"); err != nil {
 		t.Fatalf("task queue: %v\n%s", err, out)
 	}
 
@@ -159,7 +159,7 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	for time.Now().Before(deadline) {
 		shown, _ = sfy("", "", "task", "show", "t1")
 		if strings.Contains(shown, "State: approved\n") && strings.Contains(shown, "## Verdict, round 1: pass") {
-			if out, err := sfy("main", "", "task", "complete", "t1"); err != nil {
+			if out, err := sfy("lead", "", "task", "complete", "t1"); err != nil {
 				t.Fatalf("task complete: %v\n%s", err, out)
 			}
 			if shown, _ = sfy("", "", "task", "show", "t1"); !strings.Contains(shown, "State: done\n") {

@@ -20,7 +20,7 @@ func runningRig(t *testing.T) *rig {
 	r := newRig(t)
 	r.m.answering = true
 	r.m.alive["sfy"] = true
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 	r.m.alive["worker-t1"] = true
 	if _, err := recordMainPrompt(r.o.home, r.o.layers); err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func overrideMainPrompt(t *testing.T, home string) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "main.md"), []byte("A new prompt.\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "lead.md"), []byte("A new prompt.\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -59,7 +59,7 @@ func TestRestartStopsAndStartsOnlyServe(t *testing.T) {
 	if len(r.l.specs) != 0 {
 		t.Errorf("restart started the main agent: %v", r.l.specs)
 	}
-	if !r.m.alive["main"] {
+	if !r.m.alive["lead"] {
 		t.Error("the main agent no longer runs")
 	}
 	want := "Stopped the sfy process.\nStarted the sfy process.\nTold the main agent.\n"
@@ -147,7 +147,7 @@ func TestRestartNotesAChangedPrompt(t *testing.T) {
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(r.o.home, "main-prompt.md")
+	path := filepath.Join(r.o.home, "lead-prompt.md")
 	want := []protocol.Request{noteRequest("sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool.")}
 	if !reflect.DeepEqual(r.calls, want) {
 		t.Fatalf("requests = %q, want %q", r.calls, want)
@@ -159,7 +159,7 @@ func TestRestartNotesAChangedPrompt(t *testing.T) {
 
 func TestRestartNotesAChangedPromptAddition(t *testing.T) {
 	r := runningRig(t)
-	dir := filepath.Join(r.o.home, "prompts", "main.d")
+	dir := filepath.Join(r.o.home, "prompts", "lead.d")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestRestartNotesAChangedPromptAddition(t *testing.T) {
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(r.o.home, "main-prompt.md")
+	path := filepath.Join(r.o.home, "lead-prompt.md")
 	want := []protocol.Request{noteRequest("sfy restarted. Your prompt changed. Read the new text in " + path + " with the Read tool.")}
 	if !reflect.DeepEqual(r.calls, want) {
 		t.Fatalf("requests = %q, want %q", r.calls, want)
@@ -217,7 +217,7 @@ func TestRestartWithNothingRunningActsLikeUp(t *testing.T) {
 
 func TestRestartWithDeadMainStartsMain(t *testing.T) {
 	r := runningRig(t)
-	r.m.alive["main"] = false
+	r.m.alive["lead"] = false
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestRestartRefusesWorkersAndReviewers(t *testing.T) {
 }
 
 func TestMainAgentMayRestart(t *testing.T) {
-	for agent, want := range map[string]bool{"": true, "main": true, "worker-t1": false, "review-t1-1": false} {
+	for agent, want := range map[string]bool{"": true, "lead": true, "main": true, "worker-t1": false, "review-t1-1": false} {
 		if got := mayRestart(agent); got != want {
 			t.Errorf("mayRestart(%q) = %v, want %v", agent, got, want)
 		}

@@ -48,7 +48,7 @@ func Role(kind string, layers []string, hasRepo bool) (string, error) {
 	return strings.TrimRight(base, "\n") + "\n\n" + part, nil
 }
 
-// For returns the prompt for a kind of agent: "main", "worker", "reviewer" or WorkerRepoPart.
+// For returns the prompt for a kind of agent: "lead", "worker", "reviewer" or WorkerRepoPart.
 // The last layer with prompts/<kind>.md gives the base, else the embedded default does.
 // The .md files of prompts/<kind>.d/ in all layers follow in name order, each after a blank line, as appendAdditions merges them.
 func For(kind string, layers []string) (string, error) {
@@ -85,30 +85,50 @@ func Sources(kind string, layers []string) (base string, additions []Addition, e
 
 func checkKind(kind string) error {
 	switch kind {
-	case "main", "worker", "reviewer", WorkerRepoPart:
+	case lead, "worker", "reviewer", WorkerRepoPart:
 		return nil
 	}
 	return fmt.Errorf("prompts: unknown kind %q", kind)
 }
 
+// lead is the kind of the lead, and oldLead is the name that its prompt files had before.
+// A layer may still use the old name, and sfy reads it as the new one.
+const (
+	lead    = "lead"
+	oldLead = "main"
+)
+
+// names returns the names of a kind's files in one layer, the one that wins last.
+func names(kind string) []string {
+	if kind == lead {
+		return []string{oldLead, lead}
+	}
+	return []string{kind}
+}
+
+// additionDirs returns the addition folders of each layer, lowest first. In a layer, lead.d comes after main.d, so its file wins over one of the same name.
 func additionDirs(kind string, layers []string) []string {
 	dirs := make([]string, 0, len(layers))
 	for _, l := range layers {
-		dirs = append(dirs, filepath.Join(l, "prompts", kind+".d"))
+		for _, name := range names(kind) {
+			dirs = append(dirs, filepath.Join(l, "prompts", name+".d"))
+		}
 	}
 	return dirs
 }
 
-// lastBase returns the <kind>.md file of the last layer that has one.
+// lastBase returns the <kind>.md file of the last layer that has one. In a layer, lead.md wins over main.md.
 func lastBase(kind string, layers []string) (string, bool, error) {
 	for _, l := range slices.Backward(layers) {
-		path := filepath.Join(l, "prompts", kind+".md")
-		_, err := os.Stat(path)
-		if err == nil {
-			return path, true, nil
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			return "", false, fmt.Errorf("prompts: %w", err)
+		for _, name := range slices.Backward(names(kind)) {
+			path := filepath.Join(l, "prompts", name+".md")
+			_, err := os.Stat(path)
+			if err == nil {
+				return path, true, nil
+			}
+			if !errors.Is(err, fs.ErrNotExist) {
+				return "", false, fmt.Errorf("prompts: %w", err)
+			}
 		}
 	}
 	return "", false, nil

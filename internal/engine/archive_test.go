@@ -12,7 +12,7 @@ func TestTaskArchiveKeepsTheStateAndLeavesTheWorkspaceAlone(t *testing.T) {
 		v := newEnv(t)
 		v.seed(t, state, 1)
 
-		mustOK(t, v.run("main", "", "task archive", "", "t1"))
+		mustOK(t, v.run("lead", "", "task archive", "", "t1"))
 
 		tk := v.state(t, "t1")
 		if !tk.Archived || tk.State != state || tk.Dir != "/work/t1" || len(v.ws.removed) != 0 || len(v.l.stopped) != 0 {
@@ -34,7 +34,7 @@ func TestTaskArchiveRefusesEveryOtherStateAndNamesIt(t *testing.T) {
 		v := newEnv(t)
 		v.seed(t, state, 0)
 
-		mustFail(t, v.run("main", "", "task archive", "", "t1"), string(state))
+		mustFail(t, v.run("lead", "", "task archive", "", "t1"), string(state))
 
 		if v.state(t, "t1").Archived {
 			t.Fatalf("task in %s was archived", state)
@@ -45,16 +45,16 @@ func TestTaskArchiveRefusesEveryOtherStateAndNamesIt(t *testing.T) {
 func TestTaskArchiveOfAnArchivedTaskFails(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Done, 1)
-	mustOK(t, v.run("main", "", "task archive", "", "t1"))
+	mustOK(t, v.run("lead", "", "task archive", "", "t1"))
 
-	mustFail(t, v.run("main", "", "task archive", "", "t1"), "already archived")
+	mustFail(t, v.run("lead", "", "task archive", "", "t1"), "already archived")
 }
 
 func TestStatusLeavesOutAnArchivedTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Cancelled, 0)
 
-	mustOK(t, v.run("main", "", "task archive", "", "t1"))
+	mustOK(t, v.run("lead", "", "task archive", "", "t1"))
 
 	if strings.Contains(v.status(t), "t1") {
 		t.Fatalf("status.md still lists t1:\n%s", v.status(t))
@@ -64,12 +64,12 @@ func TestStatusLeavesOutAnArchivedTask(t *testing.T) {
 func TestTaskListHidesArchivedTasksUnlessAsked(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Cancelled, 0)
-	mustOK(t, v.run("main", "", "task archive", "", "t1"))
+	mustOK(t, v.run("lead", "", "task archive", "", "t1"))
 
-	if a := v.run("main", "", "task list", ""); !a.OK || strings.Contains(a.Text, "t1") {
+	if a := v.run("lead", "", "task list", ""); !a.OK || strings.Contains(a.Text, "t1") {
 		t.Fatalf("default list: %+v", a)
 	}
-	if a := v.run("main", "", "task list", "", "--archived"); !a.OK || !strings.Contains(a.Text, "t1\tcancelled") {
+	if a := v.run("lead", "", "task list", "", "--archived"); !a.OK || !strings.Contains(a.Text, "t1\tcancelled") {
 		t.Fatalf("archived list: %+v", a)
 	}
 }
@@ -78,7 +78,7 @@ func TestTaskListArchivedLeavesOutTasksThatAreNotArchived(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
 
-	if a := v.run("main", "", "task list", "", "--archived"); !a.OK || a.Text != "" {
+	if a := v.run("lead", "", "task list", "", "--archived"); !a.OK || a.Text != "" {
 		t.Fatalf("got %+v", a)
 	}
 }
@@ -86,9 +86,9 @@ func TestTaskListArchivedLeavesOutTasksThatAreNotArchived(t *testing.T) {
 func TestTaskShowWorksForAnArchivedTaskAndSaysSo(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Done, 1)
-	mustOK(t, v.run("main", "", "task archive", "", "t1"))
+	mustOK(t, v.run("lead", "", "task archive", "", "t1"))
 
-	a := v.run("main", "", "task show", "", "t1")
+	a := v.run("lead", "", "task show", "", "t1")
 
 	if !a.OK || !strings.Contains(a.Text, "State: done") || !strings.Contains(a.Text, "Archived: yes") {
 		t.Fatalf("got %+v", a)
@@ -99,20 +99,20 @@ func TestTaskShowOfAnUnarchivedTaskDoesNotSayArchived(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Done, 1)
 
-	if a := v.run("main", "", "task show", "", "t1"); strings.Contains(a.Text, "Archived") {
+	if a := v.run("lead", "", "task show", "", "t1"); strings.Contains(a.Text, "Archived") {
 		t.Fatalf("got %+v", a)
 	}
 }
 
 func TestNewTasksNeverReuseTheIdOfAnArchivedTask(t *testing.T) {
 	v := newEnv(t)
-	first := v.run("main", "", "task new", taskFile)
+	first := v.run("lead", "", "task new", taskFile)
 	mustOK(t, first)
 	id := strings.TrimSpace(first.Text)
-	mustOK(t, v.run("main", "", "task cancel", "", id))
-	mustOK(t, v.run("main", "", "task archive", "", id))
+	mustOK(t, v.run("lead", "", "task cancel", "", id))
+	mustOK(t, v.run("lead", "", "task archive", "", id))
 
-	second := v.run("main", "", "task new", taskFile)
+	second := v.run("lead", "", "task new", taskFile)
 
 	mustOK(t, second)
 	if strings.TrimSpace(second.Text) == id {

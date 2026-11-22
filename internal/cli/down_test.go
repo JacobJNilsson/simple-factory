@@ -28,7 +28,7 @@ func TestDownPrintsWhatItStopped(t *testing.T) {
 
 	code := Run([]string{"down"}, env, strings.NewReader(""), &out, &errb)
 
-	if code != exitOK || out.String() != "Stopped main and the sfy process.\n" {
+	if code != exitOK || out.String() != "Stopped lead and the sfy process.\n" {
 		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), errb.String())
 	}
 }
@@ -37,7 +37,7 @@ func TestDownByAnAgentFails(t *testing.T) {
 	home := liveServer(t)
 	env := func(k string) string {
 		if k == "SFY_AGENT" {
-			return "main"
+			return "lead"
 		}
 		return home(k)
 	}

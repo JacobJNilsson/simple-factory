@@ -166,7 +166,7 @@ func TestUpStartsServeAndMain(t *testing.T) {
 		t.Fatalf("main starts: %v", r.l.specs)
 	}
 	m := r.l.specs[0]
-	if m.Name != "main" || m.Kind != "main" || m.Dir != r.o.home || m.Model != "opus" ||
+	if m.Name != "lead" || m.Kind != "lead" || m.Dir != r.o.home || m.Model != "opus" ||
 		!strings.Contains(m.Prompt, "notes.md") || !strings.Contains(m.Prompt, "status.md") ||
 		!strings.Contains(m.Prompt, r.o.home) {
 		t.Errorf("main spec: %+v", m)
@@ -223,14 +223,14 @@ func TestSecondUpStartsNothing(t *testing.T) {
 	if r.out.String() != "The main agent already runs and was shown.\n" {
 		t.Errorf("output: %q", r.out.String())
 	}
-	if !reflect.DeepEqual(r.m.shownMain, []string{"main"}) {
+	if !reflect.DeepEqual(r.m.shownMain, []string{"lead"}) {
 		t.Errorf("shown %v, want the main agent once", r.m.shownMain)
 	}
 }
 
 func TestUpWithServeStartedAndMainRunningNamesBoth(t *testing.T) {
 	r := newRig(t)
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ func TestUpSaysNothingWhenHomeIsTrusted(t *testing.T) {
 func TestUpDoesNotWarnWhenMainAlreadyRuns(t *testing.T) {
 	r := newRig(t)
 	r.l.warning = "some warning"
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}

@@ -16,11 +16,11 @@ func TestDownStopsMainAndEverySessionThatRuns(t *testing.T) {
 	a := v.run("", "", "down", "")
 
 	mustOK(t, a)
-	want := []string{"main", "worker-t1", "review-t1-2"}
+	want := []string{"lead", "worker-t1", "review-t1-2"}
 	if !slices.Equal(v.l.stopped, want) {
 		t.Fatalf("stopped %v, want %v", v.l.stopped, want)
 	}
-	if a.Text != "Stopped main, worker-t1, review-t1-2 and the sfy process." {
+	if a.Text != "Stopped lead, worker-t1, review-t1-2 and the sfy process." {
 		t.Fatalf("text %q", a.Text)
 	}
 	if !v.e.Stopping() {
@@ -40,7 +40,7 @@ func TestDownLeavesTaskStatesAlone(t *testing.T) {
 }
 
 func TestDownIsForTheOperatorOnly(t *testing.T) {
-	for _, agent := range []string{"main", "worker-t1", "review-t1-1"} {
+	for _, agent := range []string{"lead", "worker-t1", "review-t1-1"} {
 		v := newEnv(t)
 		v.seed(t, task.Review, 1)
 
@@ -54,7 +54,7 @@ func TestDownIsForTheOperatorOnly(t *testing.T) {
 
 func TestDownWithNothingRunningStillEnds(t *testing.T) {
 	v := newEnv(t)
-	v.l.dead = map[string]bool{"main": true}
+	v.l.dead = map[string]bool{"lead": true}
 
 	a := v.run("", "", "down", "")
 
@@ -85,7 +85,7 @@ func TestTickDoesNothingAfterDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := v.inbox(t, "main"); len(got) != 0 {
+	if got := v.inbox(t, "lead"); len(got) != 0 {
 		t.Fatalf("main got %v", got)
 	}
 }

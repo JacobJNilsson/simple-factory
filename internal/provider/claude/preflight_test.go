@@ -23,10 +23,10 @@ func TestPreflight(t *testing.T) {
 		{"missing both tools", "linux", "worker", claude.Machine{Tools: []string{"claude"}}, engine.CauseToolsMissing},
 		{"missing socat", "linux", "reviewer", claude.Machine{Tools: []string{"claude", "bwrap"}}, engine.CauseToolsMissing},
 		{"bwrap blocked", "linux", "worker", blocked, engine.CauseSandboxBlocked},
-		{"main needs no sandbox", "linux", "main", claude.Machine{Tools: []string{"claude"}}, ""},
+		{"main needs no sandbox", "linux", "lead", claude.Machine{Tools: []string{"claude"}}, ""},
 		{"macOS skips the check", "darwin", "worker", claude.Machine{Tools: []string{"claude"}, BwrapErr: errors.New("x")}, ""},
 		{"claude missing", "linux", "worker", claude.Machine{Tools: []string{"bwrap", "socat"}}, engine.CauseProgramMissing},
-		{"claude missing on macOS", "darwin", "main", claude.Machine{}, engine.CauseProgramMissing},
+		{"claude missing on macOS", "darwin", "lead", claude.Machine{}, engine.CauseProgramMissing},
 		{"claude in the default folder", "linux", "worker", claude.Machine{Tools: []string{"bwrap", "socat"}, ClaudeHome: "/home/u"}, ""},
 	}
 	for _, tt := range tests {

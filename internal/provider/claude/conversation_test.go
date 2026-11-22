@@ -11,7 +11,7 @@ import (
 const recordedID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
 
 func conversationFile(home string) string {
-	return filepath.Join(home, "sessions", "main", "conversation-id")
+	return filepath.Join(home, "sessions", "lead", "conversation-id")
 }
 
 func TestFirstMainStartCreatesAndRecordsTheConversationID(t *testing.T) {

@@ -14,16 +14,16 @@ import (
 
 const mainConversation = "11111111-2222-4333-8444-555555555555"
 
-// preTokenHome returns a factory folder with the session folders that an sfy without tokens left behind.
+// preTokenHome returns a factory folder with the session folders that an sfy without tokens left behind, with the folder of the lead moved to its new name.
 func preTokenHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	for _, name := range []string{"main", "worker-t1", "worker-t2"} {
+	for _, name := range []string{"lead", "worker-t1", "worker-t2"} {
 		if err := os.MkdirAll(filepath.Join(home, "sessions", name), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	id := filepath.Join(home, "sessions", "main", "conversation-id")
+	id := filepath.Join(home, "sessions", "lead", "conversation-id")
 	if err := os.WriteFile(id, []byte(mainConversation+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -47,8 +47,8 @@ func answer(t *testing.T, home string, env map[string]string, args ...string) (o
 func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 	home := preTokenHome(t)
 	sessions := map[string]map[string]string{
-		"main":      {"SFY_AGENT": "main", "CLAUDE_CODE_SESSION_ID": mainConversation},
-		"worker-t1": {"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"},
+		"lead under its old name": {"SFY_AGENT": "main", "CLAUDE_CODE_SESSION_ID": mainConversation},
+		"worker-t1":               {"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"},
 	}
 
 	// Before the restart, the session has no token.

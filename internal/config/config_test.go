@@ -162,29 +162,29 @@ func TestLoadReadsSessionSettingsPerKind(t *testing.T) {
 	if c.SessionSettings["worker"]["flag"] != "x" || c.SessionSettings["worker"]["level"] != int64(2) {
 		t.Errorf("worker table: %v", c.SessionSettings["worker"])
 	}
-	if c.SessionSettings["reviewer"]["flag"] != "y" || len(c.SessionSettings["main"]) != 0 {
+	if c.SessionSettings["reviewer"]["flag"] != "y" || len(c.SessionSettings["lead"]) != 0 {
 		t.Errorf("tables: %v", c.SessionSettings)
 	}
 }
 
 func TestLoadReadsNestedSessionSettingsValues(t *testing.T) {
-	home := writeConfig(t, "[session_settings.main]\nattribution = { commit = \"\", pr = \"\" }\nlist = [\"a\", \"b\"]\n[session_settings.main.deep]\ninner = { x = 1 }\n")
+	home := writeConfig(t, "[session_settings.lead]\nattribution = { commit = \"\", pr = \"\" }\nlist = [\"a\", \"b\"]\n[session_settings.lead.deep]\ninner = { x = 1 }\n")
 
 	c, err := config.Load(home)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	main := c.SessionSettings["main"]
-	if got, ok := main["attribution"].(map[string]any); !ok || got["commit"] != "" || got["pr"] != "" {
-		t.Errorf("attribution: %v", main["attribution"])
+	lead := c.SessionSettings["lead"]
+	if got, ok := lead["attribution"].(map[string]any); !ok || got["commit"] != "" || got["pr"] != "" {
+		t.Errorf("attribution: %v", lead["attribution"])
 	}
-	if got, ok := main["list"].([]any); !ok || len(got) != 2 || got[1] != "b" {
-		t.Errorf("list: %v", main["list"])
+	if got, ok := lead["list"].([]any); !ok || len(got) != 2 || got[1] != "b" {
+		t.Errorf("list: %v", lead["list"])
 	}
-	deep, _ := main["deep"].(map[string]any)
+	deep, _ := lead["deep"].(map[string]any)
 	if _, ok := deep["inner"].(map[string]any); !ok {
-		t.Errorf("deep: %v", main["deep"])
+		t.Errorf("deep: %v", lead["deep"])
 	}
 }
 
@@ -364,7 +364,7 @@ func TestLoadLeavesOutTheUserTempFolderWhenTheLookupFails(t *testing.T) {
 }
 
 func TestLoadStillFailsOnAnUnknownKeyNextToSessionSettings(t *testing.T) {
-	home := writeConfig(t, "[session_settings.main]\nattribution = { pr = \"\" }\n[models]\nwroker = { a = 1 }\n")
+	home := writeConfig(t, "[session_settings.lead]\nattribution = { pr = \"\" }\n[models]\nwroker = { a = 1 }\n")
 
 	_, err := config.Load(home)
 

@@ -13,7 +13,7 @@ const fix = "Handle the empty case."
 
 func (v env) feedback(t *testing.T, text string) {
 	t.Helper()
-	mustOK(t, v.run("main", "", "task feedback", "", "t1", text))
+	mustOK(t, v.run("lead", "", "task feedback", "", "t1", text))
 }
 
 // workerBodies returns the unread messages of the task's worker.
@@ -90,7 +90,7 @@ func TestFeedbackInReviewEndsTheReviewerAndMovesToFeedback(t *testing.T) {
 func TestFeedbackOnAnEscalatedTaskWaitsForTheResume(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 1)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 
 	v.feedback(t, fix)
 
@@ -110,7 +110,7 @@ func TestFeedbackOnAnEscalatedTaskWaitsForTheResume(t *testing.T) {
 func TestFeedbackOnAnEscalatedQueuedTaskReachesItsFirstWorker(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 	v.feedback(t, fix)
 	mustOK(t, v.run("", "", "task resume", "", "t1"))
 
@@ -226,9 +226,9 @@ func TestFeedbackNeedsATextAndIsNotForWorkers(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 
-	mustFail(t, v.run("main", "", "task feedback", "", "t1", "  "), "needs a text")
+	mustFail(t, v.run("lead", "", "task feedback", "", "t1", "  "), "needs a text")
 	mustFail(t, v.run("worker-t1", "t1", "task feedback", "", "t1", "Fix it."), "not for a worker")
-	mustFail(t, v.run("main", "", "task feedback", "", "t9", "Fix it."), "no task")
+	mustFail(t, v.run("lead", "", "task feedback", "", "t9", "Fix it."), "no task")
 }
 
 func TestTaskShowListsTheFeedbackWithTheVerdictsInOrder(t *testing.T) {
@@ -257,7 +257,7 @@ func TestTaskEditKeepsThePendingFeedback(t *testing.T) {
 	v.seed(t, task.Queued, 0)
 	v.feedback(t, fix)
 
-	mustOK(t, v.run("main", "", "task edit", taskFile, "t1"))
+	mustOK(t, v.run("lead", "", "task edit", taskFile, "t1"))
 
 	if got := v.state(t, "t1").Pending; !slices.Equal(got, []string{fix}) {
 		t.Fatalf("got %v", got)

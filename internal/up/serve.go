@@ -205,7 +205,19 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 	if err != nil {
 		return err
 	}
+	warnOldNames(o.warn, o.home, env("HOME"))
 	return run(o)
+}
+
+// warnOldNames prints one warning line for each old name that the factory home still uses. A failure is a warning too and never stops sfy.
+func warnOldNames(warn io.Writer, home, userHome string) {
+	lines, err := config.OldNames(home, userHome)
+	if err != nil {
+		_, _ = fmt.Fprintln(warn, "sfy: warning: no check of old names: "+err.Error())
+	}
+	for _, line := range lines {
+		_, _ = fmt.Fprintln(warn, "sfy: warning: "+line)
+	}
 }
 
 // factoryEnv returns env with SFY_HOME set to the factory that sfy up starts in the current folder.
@@ -257,6 +269,7 @@ func restartWith(u updater, environ []string, env func(string) string, stdout, s
 	if err != nil {
 		return err
 	}
+	warnOldNames(o.warn, o.home, env("HOME"))
 	return restart(o)
 }
 

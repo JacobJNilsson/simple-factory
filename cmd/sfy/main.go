@@ -75,7 +75,7 @@ func (a app) run(args []string) int {
 		}()
 		return a.report(up.Serve(ctx, a.getenv, a.stderr))
 	case "config":
-		return a.report(up.ShowConfig(a.getenv, a.stdout))
+		return a.report(up.ShowConfig(a.getenv, a.stdout, a.stderr))
 	case "run":
 		// On success the process becomes the command, so run returns only on an error.
 		return a.report(envrun.Run(args[1:]))

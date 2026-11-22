@@ -96,7 +96,7 @@ func TestShowMainGetsTheFolderRulesFactory(t *testing.T) {
 	// The caller's env has no SFY_HOME, so only the folder rules can name the factory.
 	t.Setenv("SFY_HOME", "")
 	cfg := "multiplexer = \"probe\"\n\n[multiplexers.probe]\nstart = \"true\"\nsend = \"true\"\nalive = \"true\"\nstop = \"true\"\n" +
-		"show_main = \"printf '%s|%s' {home} \\\"$SFY_HOME\\\" > '" + out + "'\"\n"
+		"show_lead = \"printf '%s|%s' {home} \\\"$SFY_HOME\\\" > '" + out + "'\"\n"
 	env, err := factoryEnv(factoryTestEnv(home, ""), func() (string, error) { return dir, nil })
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +109,7 @@ func TestShowMainGetsTheFolderRulesFactory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.mux.ShowMain("main"); err != nil {
+	if err := p.mux.ShowMain("lead"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(out)

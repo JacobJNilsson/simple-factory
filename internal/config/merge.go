@@ -22,22 +22,32 @@ func (e *FileError) Error() string { return fmt.Sprintf("config: %s: %v", e.Path
 
 func (e *FileError) Unwrap() error { return e.Err }
 
-// readTable parses one config file into a raw table.
+// readTable parses one config file into a raw table, with each old key renamed to its new name.
 // It also decodes the file onto a spare Config, so a value of the wrong type names its own file.
 func readTable(path string) (rawTable, error) {
+	raw, _, err := readRenamed(path)
+	return raw, err
+}
+
+// readRenamed is readTable that also returns each old key that the file sets, as renameOldKeys reports them.
+func readRenamed(path string) (rawTable, []renamed, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	raw := rawTable{}
 	if _, err := toml.Decode(string(b), (*map[string]any)(&raw)); err != nil {
-		return nil, &FileError{Path: path, Err: err}
+		return nil, nil, &FileError{Path: path, Err: err}
 	}
 	var spare Config
 	if _, err := toml.Decode(string(b), &spare); err != nil {
-		return nil, &FileError{Path: path, Err: err}
+		return nil, nil, &FileError{Path: path, Err: err}
 	}
-	return raw, nil
+	found, err := renameOldKeys(raw)
+	if err != nil {
+		return nil, nil, &FileError{Path: path, Err: err}
+	}
+	return raw, found, nil
 }
 
 // mergeTables merges upper onto lower at every depth and returns a new table.

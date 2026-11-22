@@ -91,11 +91,11 @@ var sessionName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 // Command writes the session's settings file and returns the argv that starts claude.
 func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	switch spec.Kind {
-	case "main", "worker", "reviewer":
+	case "lead", "worker", "reviewer":
 	default:
 		return nil, fmt.Errorf("claude: unknown session kind %q", spec.Kind)
 	}
-	if spec.Kind != "main" && spec.TaskFile == "" {
+	if spec.Kind != "lead" && spec.TaskFile == "" {
 		return nil, fmt.Errorf("claude: %s has no task file", spec.Name)
 	}
 	if !sessionName.MatchString(spec.Name) {
@@ -128,13 +128,13 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		"SFY_HOME="+a.home,
 		"PATH="+filepath.Dir(a.sfyBin)+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
-	clean := spec.Kind != "main"
+	clean := spec.Kind != "lead"
 	if clean {
 		env = append(env, a.inherited()...)
 	}
 	argv := []string{a.claudeCommand(), "--name", spec.Name, "--model", spec.Model}
 	// The main agent gets no permission flag, so claude uses the operator's own default mode.
-	if spec.Kind != "main" {
+	if spec.Kind != "lead" {
 		argv = append(argv, "--permission-mode", "acceptEdits")
 	}
 	prompt := spec.Prompt
@@ -145,7 +145,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		return nil, err
 	}
 	argv = append(argv, plugin...)
-	if spec.Kind == "main" {
+	if spec.Kind == "lead" {
 		conversation, resumed, err := a.mainConversation(spec)
 		if err != nil {
 			return nil, err
@@ -197,7 +197,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"FileChanged": {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
-	if spec.Kind == "main" {
+	if spec.Kind == "lead" {
 		// The hook blocks a hand push, merge or rebase in a no-merge repo. sfy task integrate refuses there too.
 		s.Hooks["PreToolUse"] = []hookGroup{{Matcher: "Bash", Hooks: []hook{a.hook("merge-guard")}}}
 	} else {
@@ -228,7 +228,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 // Workers and reviewers turn off prompt suggestions by default, and a config table can override that.
 func (a adapter) extraSettings(kind string) config.SessionValues {
 	configured := a.cfg.SessionSettings[kind]
-	if kind == "main" {
+	if kind == "lead" {
 		return configured
 	}
 	extra := config.SessionValues{"promptSuggestionEnabled": false}
@@ -367,7 +367,7 @@ func shellWord(s string) string {
 func (a adapter) allow(spec engine.SessionSpec) []string {
 	rules := []string{}
 	switch spec.Kind {
-	case "main":
+	case "lead":
 		for _, c := range a.cfg.Allow {
 			rules = append(rules, "Bash("+c+" *)")
 		}
@@ -384,7 +384,7 @@ func (a adapter) allow(spec engine.SessionSpec) []string {
 	rules = append(rules, a.cfg.SessionRules[spec.Kind].Allow...)
 	// Agents run sfy by its name on the PATH, and the hooks run it by its full path.
 	// Hooks run from the settings and need no rule. Agents run sfy by its name on the PATH.
-	if spec.Kind == "main" {
+	if spec.Kind == "lead" {
 		rules = append(rules, "Bash("+a.sfyBin+" *)", "Bash(sfy *)")
 		rules = append(rules, a.mainReads()...)
 	} else {

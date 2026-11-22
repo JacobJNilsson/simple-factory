@@ -37,7 +37,7 @@ hc get --json | sed -n 's/.*"address":"\([^"]*\)".*/\1/p'
 # An empty show keeps workers and reviewers hidden. Their terminals run in the background.
 show = ""
 # A background terminal has no pane. herdr-app needs its address, which hc get prints in the JSON.
-show_main = '''
+show_lead = '''
 out=$(hc get {name} --json) || exit 1
 addr=$(printf '%s' "$out" | sed -n 's/.*"address":"\([^"]*\)".*/\1/p')
 [ -n "$addr" ] || { echo "no address for {name}" >&2; exit 1; }

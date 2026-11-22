@@ -11,7 +11,7 @@ import (
 // seedRepo seeds a task that has a repo.
 func (v env) seedRepo(t *testing.T, state task.State, round int) {
 	t.Helper()
-	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", Repo: "some/repo", State: state, Round: round, Source: "main"}
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", Repo: "some/repo", State: state, Round: round, Source: "lead"}
 	if state != task.New && state != task.Queued {
 		tk.Dir = "/work/t1"
 	}
@@ -81,7 +81,7 @@ func TestAPassedReviewAfterFeedbackKeepsTheWorkerAndTellsItToPush(t *testing.T) 
 	if tk := v.state(t, "t1"); tk.State != task.Review || !tk.Pushing || tk.Round != 2 {
 		t.Fatalf("got %+v", tk)
 	}
-	if got := v.inbox(t, "main"); len(got) != 0 {
+	if got := v.inbox(t, "lead"); len(got) != 0 {
 		t.Fatalf("main heard of an approval before the push: %v", got)
 	}
 }
@@ -96,7 +96,7 @@ func TestTheTaskIsApprovedOnlyAfterTheWorkerReportsThePush(t *testing.T) {
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing || tk.Round != 2 {
 		t.Fatalf("got %+v", tk)
 	}
-	got := v.inbox(t, "main")
+	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") {
 		t.Fatalf("main got %v", got)
 	}
@@ -184,14 +184,14 @@ func TestAPassedFirstReviewTellsTheWorkerToPushAndApprovesAfterTheReport(t *test
 	if tk := v.state(t, "t1"); tk.State != task.Review || !tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
-	if got := v.inbox(t, "main"); len(got) != 0 {
+	if got := v.inbox(t, "lead"); len(got) != 0 {
 		t.Fatalf("main heard of an approval before the push: %v", got)
 	}
 	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed the branch."))
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
-	if got := v.inbox(t, "main"); len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") || !strings.Contains(got[0].Body, "worker pushed") {
+	if got := v.inbox(t, "lead"); len(got) != 1 || !strings.Contains(got[0].Body, "task integrate t1") || !strings.Contains(got[0].Body, "worker pushed") {
 		t.Fatalf("main got %v", got)
 	}
 }
@@ -209,7 +209,7 @@ func TestAPassedReviewOnARepoWithNoRemoteApprovesWithoutAPush(t *testing.T) {
 	if tk := v.state(t, "t1"); tk.State != task.Approved || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
-	got := v.inbox(t, "main")
+	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "no remote") || !strings.Contains(got[0].Body, "task integrate t1") {
 		t.Fatalf("main got %v", got)
 	}

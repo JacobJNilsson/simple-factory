@@ -58,7 +58,7 @@ func TestUpRunsTheMainAgentInPlaceWhenWhoamiPrintsAnAddress(t *testing.T) {
 	if len(r.l.specs) != 0 {
 		t.Errorf("the set started a main agent as well: %v", r.l.specs)
 	}
-	if len(r.l.commands) != 1 || r.l.commands[0].Name != "main" || r.l.commands[0].Dir != r.o.home {
+	if len(r.l.commands) != 1 || r.l.commands[0].Name != "lead" || r.l.commands[0].Dir != r.o.home {
 		t.Errorf("command specs %+v", r.l.commands)
 	}
 	if len(r.m.starts) != 1 || r.m.starts[0][0] != "sfy" {
@@ -114,7 +114,7 @@ func TestUpShowsTheMainAgentBeforeItReplacesItself(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(r.m.shownMain, []string{"main"}) {
+	if !reflect.DeepEqual(r.m.shownMain, []string{"lead"}) {
 		t.Fatalf("shown %v, want the main agent once", r.m.shownMain)
 	}
 	if addressAtShow != "dev" || execsAtShow != 0 {
@@ -207,7 +207,7 @@ func TestUpFallsBackToStartWhenTheExecFails(t *testing.T) {
 
 func TestUpShowsAMainAgentThatAlreadyRunsAndDoesNotAskWhoami(t *testing.T) {
 	r, rec := inPlaceRig(t, "dev", nil)
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 	asked := false
 	r.o.whoami = func() (string, error) { asked = true; return "dev", nil }
 	if err := run(r.o); err != nil {
@@ -216,7 +216,7 @@ func TestUpShowsAMainAgentThatAlreadyRunsAndDoesNotAskWhoami(t *testing.T) {
 	if asked || len(rec.argvs) != 0 {
 		t.Errorf("asked %v, execs %v, want neither", asked, rec.argvs)
 	}
-	if !reflect.DeepEqual(r.m.shownMain, []string{"main"}) {
+	if !reflect.DeepEqual(r.m.shownMain, []string{"lead"}) {
 		t.Errorf("shown %v, want the main agent", r.m.shownMain)
 	}
 }
@@ -251,8 +251,8 @@ func TestSendToMainUsesTheRecordedAddress(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	m := mux.Registered(r.m, "main", mainAddressPath(r.o.home))
-	if err := m.Send("main", "hi"); err != nil {
+	m := mux.Registered(r.m, "lead", mainAddressPath(r.o.home))
+	if err := m.Send("lead", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	if want := [][2]string{{"dev", "hi"}}; !reflect.DeepEqual(r.m.sends, want) {
@@ -266,7 +266,7 @@ func TestAGoneAddressIsClearedAndTheNextUpRunsInPlaceAgain(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "main", mainAddressPath(r.o.home))}
+	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", mainAddressPath(r.o.home))}
 
 	r.m.alive["dev"] = false
 	if err := run(r.o); err != nil {
@@ -287,7 +287,7 @@ func TestUpShowsTheRecordedMainAgentAndStartsNothing(t *testing.T) {
 	}
 	r.m.alive["dev"] = true
 	r.m.shownMain = nil
-	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "main", mainAddressPath(r.o.home))}
+	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", mainAddressPath(r.o.home))}
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
@@ -304,8 +304,8 @@ func TestStopOfMainUsesTheRecordedAddress(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	m := mux.Registered(r.m, "main", mainAddressPath(r.o.home))
-	if err := m.Stop("main"); err != nil {
+	m := mux.Registered(r.m, "lead", mainAddressPath(r.o.home))
+	if err := m.Stop("lead"); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(r.m.stops, []string{"dev"}) {

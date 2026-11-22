@@ -224,9 +224,9 @@ func (e *Engine) checkWorkers() error {
 		ev, werr := e.sess.watch(name)
 		switch ev {
 		case cannotTell:
-			errs = append(errs, e.message("main", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, werr)))
+			errs = append(errs, e.message("lead", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, werr)))
 		case becameGone:
-			errs = append(errs, e.message("main", "sfy", fmt.Sprintf("The worker of task %s is gone. Its session no longer runs.", t.ID)))
+			errs = append(errs, e.message("lead", "sfy", fmt.Sprintf("The worker of task %s is gone. Its session no longer runs.", t.ID)))
 		}
 	}
 	return errors.Join(errs...)

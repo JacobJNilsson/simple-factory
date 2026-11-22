@@ -21,7 +21,7 @@ func TestDownAnswersThenEndsServeAndRemovesSocket(t *testing.T) {
 
 	ans, err := server.Call(socket, protocol.Request{Command: "down"})
 
-	if err != nil || !ans.OK || !strings.Contains(ans.Text, "Stopped main") {
+	if err != nil || !ans.OK || !strings.Contains(ans.Text, "Stopped lead") {
 		t.Fatalf("answer %+v, %v", ans, err)
 	}
 	select {
@@ -42,7 +42,7 @@ func TestRefusedDownKeepsServing(t *testing.T) {
 	socket := newSocket(t)
 	start(t, socket, eng, time.Hour, io.Discard)
 
-	ans, err := server.Call(socket, protocol.Request{Caller: protocol.Caller{Agent: "main"}, Command: "down"})
+	ans, err := server.Call(socket, protocol.Request{Caller: protocol.Caller{Agent: "lead"}, Command: "down"})
 
 	if err != nil || ans.OK {
 		t.Fatalf("answer %+v, %v", ans, err)

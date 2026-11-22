@@ -20,7 +20,7 @@ import (
 
 // Models names the model of each kind of agent.
 type Models struct {
-	Main     string `toml:"main"`
+	Main     string `toml:"lead"`
 	Worker   string `toml:"worker"`
 	Reviewer string `toml:"reviewer"`
 }
@@ -80,7 +80,7 @@ func (e *SessionSettingsError) Error() string {
 }
 
 // sessionKinds lists the kinds that session_settings accepts.
-var sessionKinds = []string{"main", "worker", "reviewer"}
+var sessionKinds = []string{"lead", "worker", "reviewer"}
 
 // validateSessionSettings refuses an unknown kind.
 // A key that sfy writes itself, such as permissions, is fine, because the provider merges it with sfy's own value.

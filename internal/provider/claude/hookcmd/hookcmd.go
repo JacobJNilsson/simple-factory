@@ -103,7 +103,7 @@ func userHook(event string, env func(string) string, stdin io.Reader, send Sende
 		return exitFailed, err
 	}
 	c := identity.Folder{Home: config.Home(env)}.Resolve(identity.Claim{Session: claude.HookSession(body)})
-	if c.Agent != "main" {
+	if c.Agent != protocol.Lead {
 		return exitOK, nil
 	}
 	req := protocol.Request{Caller: c, Command: "hook " + event, Body: claude.HookBody(event, body)}
@@ -151,11 +151,14 @@ func hookEventName(stdin io.Reader) string {
 	return in.Name
 }
 
+// agentName returns the session name in SFY_AGENT. A lead that started before the rename has the old name there.
+func agentName(env func(string) string) string { return protocol.AgentName(env("SFY_AGENT")) }
+
 // noteHook runs the two hooks that deliver notes through the session's note file. It needs no sfy process.
 // note-watch prints the SessionStart or CwdChanged output that names the file. note prints the file's text to stderr and exits with exitWake.
 // A caller with no session name, such as a registered main agent, gets no output and exit code 0.
 func noteHook(event string, env func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
-	path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT"))
+	path, ok := claude.NotePath(config.Home(env), agentName(env))
 	if !ok {
 		return exitOK
 	}
@@ -190,7 +193,7 @@ func drainNoteText(env func(string) string, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return takeDelivered(store.Files(config.Home(env)), env("SFY_AGENT"), entries)
+	return takeDelivered(store.Files(config.Home(env)), agentName(env), entries)
 }
 
 // turnEndedHook is the Stop hook of a started session. It drains the note file first, so a message that came during the turn reaches the agent at the turn end at the latest.
@@ -202,7 +205,7 @@ func turnEndedHook(env func(string) string, stdin io.Reader, stderr io.Writer, c
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed, nil
 	}
-	if path, ok := claude.NotePath(config.Home(env), env("SFY_AGENT")); ok {
+	if path, ok := claude.NotePath(config.Home(env), agentName(env)); ok {
 		text, err := drainNoteText(env, path)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)

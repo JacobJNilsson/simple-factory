@@ -45,11 +45,11 @@ func TestWrapKeepsEnvironmentValuesOutOfArgv(t *testing.T) {
 }
 
 func TestWrapReturnsASfyRunCommand(t *testing.T) {
-	argv := wrap(t, t.TempDir(), []string{"A=1"}, true, "claude", "--name", "main")
+	argv := wrap(t, t.TempDir(), []string{"A=1"}, true, "claude", "--name", "lead")
 
 	c := envruntest.Parse(t, argv)
 
-	if c.Bin != "/opt/sfy" || !c.Clean || !slices.Equal(c.Cmd, []string{"claude", "--name", "main"}) {
+	if c.Bin != "/opt/sfy" || !c.Clean || !slices.Equal(c.Cmd, []string{"claude", "--name", "lead"}) {
 		t.Errorf("parsed %+v", c)
 	}
 }

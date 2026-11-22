@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
@@ -294,7 +295,8 @@ func (f files) Task(id string) (task.Task, error) {
 		return task.Task{}, fmt.Errorf("store: task %s state: %w", id, err)
 	}
 	t.ID = id
-	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, st.Source
+	// A task that the lead created before the rename has the old name as its source.
+	t.State, t.Before, t.Round, t.Archived, t.Source = st.State, st.Before, st.Round, st.Archived, protocol.AgentName(st.Source)
 	t.Progress, t.Dir, t.Pending, t.Reopened, t.Pushing, t.Released, t.Branch, t.Lease, t.Updated = st.Progress, st.Dir, st.Pending, st.Reopened, st.Pushing, st.Released, st.Branch, st.Lease, st.Updated
 	return t, nil
 }

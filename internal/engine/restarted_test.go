@@ -9,7 +9,7 @@ import (
 
 const (
 	restartNote      = "sfy restarted."
-	typedRestartNote = "main: " + restartNote
+	typedRestartNote = "lead: " + restartNote
 	heldAnswer       = "The main agent gets the note when it waits."
 )
 
@@ -22,7 +22,7 @@ func TestTheRestartNoteGoesThroughTheProviderAndNothingIsTyped(t *testing.T) {
 	a := v.run("", "", "restarted", restartNote)
 
 	mustOK(t, a)
-	if want := []string{"main: " + restartNote}; !slices.Equal(v.ch.delivered, want) || len(v.l.sent) != 0 || a.Text != "" {
+	if want := []string{"lead: " + restartNote}; !slices.Equal(v.ch.delivered, want) || len(v.l.sent) != 0 || a.Text != "" {
 		t.Fatalf("delivered %q, typed %q, text %q", v.ch.delivered, v.l.sent, a.Text)
 	}
 }
@@ -36,7 +36,7 @@ func TestTheRestartNoteWaitsForTheTurnEndOfMain(t *testing.T) {
 	if len(v.l.sent) != 0 || a.Text != heldAnswer {
 		t.Fatalf("typed %q, text %q", v.l.sent, a.Text)
 	}
-	mustOK(t, v.run("main", "", "hook turn-ended", ""))
+	mustOK(t, v.run("lead", "", "hook turn-ended", ""))
 	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {
 		t.Fatalf("typed %q, want %q", v.l.sent, want)
 	}
@@ -46,14 +46,14 @@ func TestTheRestartNoteWaitsForABusyRegisteredMainEvenWhenTheProviderCanDeliver(
 	v := newEnv(t)
 	v.ch.canDeliver = true
 	v.e.SetRegistration(&fakeRegistration{registered: true})
-	mustOK(t, v.run("main", "", "hook busy", ""))
+	mustOK(t, v.run("lead", "", "hook busy", ""))
 
 	mustOK(t, v.run("", "", "restarted", restartNote))
 
 	if len(v.l.sent) != 0 || len(v.ch.delivered) != 0 {
 		t.Fatalf("typed %q, delivered %q", v.l.sent, v.ch.delivered)
 	}
-	mustOK(t, v.run("main", "", "hook idle", ""))
+	mustOK(t, v.run("lead", "", "hook idle", ""))
 	if want := []string{typedRestartNote}; !slices.Equal(v.l.sent, want) {
 		t.Fatalf("typed %q, want %q", v.l.sent, want)
 	}

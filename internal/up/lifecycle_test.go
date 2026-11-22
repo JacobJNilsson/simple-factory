@@ -20,7 +20,7 @@ func registeredRig(t *testing.T) *rig {
 		t.Fatal(err)
 	}
 	r.m.alive["dev"] = true
-	m := mux.Registered(r.m, "main", mainAddressPath(r.o.home), registration.Path(r.o.home))
+	m := mux.Registered(r.m, "lead", mainAddressPath(r.o.home), registration.Path(r.o.home))
 	r.o.mux = m
 	r.o.launcher = registeredLauncher{r.l, m}
 	r.out.Reset()
@@ -39,7 +39,7 @@ func TestAGoneAddressClearsTheRegistrationAndTheNextUpStartsAMainAgent(t *testin
 	if _, ok := registration.Read(r.o.home); ok {
 		t.Error("the registration stayed")
 	}
-	if len(r.l.specs) != 1 || r.l.specs[0].Name != "main" {
+	if len(r.l.specs) != 1 || r.l.specs[0].Name != "lead" {
 		t.Fatalf("starts %v, want a main agent started as usual", r.l.specs)
 	}
 }

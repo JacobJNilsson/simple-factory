@@ -134,7 +134,7 @@ func (r *rig) advance(d time.Duration) { r.now = r.now.Add(d) }
 func (r *rig) store(to, body string) {
 	r.t.Helper()
 	r.seq++
-	m := store.Message{ID: fmt.Sprintf("%06d", r.seq), From: "main", To: to, Body: body, Created: r.now}
+	m := store.Message{ID: fmt.Sprintf("%06d", r.seq), From: "lead", To: to, Body: body, Created: r.now}
 	if err := r.st.Send(m); err != nil {
 		r.t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestAMessageForASessionThatWaitsGoesThroughTheChannelWithItsSenderAndText(t
 
 	r.message(worker, "Please rebase.")
 
-	if want := []string{worker + ": From main:\nPlease rebase."}; !slices.Equal(r.ch.delivered, want) {
+	if want := []string{worker + ": From lead:\nPlease rebase."}; !slices.Equal(r.ch.delivered, want) {
 		t.Fatalf("delivered %q, want %q", r.ch.delivered, want)
 	}
 	r.wantNothingTyped()
@@ -217,7 +217,7 @@ func TestADeliveredMessageStaysUnreadUntilTheSessionTakesIt(t *testing.T) {
 		t.Fatalf("unread after delivery: %+v", got)
 	}
 	out, err := r.d.Inbox(worker)
-	if err != nil || out != "From main:\nPlease rebase.\n\n" {
+	if err != nil || out != "From lead:\nPlease rebase.\n\n" {
 		t.Fatalf("inbox shows %q, %v", out, err)
 	}
 }
@@ -312,7 +312,7 @@ func TestInboxShowsTheMessagesWhenTheDrainFails(t *testing.T) {
 
 	out, err := r.d.Inbox(worker)
 
-	if err != nil || out != "From main:\nPlease rebase.\n\n" {
+	if err != nil || out != "From lead:\nPlease rebase.\n\n" {
 		t.Fatalf("inbox shows %q, %v", out, err)
 	}
 	if got := r.unread(worker); len(got) != 0 {
@@ -345,7 +345,7 @@ func TestInboxWithoutAChannelShowsTheMessages(t *testing.T) {
 
 	out, err := r.d.Inbox(worker)
 
-	if err != nil || out != "From main:\nPlease rebase.\n\n" {
+	if err != nil || out != "From lead:\nPlease rebase.\n\n" {
 		t.Fatalf("inbox shows %q, %v", out, err)
 	}
 }
@@ -383,7 +383,7 @@ func TestSeveralUnreadMessagesAreDeliveredOneByOne(t *testing.T) {
 
 	r.turnEnded(worker)
 
-	if want := []string{worker + ": From main:\none", worker + ": From main:\ntwo"}; !slices.Equal(r.ch.delivered, want) {
+	if want := []string{worker + ": From lead:\none", worker + ": From lead:\ntwo"}; !slices.Equal(r.ch.delivered, want) {
 		t.Fatalf("delivered %q, want %q", r.ch.delivered, want)
 	}
 }
@@ -432,7 +432,7 @@ func TestABusySessionWithAHookGetsItsMessageQueuedAndNeverTyped(t *testing.T) {
 	r.advance(time.Minute)
 	r.tick(worker)
 
-	if want := []string{worker + ": From main:\nPlease rebase."}; !slices.Equal(r.ch.delivered, want) {
+	if want := []string{worker + ": From lead:\nPlease rebase."}; !slices.Equal(r.ch.delivered, want) {
 		t.Fatalf("delivered %q, want %q", r.ch.delivered, want)
 	}
 	r.wantNothingTyped()
@@ -519,7 +519,7 @@ func TestABurstOfMessagesToASessionThatWaitsIsDeliveredOnceEach(t *testing.T) {
 		r.message(worker, body)
 	}
 
-	want := []string{worker + ": From main:\none", worker + ": From main:\ntwo", worker + ": From main:\nthree"}
+	want := []string{worker + ": From lead:\none", worker + ": From lead:\ntwo", worker + ": From lead:\nthree"}
 	if !slices.Equal(r.ch.delivered, want) || len(r.panes.sent) != 0 {
 		t.Fatalf("delivered %q, typed %q", r.ch.delivered, r.panes.sent)
 	}
@@ -537,7 +537,7 @@ func TestABurstOfMessagesToABusySessionIsDeliveredOnceEach(t *testing.T) {
 	r.advance(time.Minute)
 	r.tick(worker)
 
-	want := []string{worker + ": From main:\none", worker + ": From main:\ntwo", worker + ": From main:\nthree"}
+	want := []string{worker + ": From lead:\none", worker + ": From lead:\ntwo", worker + ": From lead:\nthree"}
 	if !slices.Equal(r.ch.delivered, want) || len(r.panes.sent) != 0 {
 		t.Fatalf("delivered %q, typed %q", r.ch.delivered, r.panes.sent)
 	}
@@ -547,60 +547,60 @@ func TestARegisteredMainAgentKeepsTheTypedNote(t *testing.T) {
 	r := newRig(t)
 	r.ch.canDeliver = true
 	r.regist = true
-	r.turnEnded("main")
+	r.turnEnded("lead")
 
-	r.message("main", "hi")
+	r.message("lead", "hi")
 
 	if len(r.ch.delivered) != 0 {
 		t.Fatalf("delivered %q", r.ch.delivered)
 	}
-	r.wantTyped("main: " + newNote)
+	r.wantTyped("lead: " + newNote)
 }
 
 func TestAMessageToASessionThatWaitsTypesTheNoteOnce(t *testing.T) {
 	r := newRig(t)
-	r.turnEnded("main")
+	r.turnEnded("lead")
 
-	r.message("main", "one")
-	r.message("main", "two")
+	r.message("lead", "one")
+	r.message("lead", "two")
 
-	r.wantTyped("main: " + newNote)
+	r.wantTyped("lead: " + newNote)
 }
 
 func TestAMessageToABusySessionTypesNothing(t *testing.T) {
 	r := newRig(t)
 
-	r.message("main", "one")
+	r.message("lead", "one")
 
 	r.wantNothingTyped()
 }
 
 func TestTickResendsTheNoteAfterResendAndNotBefore(t *testing.T) {
 	r := newRig(t)
-	r.turnEnded("main")
-	r.message("main", "one")
+	r.turnEnded("lead")
+	r.message("lead", "one")
 
 	r.advance(4 * time.Minute)
-	r.tick("main")
+	r.tick("lead")
 	before := len(r.panes.sent)
 	r.advance(time.Minute)
-	r.tick("main")
+	r.tick("lead")
 
-	if before != 1 || len(r.panes.sent) != 2 || r.panes.sent[1] != "main: "+newNote {
+	if before != 1 || len(r.panes.sent) != 2 || r.panes.sent[1] != "lead: "+newNote {
 		t.Fatalf("before %d, typed %q", before, r.panes.sent)
 	}
 }
 
 func TestTickDoesNotResendToASessionThatReadItsMessages(t *testing.T) {
 	r := newRig(t)
-	r.turnEnded("main")
-	r.message("main", "one")
-	if _, err := r.d.Inbox("main"); err != nil {
+	r.turnEnded("lead")
+	r.message("lead", "one")
+	if _, err := r.d.Inbox("lead"); err != nil {
 		t.Fatal(err)
 	}
 
 	r.advance(time.Hour)
-	r.tick("main")
+	r.tick("lead")
 
 	if len(r.panes.sent) != 1 {
 		t.Fatalf("typed %q", r.panes.sent)
@@ -609,24 +609,24 @@ func TestTickDoesNotResendToASessionThatReadItsMessages(t *testing.T) {
 
 func TestAFreshDeliveryResendsAnUnreadNoteAfterResend(t *testing.T) {
 	r := newRig(t)
-	r.store("main", "one")
+	r.store("lead", "one")
 	r.advance(5 * time.Minute)
 
-	r.tick("main")
+	r.tick("lead")
 
-	r.wantTyped("main: " + newNote)
-	if got := r.unread("main"); len(got) != 1 {
+	r.wantTyped("lead: " + newNote)
+	if got := r.unread("lead"); len(got) != 1 {
 		t.Fatalf("unread %+v", got)
 	}
 }
 
 func TestTickDoesNotResendToMainWhenItsSessionIsGone(t *testing.T) {
 	r := newRig(t)
-	r.store("main", "one")
-	r.panes.dead = map[string]bool{"main": true}
+	r.store("lead", "one")
+	r.panes.dead = map[string]bool{"lead": true}
 	r.advance(time.Hour)
 
-	r.tick("main")
+	r.tick("lead")
 
 	r.wantNothingTyped()
 }
@@ -649,13 +649,13 @@ func TestANoteToAGoneSessionDeliversNothingAndLeavesTheMessageUnread(t *testing.
 
 func TestTheLogNamesEachNoteItTypesAndWhyItWasTyped(t *testing.T) {
 	r := newRig(t)
-	r.turnEnded("main")
-	r.message("main", "one")
+	r.turnEnded("lead")
+	r.message("lead", "one")
 	r.advance(5 * time.Minute)
-	r.tick("main")
+	r.tick("lead")
 
 	lines := strings.Split(strings.TrimSpace(r.log.String()), "\n")
-	want := []string{"note typed to main: new message", "note typed to main: resend"}
+	want := []string{"note typed to lead: new message", "note typed to lead: resend"}
 	if !slices.Equal(lines, want) {
 		t.Fatalf("log %q, want %q", lines, want)
 	}
@@ -663,13 +663,13 @@ func TestTheLogNamesEachNoteItTypesAndWhyItWasTyped(t *testing.T) {
 
 func TestAGoneSessionIsNamedOnceInTheLog(t *testing.T) {
 	r := newRig(t)
-	r.store("main", "one")
-	r.panes.dead = map[string]bool{"main": true}
+	r.store("lead", "one")
+	r.panes.dead = map[string]bool{"lead": true}
 
-	r.tick("main")
-	r.tick("main")
+	r.tick("lead")
+	r.tick("lead")
 
-	if n := strings.Count(r.log.String(), "note skipped for main: its session is not alive"); n != 1 {
+	if n := strings.Count(r.log.String(), "note skipped for lead: its session is not alive"); n != 1 {
 		t.Fatalf("log %q", r.log.String())
 	}
 }
@@ -749,11 +749,11 @@ func TestAMessageMidTurnTypesOneNoteAtTheTurnEnd(t *testing.T) {
 
 func TestASessionAtAPermissionPromptGetsNoResendBecauseItIsBusy(t *testing.T) {
 	r := newRig(t)
-	r.store("main", "hello")
-	r.d.Prompted("main")
+	r.store("lead", "hello")
+	r.d.Prompted("lead")
 
 	r.advance(5 * time.Minute)
-	r.tick("main")
+	r.tick("lead")
 
 	r.wantNothingTyped()
 }
@@ -786,35 +786,35 @@ func TestIdleForASessionThatDoesNotRunTypesNothing(t *testing.T) {
 func TestANoteToABusySessionTypesNothingAndIdleTypesIt(t *testing.T) {
 	r := newRig(t)
 
-	held, err := r.d.Note("main", "sfy restarted.")
+	held, err := r.d.Note("lead", "sfy restarted.")
 
 	if err != nil || !held {
 		t.Fatalf("held %v, err %v", held, err)
 	}
 	r.wantNothingTyped()
-	r.idle("main")
-	r.wantTyped("main: sfy restarted.")
+	r.idle("lead")
+	r.wantTyped("lead: sfy restarted.")
 }
 
 func TestANoteToASessionThatWaitsIsTypedAtOnce(t *testing.T) {
 	r := newRig(t)
-	r.idle("main")
+	r.idle("lead")
 
-	held, err := r.d.Note("main", "sfy restarted.")
+	held, err := r.d.Note("lead", "sfy restarted.")
 
 	if err != nil || held {
 		t.Fatalf("held %v, err %v", held, err)
 	}
-	r.wantTyped("main: sfy restarted.")
+	r.wantTyped("lead: sfy restarted.")
 }
 
 func TestANoteGoesThroughTheChannelWhenItCan(t *testing.T) {
 	r := newRig(t)
 	r.ch.canDeliver = true
 
-	held, err := r.d.Note("main", "sfy restarted.")
+	held, err := r.d.Note("lead", "sfy restarted.")
 
-	if err != nil || held || !slices.Equal(r.ch.delivered, []string{"main: sfy restarted."}) {
+	if err != nil || held || !slices.Equal(r.ch.delivered, []string{"lead: sfy restarted."}) {
 		t.Fatalf("held %v, err %v, delivered %q", held, err, r.ch.delivered)
 	}
 	r.wantNothingTyped()
@@ -824,69 +824,69 @@ func TestANoteToARegisteredBusyMainWaitsEvenWhenTheChannelCanDeliver(t *testing.
 	r := newRig(t)
 	r.ch.canDeliver = true
 	r.regist = true
-	r.d.Busy("main")
+	r.d.Busy("lead")
 
-	held, err := r.d.Note("main", "sfy restarted.")
+	held, err := r.d.Note("lead", "sfy restarted.")
 
 	if err != nil || !held || len(r.ch.delivered) != 0 {
 		t.Fatalf("held %v, err %v, delivered %q", held, err, r.ch.delivered)
 	}
 	r.wantNothingTyped()
-	r.idle("main")
-	r.wantTyped("main: sfy restarted.")
+	r.idle("lead")
+	r.wantTyped("lead: sfy restarted.")
 }
 
 func TestAHeldNoteIsTypedOnceOverTwoTurnEnds(t *testing.T) {
 	r := newRig(t)
-	if _, err := r.d.Note("main", "sfy restarted."); err != nil {
+	if _, err := r.d.Note("lead", "sfy restarted."); err != nil {
 		t.Fatal(err)
 	}
 
-	r.turnEnded("main")
-	r.turnEnded("main")
+	r.turnEnded("lead")
+	r.turnEnded("lead")
 
-	r.wantTyped("main: sfy restarted.")
+	r.wantTyped("lead: sfy restarted.")
 }
 
 func TestAHeldNoteIsTypedAfterResendWhenNoHookCame(t *testing.T) {
 	r := newRig(t)
-	if _, err := r.d.Note("main", "sfy restarted."); err != nil {
+	if _, err := r.d.Note("lead", "sfy restarted."); err != nil {
 		t.Fatal(err)
 	}
 	r.advance(4 * time.Minute)
-	r.tick("main")
+	r.tick("lead")
 	r.wantNothingTyped()
 
 	r.advance(time.Minute)
-	r.tick("main")
+	r.tick("lead")
 	r.advance(10 * time.Minute)
-	r.tick("main")
+	r.tick("lead")
 
-	r.wantTyped("main: sfy restarted.")
+	r.wantTyped("lead: sfy restarted.")
 }
 
 func TestAHeldNoteNeverReachesASessionThatAHookReportedBusy(t *testing.T) {
 	r := newRig(t)
-	if _, err := r.d.Note("main", "sfy restarted."); err != nil {
+	if _, err := r.d.Note("lead", "sfy restarted."); err != nil {
 		t.Fatal(err)
 	}
-	r.d.Busy("main")
+	r.d.Busy("lead")
 	r.advance(30 * time.Minute)
 
-	r.tick("main")
+	r.tick("lead")
 
 	r.wantNothingTyped()
-	r.turnEnded("main")
-	r.wantTyped("main: sfy restarted.")
+	r.turnEnded("lead")
+	r.wantTyped("lead: sfy restarted.")
 }
 
 func TestANoteIsNotHeldForADeadSession(t *testing.T) {
 	r := newRig(t)
-	r.panes.dead = map[string]bool{"main": true}
+	r.panes.dead = map[string]bool{"lead": true}
 
-	held, err := r.d.Note("main", "sfy restarted.")
+	held, err := r.d.Note("lead", "sfy restarted.")
 	r.advance(10 * time.Minute)
-	r.tick("main")
+	r.tick("lead")
 
 	if err != nil || held {
 		t.Fatalf("held %v, err %v", held, err)
@@ -896,13 +896,13 @@ func TestANoteIsNotHeldForADeadSession(t *testing.T) {
 
 func TestAHeldNoteIsNotTypedForADeadSession(t *testing.T) {
 	r := newRig(t)
-	if _, err := r.d.Note("main", "sfy restarted."); err != nil {
+	if _, err := r.d.Note("lead", "sfy restarted."); err != nil {
 		t.Fatal(err)
 	}
-	r.panes.dead = map[string]bool{"main": true}
+	r.panes.dead = map[string]bool{"lead": true}
 	r.advance(10 * time.Minute)
 
-	r.tick("main")
+	r.tick("lead")
 
 	r.wantNothingTyped()
 }

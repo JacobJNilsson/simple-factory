@@ -43,7 +43,7 @@ func TestLoadFactoryReadsConfigDFilesInNameOrderBeforeConfigToml(t *testing.T) {
 func TestLoadFactoryPutsAFactoryConfigDFileOverTheMachineConfigToml(t *testing.T) {
 	home := userHome(t)
 	state := mkdir(t, home, ".sfy", "factories", "acme")
-	writeFile(t, filepath.Join(home, ".sfy", "config.toml"), "[models]\nmain = \"m\"\nworker = \"w\"\n")
+	writeFile(t, filepath.Join(home, ".sfy", "config.toml"), "[models]\nlead = \"m\"\nworker = \"w\"\n")
 	writeFile(t, filepath.Join(state, "config.d", "50-shared.toml"), "[models]\nworker = \"shared\"\n")
 
 	got, err := config.LoadFactory(state, home)

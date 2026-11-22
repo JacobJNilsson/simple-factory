@@ -108,7 +108,7 @@ func worker() engine.SessionSpec {
 }
 
 func mainSpec() engine.SessionSpec {
-	return engine.SessionSpec{Name: "main", Kind: "main", Dir: "/state", Model: "opus", Prompt: "Start."}
+	return engine.SessionSpec{Name: "lead", Kind: "lead", Dir: "/state", Model: "opus", Prompt: "Start."}
 }
 
 func hookOf(t *testing.T, s settings, event string) hookEntry {
@@ -228,7 +228,7 @@ func TestMainSettingsAllowTheConfiguredCommandsAndSfy(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	for _, want := range []string{"Bash(git *)", "Bash(make *)", "Bash(" + bin + " *)", "Bash(sfy *)"} {
 		if !slices.Contains(s.Permissions.Allow, want) {
@@ -256,7 +256,7 @@ func TestMainSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	if len(s.Permissions.Deny) != 0 {
 		t.Errorf("main deny rules = %v, want none", s.Permissions.Deny)
@@ -272,11 +272,11 @@ func TestMainSettingsDenyNothingAndGuardMergesWithAHook(t *testing.T) {
 
 func TestMainSessionRulesAllowAddsMergeRules(t *testing.T) {
 	home := t.TempDir()
-	cfg := config.Config{SessionRules: map[string]config.SessionRule{"main": {Allow: []string{"Bash(gh pr merge *)"}}}}
+	cfg := config.Config{SessionRules: map[string]config.SessionRule{"lead": {Allow: []string{"Bash(gh pr merge *)"}}}}
 	p := claude.New(cfg, home, bin, []string{home})
 	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	if !slices.Contains(s.Permissions.Allow, "Bash(gh pr merge *)") {
 		t.Errorf("allow lacks the extra rule: %v", s.Permissions.Allow)
@@ -585,7 +585,7 @@ func TestCommandRejectsAPathInTheName(t *testing.T) {
 func TestMainSettingsAllowRules(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	for _, want := range []string{"Bash(sfy *)", "Read(/" + home + "/**)", "Bash(ls *)"} {
 		t.Run(want, func(t *testing.T) {
@@ -600,7 +600,7 @@ func TestMainBashRulesAreTheConfigSfyAndLsRules(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	var got []string
 	for _, a := range s.Permissions.Allow {
@@ -784,7 +784,7 @@ func TestMainSettingsHaveNoSandbox(t *testing.T) {
 	p, home := setupSandbox(t)
 	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	if s.Sandbox != nil || slices.Contains(s.Permissions.Allow, "WebFetch(domain:*)") {
 		t.Fatalf("main got sandbox settings: %+v", s)
@@ -929,7 +929,7 @@ func extraSettings(t *testing.T, kind string, cfg config.Config) config.SessionV
 	t.Helper()
 	home := t.TempDir()
 	p := claude.New(cfg, home, bin, []string{home})
-	spec := map[string]engine.SessionSpec{"main": mainSpec(), "worker": worker(), "reviewer": reviewerSpec()}[kind]
+	spec := map[string]engine.SessionSpec{"lead": mainSpec(), "worker": worker(), "reviewer": reviewerSpec()}[kind]
 	command(t, p, spec)
 	b, err := os.ReadFile(settingsPath(home, spec.Name))
 	if err != nil {
@@ -959,17 +959,17 @@ func TestSessionSettingsReachOnlyTheirKind(t *testing.T) {
 	if r["extraKey"] != "r" || r["n"] != float64(3) {
 		t.Errorf("reviewer: %v", r)
 	}
-	if _, ok := extraSettings(t, "main", cfg)["extraKey"]; ok {
+	if _, ok := extraSettings(t, "lead", cfg)["extraKey"]; ok {
 		t.Error("main got a key from another kind")
 	}
 }
 
 func TestSessionSettingsWriteNestedValuesAsJSON(t *testing.T) {
 	cfg := config.Config{SessionSettings: map[string]config.SessionValues{
-		"main": {"attribution": map[string]any{"commit": "", "pr": ""}, "list": []any{"a", "b"}},
+		"lead": {"attribution": map[string]any{"commit": "", "pr": ""}, "list": []any{"a", "b"}},
 	}}
 
-	got := extraSettings(t, "main", cfg)
+	got := extraSettings(t, "lead", cfg)
 
 	if obj, ok := got["attribution"].(map[string]any); !ok || obj["commit"] != "" || obj["pr"] != "" {
 		t.Errorf("attribution: %v", got["attribution"])
@@ -1015,7 +1015,7 @@ func TestWorkerAndReviewerTurnOffPromptSuggestions(t *testing.T) {
 			t.Errorf("%s: promptSuggestionEnabled = %v, want false", kind, got)
 		}
 	}
-	if _, ok := extraSettings(t, "main", config.Config{})["promptSuggestionEnabled"]; ok {
+	if _, ok := extraSettings(t, "lead", config.Config{})["promptSuggestionEnabled"]; ok {
 		t.Error("main got promptSuggestionEnabled")
 	}
 }

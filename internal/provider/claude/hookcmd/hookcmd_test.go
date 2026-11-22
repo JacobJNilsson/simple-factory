@@ -67,6 +67,23 @@ func noteEnv(t *testing.T, agent string) (func(string) string, string) {
 	return envOf(map[string]string{"SFY_HOME": home, "SFY_AGENT": agent}), path
 }
 
+func TestNoteHookOfALeadWithTheOldNameReadsTheNoteOfTheLead(t *testing.T) {
+	home := t.TempDir()
+	path, _ := claude.NotePath(home, "lead")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := claude.AppendNote(path, "", "From operator:\nhi"); err != nil {
+		t.Fatal(err)
+	}
+
+	code, _, errb := noteHookRun(envOf(map[string]string{"SFY_HOME": home, "SFY_AGENT": "main"}), "note")
+
+	if code != 2 || errb != "From operator:\nhi\n" {
+		t.Fatalf("code %d, stderr %q", code, errb)
+	}
+}
+
 func TestNoteHookPrintsTheNotesToStderrAndExitsWithTwo(t *testing.T) {
 	env, path := noteEnv(t, "worker-t1")
 	if err := claude.AppendNote(path, "", "From main:\nPlease rebase."); err != nil {
@@ -87,7 +104,7 @@ func TestNoteHookPrintsTheNotesToStderrAndExitsWithTwo(t *testing.T) {
 func storeMessage(t *testing.T, env func(string) string, id, body string) store.Store {
 	t.Helper()
 	st := store.Files(env("SFY_HOME"))
-	if err := st.Send(store.Message{ID: id, From: "main", To: "worker-t1", Body: body, Created: time.Now()}); err != nil {
+	if err := st.Send(store.Message{ID: id, From: "lead", To: "worker-t1", Body: body, Created: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
 	return st
@@ -350,7 +367,7 @@ func TestStartedAgentsRunOnlyTheirOwnHookForms(t *testing.T) {
 
 func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
 	home := t.TempDir()
-	token, err := identity.Folder{Home: home}.Issue("main")
+	token, err := identity.Folder{Home: home}.Issue("lead")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +386,7 @@ func TestUserHookRequestCarriesTheTokenOfMain(t *testing.T) {
 	if err != nil || code != exitOK || len(sent) != 1 {
 		t.Fatalf("code %d, err %v, sent %d", code, err, len(sent))
 	}
-	if want := (protocol.Caller{Agent: "main", Token: token}); sent[0].Caller != want {
+	if want := (protocol.Caller{Agent: "lead", Token: token}); sent[0].Caller != want {
 		t.Fatalf("caller %+v, want %+v", sent[0].Caller, want)
 	}
 }

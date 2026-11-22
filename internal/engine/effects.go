@@ -83,7 +83,7 @@ func (e *Engine) cleanup(t task.Task) error {
 		return err
 	}
 	if holds {
-		return e.message("main", "sfy", fmt.Sprintf("Task %s is %s, but its workspace %s still holds work, so sfy kept it.", t.ID, t.State, dir))
+		return e.message("lead", "sfy", fmt.Sprintf("Task %s is %s, but its workspace %s still holds work, so sfy kept it.", t.ID, t.State, dir))
 	}
 	return nil
 }

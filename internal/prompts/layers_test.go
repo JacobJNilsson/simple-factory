@@ -89,12 +89,12 @@ func TestForReadsALinkedAdditionThroughItsLink(t *testing.T) {
 	if err := os.WriteFile(target, []byte("linked"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	writePrompt(t, factory, "main.d/placeholder.md", "x")
-	if err := os.Symlink(target, filepath.Join(factory, "prompts", "main.d", "shared.md")); err != nil {
+	writePrompt(t, factory, "lead.d/placeholder.md", "x")
+	if err := os.Symlink(target, filepath.Join(factory, "prompts", "lead.d", "shared.md")); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := prompts.For("main", []string{machine, factory})
+	got, err := prompts.For("lead", []string{machine, factory})
 
 	if err != nil || !strings.HasSuffix(got, "\n\nx\n\nlinked") {
 		t.Fatalf("got %q, %v", got, err)
@@ -138,7 +138,7 @@ func TestSourcesNamesTheBaseAndEachAdditionInAppendOrder(t *testing.T) {
 }
 
 func TestSourcesNamesTheDefaultBase(t *testing.T) {
-	base, additions, err := prompts.Sources("main", []string{t.TempDir()})
+	base, additions, err := prompts.Sources("lead", []string{t.TempDir()})
 
 	if err != nil || base != prompts.DefaultBase || len(additions) != 0 {
 		t.Fatalf("got %q, %v, %v", base, additions, err)

@@ -230,7 +230,7 @@ const taskFile = "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n"
 
 func (v env) seed(t *testing.T, state task.State, round int) {
 	t.Helper()
-	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: state, Round: round, Source: "main"}
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: state, Round: round, Source: "lead"}
 	if state != task.New && state != task.Queued {
 		tk.Dir = "/work/t1"
 	}
@@ -304,7 +304,7 @@ func TestTaskNewFromTheOperatorStartsNewAndMessagesMain(t *testing.T) {
 	if tk.State != task.New || tk.Source != "operator" {
 		t.Fatalf("got %+v", tk)
 	}
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, a.Text) {
 		t.Fatalf("main inbox: %+v", msgs)
 	}
@@ -325,7 +325,7 @@ func TestTaskNewWarnsInReplyAndNoteWhenRepoIsUntrusted(t *testing.T) {
 	if want := []string{"/folder/https://example.com/x.git"}; !reflect.DeepEqual(v.l.trustAsked, want) {
 		t.Errorf("asked %v, want %v", v.l.trustAsked, want)
 	}
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "untrusted") {
 		t.Fatalf("main inbox: %+v", msgs)
 	}
@@ -350,11 +350,11 @@ func TestTaskNewIsQuietWhenRepoIsTrustedOrAbsent(t *testing.T) {
 func TestTaskNewFromMainStartsQueued(t *testing.T) {
 	v := newEnv(t)
 
-	a := v.run("main", "", "task new", taskFile)
+	a := v.run("lead", "", "task new", taskFile)
 
 	mustOK(t, a)
 	tk := v.state(t, a.Text)
-	if tk.State != task.Queued || tk.Source != "main" {
+	if tk.State != task.Queued || tk.Source != "lead" {
 		t.Fatalf("got %+v", tk)
 	}
 	v.statusShows(t, a.Text, "queued")
@@ -363,7 +363,7 @@ func TestTaskNewFromMainStartsQueued(t *testing.T) {
 func TestTaskNewWithoutAGoalFailsAndStoresNothing(t *testing.T) {
 	v := newEnv(t)
 
-	a := v.run("main", "", "task new", "# Title\n\n## Description\n\nDo it.\n")
+	a := v.run("lead", "", "task new", "# Title\n\n## Description\n\nDo it.\n")
 
 	mustFail(t, a, "Goal")
 	tasks, _ := v.st.Tasks()
@@ -384,7 +384,7 @@ func TestTaskEditReplacesTheGoalOfANewTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.New, 0)
 
-	a := v.run("main", "", "task edit", strings.Replace(taskFile, "Done.", "Better.", 1), "t1")
+	a := v.run("lead", "", "task edit", strings.Replace(taskFile, "Done.", "Better.", 1), "t1")
 
 	mustOK(t, a)
 	if g := v.state(t, "t1").Goal; g != "Better." {
@@ -396,7 +396,7 @@ const editedFile = "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nBetter.\n"
 
 func editGoal(v env, t *testing.T) {
 	t.Helper()
-	mustOK(t, v.run("main", "", "task edit", editedFile, "t1"))
+	mustOK(t, v.run("lead", "", "task edit", editedFile, "t1"))
 }
 
 func TestTaskEditReplacesTheGoalOfAQueuedTask(t *testing.T) {
@@ -471,7 +471,7 @@ func TestTaskEditOfAnEscalatedTaskWithAWorkspaceMessagesTheWorker(t *testing.T) 
 
 func TestTaskEditOfAnEscalatedTaskWithoutAWorkspaceMessagesNobody(t *testing.T) {
 	v := newEnv(t)
-	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Escalated, Source: "main"}
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Escalated, Source: "lead"}
 	if err := v.st.Create(tk); err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +520,7 @@ func TestTaskEditFailsWhenTheNoteFailsForALiveWorker(t *testing.T) {
 	waitingWorker(v, t)
 	v.l.sendErr = errors.New("pane refused")
 
-	a := v.run("main", "", "task edit", editedFile, "t1")
+	a := v.run("lead", "", "task edit", editedFile, "t1")
 
 	mustFail(t, a, "pane refused")
 }
@@ -529,7 +529,7 @@ func TestTaskEditFailsOnADoneTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Done, 0)
 
-	a := v.run("main", "", "task edit", taskFile, "t1")
+	a := v.run("lead", "", "task edit", taskFile, "t1")
 
 	if a.OK {
 		t.Fatalf("want an error, got %+v", a)
@@ -540,7 +540,7 @@ func TestTaskEditFailsOnACancelledTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Cancelled, 0)
 
-	a := v.run("main", "", "task edit", taskFile, "t1")
+	a := v.run("lead", "", "task edit", taskFile, "t1")
 
 	if a.OK {
 		t.Fatalf("want an error, got %+v", a)
@@ -551,7 +551,7 @@ func TestTaskEditRefusesANewRepoOnceTheWorkspaceExists(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	a := v.run("main", "", "task edit", taskFile+"\n## Repo\n\nother\n", "t1")
+	a := v.run("lead", "", "task edit", taskFile+"\n## Repo\n\nother\n", "t1")
 
 	mustFail(t, a, "repo is fixed")
 }
@@ -560,7 +560,7 @@ func TestTaskEditRefusesNewProtectedPathsOnceTheWorkspaceExists(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	a := v.run("main", "", "task edit", taskFile+"\n## Protected\n\n- a.go\n", "t1")
+	a := v.run("lead", "", "task edit", taskFile+"\n## Protected\n\n- a.go\n", "t1")
 
 	mustFail(t, a, "protected paths are fixed")
 }
@@ -569,7 +569,7 @@ func TestTaskEditAllowsANewRepoBeforeTheWorkspaceExists(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
 
-	mustOK(t, v.run("main", "", "task edit", taskFile+"\n## Repo\n\nother\n", "t1"))
+	mustOK(t, v.run("lead", "", "task edit", taskFile+"\n## Repo\n\nother\n", "t1"))
 
 	if r := v.state(t, "t1").Repo; r != "other" {
 		t.Fatalf("repo %q", r)
@@ -606,7 +606,7 @@ func TestTaskQueueMovesANewTaskToQueued(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.New, 0)
 
-	mustOK(t, v.run("main", "", "task queue", "", "t1"))
+	mustOK(t, v.run("lead", "", "task queue", "", "t1"))
 
 	v.statusShows(t, "t1", "queued")
 }
@@ -627,10 +627,10 @@ func TestSendStoresAMessageForTheAgent(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "use", "Go"))
+	mustOK(t, v.run("lead", "", "send", "", "worker-t1", "use", "Go"))
 
 	msgs := v.inbox(t, "worker-t1")
-	if len(msgs) != 1 || msgs[0].Body != "use Go" || msgs[0].From != "main" {
+	if len(msgs) != 1 || msgs[0].Body != "use Go" || msgs[0].From != "lead" {
 		t.Fatalf("got %+v", msgs)
 	}
 }
@@ -676,7 +676,7 @@ func TestReportBlockedMessagesMainAndKeepsTheState(t *testing.T) {
 
 	mustOK(t, v.run("worker-t1", "t1", "report blocked", "", "which", "db?"))
 
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "t1") || !strings.Contains(msgs[0].Body, "which db?") {
 		t.Fatalf("got %+v", msgs)
 	}
@@ -700,7 +700,7 @@ func TestReportProgressRecordsTheText(t *testing.T) {
 func (v env) pass(t *testing.T) {
 	t.Helper()
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
-	mustOK(t, v.run("main", "", "task complete", "", "t1"))
+	mustOK(t, v.run("lead", "", "task complete", "", "t1"))
 }
 
 func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
@@ -710,7 +710,7 @@ func TestVerdictPassMovesToApprovedAndTellsMain(t *testing.T) {
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
 
 	v.statusShows(t, "t1", "approved")
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no repo") {
 		t.Fatalf("main got %+v", msgs)
 	}
@@ -748,10 +748,10 @@ func TestVerdictFailInTheLastRoundEscalatesAndNotifiesMain(t *testing.T) {
 	mustOK(t, v.run("review-t1-3", "t1", "verdict fail", "Still wrong."))
 
 	v.statusShows(t, "t1", "escalated")
-	if len(v.l.notified) != 1 || !strings.HasPrefix(v.l.notified[0], "main: ") {
+	if len(v.l.notified) != 1 || !strings.HasPrefix(v.l.notified[0], "lead: ") {
 		t.Fatalf("notified %v", v.l.notified)
 	}
-	if len(v.inbox(t, "main")) != 1 {
+	if len(v.inbox(t, "lead")) != 1 {
 		t.Fatal("main got no message")
 	}
 }
@@ -760,7 +760,7 @@ func TestEscalateMovesTheTaskAndNotifiesMain(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "need", "a", "decision"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "need", "a", "decision"))
 
 	v.statusShows(t, "t1", "escalated")
 	if len(v.l.notified) != 1 || !strings.Contains(v.l.notified[0], "need a decision") {
@@ -785,7 +785,7 @@ func TestTaskCancelOfATaskWithoutAWorkspaceStopsNothing(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
 
-	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
 
 	if len(v.ws.removed) != 0 || len(v.l.stopped) != 0 {
 		t.Fatalf("removed %v stopped %v", v.ws.removed, v.l.stopped)
@@ -795,7 +795,7 @@ func TestTaskCancelOfATaskWithoutAWorkspaceStopsNothing(t *testing.T) {
 func TestACommandOfAnotherKindFailsAndNamesTheCommandsThatKindMayRun(t *testing.T) {
 	v := newEnv(t)
 
-	a := v.run("review-t1-1", "t1", "send", "", "main", "hi")
+	a := v.run("review-t1-1", "t1", "send", "", "lead", "hi")
 
 	mustFail(t, a, "verdict pass")
 }
@@ -828,7 +828,7 @@ func TestCompleteMovesAnApprovedTaskToDoneAndCleansUp(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 
-	mustOK(t, v.run("main", "", "task complete", "", "t1"))
+	mustOK(t, v.run("lead", "", "task complete", "", "t1"))
 
 	v.statusShows(t, "t1", "done")
 	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || !slices.Equal(v.ws.removed, []string{"t1"}) {
@@ -840,7 +840,7 @@ func TestCompleteOfAWorkingTaskFails(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	mustFail(t, v.run("main", "", "task complete", "", "t1"), "needs approved")
+	mustFail(t, v.run("lead", "", "task complete", "", "t1"), "needs approved")
 	if v.state(t, "t1").State != task.Working {
 		t.Fatal("the task changed state")
 	}
@@ -860,7 +860,7 @@ func TestCancelOfAnApprovedTaskWorks(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 
-	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
 
 	v.statusShows(t, "t1", "cancelled")
 	if !slices.Equal(v.ws.removed, []string{"t1"}) {
@@ -872,7 +872,7 @@ func TestTaskEditFailsOnAnApprovedTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 
-	mustFail(t, v.run("main", "", "task edit", taskFile, "t1"), "approved")
+	mustFail(t, v.run("lead", "", "task edit", taskFile, "t1"), "approved")
 }
 
 func TestCompleteClearsTheWorkspaceOfTheTask(t *testing.T) {
@@ -902,7 +902,7 @@ func TestTaskCancelKeepsTheDirWhenTheWorkspaceStaysBehind(t *testing.T) {
 func TestEscalatedTaskWithoutAWorkspaceIsCancelledWithoutSessionCalls(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.New, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "unclear"))
 
 	mustOK(t, v.run("", "", "task cancel", "", "t1"))
 
@@ -940,7 +940,7 @@ func TestSendToAnAgentThatIsNotLiveFails(t *testing.T) {
 	v.seed(t, task.Queued, 0)
 
 	for _, to := range []string{"worker-t1", "review-t1-1", "nobody", "worker-t9"} {
-		mustFail(t, v.run("main", "", "send", "", to, "hi"), to)
+		mustFail(t, v.run("lead", "", "send", "", to, "hi"), to)
 	}
 }
 
@@ -948,7 +948,7 @@ func TestSendToTheReviewerOfATaskInReviewWorks(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
 
-	mustOK(t, v.run("main", "", "send", "", "review-t1-1", "hi"))
+	mustOK(t, v.run("lead", "", "send", "", "review-t1-1", "hi"))
 }
 
 func TestTaskShowPrintsTheVerdicts(t *testing.T) {
@@ -994,7 +994,7 @@ func TestTurnEndedFromAWorkerThatReportedTypesNoReminder(t *testing.T) {
 func TestTurnEndedTypesTheNoteForUnreadMessages(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hi"))
+	mustOK(t, v.run("lead", "", "send", "", "worker-t1", "hi"))
 
 	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
@@ -1015,7 +1015,7 @@ func TestTheReminderStopsAfterTwoAndMainGetsOneMessage(t *testing.T) {
 	if !slices.Equal(v.l.sent, []string{"worker-t1: " + reminder, "worker-t1: " + reminder}) {
 		t.Fatalf("sent %v", v.l.sent)
 	}
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "worker-t1 ended 2 turns without a report.") {
 		t.Fatalf("got %+v", msgs)
 	}
@@ -1031,7 +1031,7 @@ func TestAReportResetsTheCountOfReminders(t *testing.T) {
 
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
 
-	if len(v.l.sent) != 3 || len(v.inbox(t, "main")) != 0 {
+	if len(v.l.sent) != 3 || len(v.inbox(t, "lead")) != 0 {
 		t.Fatalf("sent %v", v.l.sent)
 	}
 }
@@ -1067,7 +1067,7 @@ func TestPermissionFromAWorkerWritesNothingToMainsInboxAndLogsTheCall(t *testing
 
 	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Tool: Bash. Command: rm -rf build"))
 
-	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
+	if msgs := v.inbox(t, "lead"); len(msgs) != 0 {
 		t.Fatalf("main got %+v", msgs)
 	}
 	if len(v.l.sent) != 0 {
@@ -1103,7 +1103,7 @@ func TestReviewerReportBlockedTellsMain(t *testing.T) {
 
 	mustOK(t, v.run("review-t1-1", "t1", "report blocked", "", "needs", "network"))
 
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "needs network") {
 		t.Fatalf("got %+v", msgs)
 	}
@@ -1115,7 +1115,7 @@ func TestReviewerReportBlockedTellsMain(t *testing.T) {
 func TestPermissionDenialLeavesTheResendOfAnUnreadNoteRunning(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hello"))
+	mustOK(t, v.run("lead", "", "send", "", "worker-t1", "hello"))
 	mustOK(t, v.run("worker-t1", "t1", "hook permission", "Tool: Bash. Command: ls"))
 	before := len(v.l.sent)
 
@@ -1144,7 +1144,7 @@ func TestPermissionFromAStaleWorkerIsDeniedAndNotLogged(t *testing.T) {
 func TestPermissionFromMainNotifiesTheOperator(t *testing.T) {
 	v := newEnv(t)
 
-	a := v.run("main", "", "hook permission", "Run make?")
+	a := v.run("lead", "", "hook permission", "Run make?")
 
 	mustOK(t, a)
 	if a.Text != "" {
@@ -1159,7 +1159,7 @@ func TestPermissionFromMainNotifiesTheOperator(t *testing.T) {
 func (v env) queue(t *testing.T, n int) {
 	t.Helper()
 	for range n {
-		mustOK(t, v.run("main", "", "task new", taskFile))
+		mustOK(t, v.run("lead", "", "task new", taskFile))
 	}
 }
 
@@ -1255,7 +1255,7 @@ func TestTickTellsMainOnceWhenAWorkerIsGone(t *testing.T) {
 	v.tick(t)
 	v.tick(t)
 
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "t1") {
 		t.Fatalf("got %+v", msgs)
 	}
@@ -1272,7 +1272,7 @@ func TestTickTellsMainAgainWhenAWorkerDiesAfterRunningAgain(t *testing.T) {
 
 	v.tick(t)
 
-	if n := len(v.inbox(t, "main")); n != 2 {
+	if n := len(v.inbox(t, "lead")); n != 2 {
 		t.Fatalf("got %d messages", n)
 	}
 }
@@ -1302,7 +1302,7 @@ func TestThreeFailedStartsEscalateTheTask(t *testing.T) {
 	}
 
 	v.statusShows(t, "t1", "escalated")
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "t1") || !strings.Contains(msgs[0].Body, "no pane") {
 		t.Fatalf("got %+v", msgs)
 	}
@@ -1316,7 +1316,7 @@ func TestAFailedPreflightEscalatesAtOnceWithTheFix(t *testing.T) {
 	_ = v.e.Tick()
 
 	v.statusShows(t, "t1", "escalated")
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "sudo apt install bubblewrap socat") || !strings.Contains(msgs[0].Body, "sfy task resume t1") {
 		t.Fatalf("got %+v", msgs)
 	}
@@ -1352,7 +1352,7 @@ func TestStartedWorkerKnowsWhetherTheTaskHasARepo(t *testing.T) {
 	}{"no repo": {taskFile, false}, "repo": {taskFile + "\n## Repo\n\nhttps://example.com/r.git\n", true}} {
 		t.Run(name, func(t *testing.T) {
 			v := newEnv(t)
-			mustOK(t, v.run("main", "", "task new", tc.file))
+			mustOK(t, v.run("lead", "", "task new", tc.file))
 
 			v.tick(t)
 
@@ -1365,7 +1365,7 @@ func TestStartedWorkerKnowsWhetherTheTaskHasARepo(t *testing.T) {
 
 func TestStartedSessionsCarryTheTasksProtectedPaths(t *testing.T) {
 	v := newEnv(t)
-	mustOK(t, v.run("main", "", "task new", protectedTaskFile))
+	mustOK(t, v.run("lead", "", "task new", protectedTaskFile))
 	want := []string{"SPEC.md", "internal/store"}
 
 	v.tick(t)
@@ -1384,7 +1384,7 @@ func TestStartedSessionsCarryTheTasksProtectedPaths(t *testing.T) {
 func TestResumeReturnsAWorkingTaskToWorking(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 
 	mustOK(t, v.run("", "", "task resume", "", "t1"))
 
@@ -1396,7 +1396,7 @@ func TestResumeReturnsAWorkingTaskToWorking(t *testing.T) {
 func TestResumeTellsTheWorkerToGoOn(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 
 	mustOK(t, v.run("", "", "task resume", "", "t1"))
 
@@ -1409,9 +1409,9 @@ func TestResumeTellsTheWorkerToGoOn(t *testing.T) {
 func TestResumeKeepsTheRoundOfAFeedbackTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Feedback, 2)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	if tk := v.state(t, "t1"); tk.State != task.Feedback || tk.Round != 2 {
 		t.Fatalf("got %+v", tk)
@@ -1440,7 +1440,7 @@ func TestResumeAfterTheLastFailedRoundGoesToFeedbackWithTheSameRound(t *testing.
 	v := newEnv(t)
 	v.failLastRound(t)
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	if tk := v.state(t, "t1"); tk.State != task.Feedback || tk.Round != 3 {
 		t.Fatalf("got %+v", tk)
@@ -1450,7 +1450,7 @@ func TestResumeAfterTheLastFailedRoundGoesToFeedbackWithTheSameRound(t *testing.
 func TestReportDoneAfterThatResumeStartsTheNextRound(t *testing.T) {
 	v := newEnv(t)
 	v.failLastRound(t)
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	mustOK(t, v.run("worker-t1", "t1", "report done", "", "fixed"))
 
@@ -1462,9 +1462,9 @@ func TestReportDoneAfterThatResumeStartsTheNextRound(t *testing.T) {
 func TestResumeOfAQueuedEscalationGoesBackToQueuedWithoutAWorkerMessage(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Queued, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "unclear"))
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	v.statusShows(t, "t1", "queued")
 	if len(v.inbox(t, "worker-t1")) != 0 {
@@ -1476,7 +1476,7 @@ func TestResumeFailsForATaskThatIsNotEscalated(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	ans := v.run("main", "", "task resume", "", "t1")
+	ans := v.run("lead", "", "task resume", "", "t1")
 
 	if ans.OK || !strings.Contains(ans.Error, "needs escalated") {
 		t.Fatalf("got %+v", ans)
@@ -1507,7 +1507,7 @@ func TestPassTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
 
 	want := "Task t1 is done, but its workspace /work/t1 still holds work, so sfy kept it."
 	var found bool
-	for _, m := range v.inbox(t, "main") {
+	for _, m := range v.inbox(t, "lead") {
 		found = found || m.Body == want
 	}
 	if !found {
@@ -1534,7 +1534,7 @@ func TestCancelTellsMainThatTheWorkspaceHoldsWork(t *testing.T) {
 
 	mustOK(t, v.run("", "", "task cancel", "", "t1"))
 
-	msgs := v.inbox(t, "main")
+	msgs := v.inbox(t, "lead")
 	if len(msgs) != 1 || msgs[0].Body != "Task t1 is cancelled, but its workspace /work/t1 still holds work, so sfy kept it." {
 		t.Fatalf("main got %+v", msgs)
 	}
@@ -1544,7 +1544,7 @@ func TestPassKeepsAPlainFolderThatHoldsAFile(t *testing.T) {
 	v := newEnv(t)
 	ws := workspace.New(t.TempDir())
 	v.e = engine.New(v.st, v.l, v.ch, ws, config.Config{ReviewRounds: 3, MaxWorkers: 2}, v.clock)
-	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Review, Round: 1, Source: "main"}
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", State: task.Review, Round: 1, Source: "lead"}
 	p, err := ws.Prepare(tk)
 	if err != nil {
 		t.Fatal(err)
@@ -1575,7 +1575,7 @@ func TestTickAfterAFailedSaveTellsMainOnceThatTheWorkspaceWasKept(t *testing.T) 
 	v.ws.beforeCheck = func() { _ = os.Chmod(taskDir, 0o500) }
 
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
-	if ans := v.run("main", "", "task complete", "", "t1"); ans.OK {
+	if ans := v.run("lead", "", "task complete", "", "t1"); ans.OK {
 		t.Fatal("the failed save went unreported")
 	}
 	if err := os.Chmod(taskDir, 0o700); err != nil {
@@ -1587,7 +1587,7 @@ func TestTickAfterAFailedSaveTellsMainOnceThatTheWorkspaceWasKept(t *testing.T) 
 	}
 
 	var kept int
-	for _, m := range v.inbox(t, "main") {
+	for _, m := range v.inbox(t, "lead") {
 		if strings.Contains(m.Body, "still holds work") {
 			kept++
 		}
@@ -1602,13 +1602,13 @@ func TestTickAfterAKeptWorktreeSendsMainNothing(t *testing.T) {
 	v.ws.dirty = map[string]bool{"t1": true}
 	v.seed(t, task.Review, 1)
 	v.pass(t)
-	before := len(v.inbox(t, "main"))
+	before := len(v.inbox(t, "lead"))
 
 	if err := v.e.Tick(); err != nil {
 		t.Fatal(err)
 	}
 
-	if after := len(v.inbox(t, "main")); after != before {
+	if after := len(v.inbox(t, "lead")); after != before {
 		t.Fatalf("main got %d messages before and %d after the tick", before, after)
 	}
 }
@@ -1616,9 +1616,9 @@ func TestTickAfterAKeptWorktreeSendsMainNothing(t *testing.T) {
 func TestResumeIntoReviewTellsTheReviewerToo(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Review, 1)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	want := "Task t1 is resumed. Go on, and report as usual."
 	for _, name := range []string{"worker-t1", "review-t1-1"} {
@@ -1635,7 +1635,7 @@ func (v env) escalateWithAWaitingWorker(t *testing.T) {
 	v.seed(t, task.Working, 0)
 	mustOK(t, v.run("worker-t1", "t1", "report progress", "", "half"))
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 	v.l.sendErr = errors.New("no such pane")
 }
 
@@ -1644,7 +1644,7 @@ func TestResumeRefusesAndSuggestsFeedbackWhenTheWorkerSessionIsGone(t *testing.T
 	v.escalateWithAWaitingWorker(t)
 	v.l.dead = map[string]bool{"worker-t1": true}
 
-	ans := v.run("main", "", "task resume", "", "t1")
+	ans := v.run("lead", "", "task resume", "", "t1")
 
 	if ans.OK || !strings.Contains(ans.Error, "sfy task feedback t1") || !strings.Contains(ans.Error, "sfy task cancel t1") {
 		t.Fatalf("got %+v", ans)
@@ -1659,7 +1659,7 @@ func TestSendRefusesAndSuggestsFeedbackWhenTheWorkerSessionIsGone(t *testing.T) 
 	v.seed(t, task.Working, 0)
 	v.l.dead = map[string]bool{"worker-t1": true}
 
-	ans := v.run("main", "", "send", "", "worker-t1", "hello")
+	ans := v.run("lead", "", "send", "", "worker-t1", "hello")
 
 	if ans.OK || !strings.Contains(ans.Error, "sfy task feedback t1") {
 		t.Fatalf("got %+v", ans)
@@ -1674,7 +1674,7 @@ func TestSendToAWorkerWhoseAliveCheckFailsStoresTheMessage(t *testing.T) {
 	v.seed(t, task.Working, 0)
 	v.l.aliveErr = errors.New("exit status 2")
 
-	mustOK(t, v.run("main", "", "send", "", "worker-t1", "hello"))
+	mustOK(t, v.run("lead", "", "send", "", "worker-t1", "hello"))
 
 	if msgs := v.inbox(t, "worker-t1"); len(msgs) != 1 || msgs[0].Body != "hello" {
 		t.Fatalf("worker got %+v", msgs)
@@ -1684,10 +1684,10 @@ func TestSendToAWorkerWhoseAliveCheckFailsStoresTheMessage(t *testing.T) {
 func TestResumeOfAWorkerWhoseAliveCheckFailsResumesTheTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 	v.l.aliveErr = errors.New("exit status 2")
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	if tk := v.state(t, "t1"); tk.State != task.Working {
 		t.Fatalf("got %+v", tk)
@@ -1703,13 +1703,13 @@ func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
 
 	for range 6 {
 		v.tick(t)
-		if len(v.inbox(t, "main")) != 0 && strings.Contains(v.inbox(t, "main")[0].Body, "cannot tell") {
+		if len(v.inbox(t, "lead")) != 0 && strings.Contains(v.inbox(t, "lead")[0].Body, "cannot tell") {
 			break
 		}
 	}
 
 	var told []string
-	for _, m := range v.inbox(t, "main") {
+	for _, m := range v.inbox(t, "lead") {
 		told = append(told, m.Body)
 	}
 	want := []string{"sfy cannot tell whether worker-t1 runs: exit status 2"}
@@ -1719,7 +1719,7 @@ func TestMainHearsOfAnAliveErrorAfterAFewTicksInARowAndOnlyOnce(t *testing.T) {
 	for range 3 {
 		v.tick(t)
 	}
-	if got := len(v.inbox(t, "main")); got != 1 {
+	if got := len(v.inbox(t, "lead")); got != 1 {
 		t.Fatalf("main got %d messages after more ticks", got)
 	}
 	if got := strings.Count(log.String(), "alive check of worker-t1 failed"); got != 1 {
@@ -1738,7 +1738,7 @@ func TestMainHearsNothingWhenTheAliveErrorsAreNotInARow(t *testing.T) {
 		v.tick(t)
 	}
 
-	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
+	if msgs := v.inbox(t, "lead"); len(msgs) != 0 {
 		t.Fatalf("main got %+v", msgs)
 	}
 }
@@ -1762,7 +1762,7 @@ func TestResumeFailsWhenTheNoteFailsAndTheSessionRuns(t *testing.T) {
 	v := newEnv(t)
 	v.escalateWithAWaitingWorker(t)
 
-	ans := v.run("main", "", "task resume", "", "t1")
+	ans := v.run("lead", "", "task resume", "", "t1")
 
 	if ans.OK || !strings.Contains(ans.Error, "no such pane") {
 		t.Fatalf("got %+v", ans)
@@ -1772,7 +1772,7 @@ func TestResumeFailsWhenTheNoteFailsAndTheSessionRuns(t *testing.T) {
 func TestResumeFailsWhenTheMessageCannotBeStoredAndTheSessionIsGone(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 	v.l.dead = map[string]bool{"worker-t1": true}
 	// A file where the inbox folder belongs makes every write to that inbox fail.
 	if err := os.MkdirAll(filepath.Join(v.home, "inbox"), 0o700); err != nil {
@@ -1782,7 +1782,7 @@ func TestResumeFailsWhenTheMessageCannotBeStoredAndTheSessionIsGone(t *testing.T
 		t.Fatal(err)
 	}
 
-	if ans := v.run("main", "", "task resume", "", "t1"); ans.OK {
+	if ans := v.run("lead", "", "task resume", "", "t1"); ans.OK {
 		t.Fatal("resume reported success although the message was lost")
 	}
 }
@@ -1790,9 +1790,9 @@ func TestResumeFailsWhenTheMessageCannotBeStoredAndTheSessionIsGone(t *testing.T
 func TestCancelOfAnEscalatedTaskClearsTheStateBefore(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "stuck"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "stuck"))
 
-	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
 
 	if tk := v.state(t, "t1"); tk.State != task.Cancelled || tk.Before != "" {
 		t.Fatalf("got %+v", tk)
@@ -1803,9 +1803,9 @@ func TestMainEscalatingATaskGetsNoMessageAboutIt(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
 
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "need", "a", "decision"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "need", "a", "decision"))
 
-	if msgs := v.inbox(t, "main"); len(msgs) != 0 {
+	if msgs := v.inbox(t, "lead"); len(msgs) != 0 {
 		t.Fatalf("got %+v", msgs)
 	}
 	if len(v.l.notified) != 1 {
@@ -1824,7 +1824,7 @@ func TestARestartedEngineTypesTheNoteForAnIdleMainAfterResendMinutes(t *testing.
 		t.Fatal(err)
 	}
 
-	if !slices.Equal(v.l.sent, []string{"main: " + note}) {
+	if !slices.Equal(v.l.sent, []string{"lead: " + note}) {
 		t.Fatalf("sent %v", v.l.sent)
 	}
 }
@@ -1834,7 +1834,7 @@ func TestEngineLogsOnceWhenATickSkipsAnUnreadMainThatIsNotAlive(t *testing.T) {
 	var log bytes.Buffer
 	v.e.SetLog(&log)
 	mustOK(t, v.run("", "", "task new", taskFile))
-	v.l.dead = map[string]bool{"main": true}
+	v.l.dead = map[string]bool{"lead": true}
 	v.clock.now = v.clock.now.Add(5 * time.Minute)
 
 	v.tick(t)
@@ -1851,11 +1851,11 @@ func TestEngineLogsAgainForASecondPeriodInWhichMainIsNotAlive(t *testing.T) {
 	v.e.SetLog(&log)
 	mustOK(t, v.run("", "", "task new", taskFile))
 	v.clock.now = v.clock.now.Add(time.Minute)
-	v.l.dead = map[string]bool{"main": true}
+	v.l.dead = map[string]bool{"lead": true}
 	v.tick(t)
 	v.l.dead = nil
 	v.tick(t)
-	v.l.dead = map[string]bool{"main": true}
+	v.l.dead = map[string]bool{"lead": true}
 
 	v.tick(t)
 
@@ -1883,13 +1883,13 @@ func TestEngineLogsOnceWhenTheAliveCheckOfMainFails(t *testing.T) {
 func TestResumeNoteReachesAWorkerWhoseTurnEndedDuringTheEscalation(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "unclear"))
 	mustOK(t, v.run("worker-t1", "t1", "hook turn-ended", ""))
 	if len(v.l.sent) != 0 {
 		t.Fatalf("an escalated worker got a note: %v", v.l.sent)
 	}
 
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	if !slices.Equal(v.l.sent, []string{"worker-t1: " + note}) {
 		t.Fatalf("sent %v", v.l.sent)
@@ -1899,13 +1899,13 @@ func TestResumeNoteReachesAWorkerWhoseTurnEndedDuringTheEscalation(t *testing.T)
 func TestIdleOfAnEscalatedWorkerTypesNothingButRecordsTheWait(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)
-	mustOK(t, v.run("main", "", "escalate", "", "t1", "unclear"))
+	mustOK(t, v.run("lead", "", "escalate", "", "t1", "unclear"))
 
 	mustOK(t, v.run("worker-t1", "t1", "hook idle", ""))
 	if len(v.l.sent) != 0 {
 		t.Fatalf("sent %v", v.l.sent)
 	}
-	mustOK(t, v.run("main", "", "task resume", "", "t1"))
+	mustOK(t, v.run("lead", "", "task resume", "", "t1"))
 
 	if got := sentTo(v, "worker-t1"); !slices.Equal(got, []string{"worker-t1: " + note}) {
 		t.Fatalf("sent %v", got)
@@ -1932,7 +1932,7 @@ func TestTickSendsNoNoticeAndNoResendForAnApprovedTask(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 	v.l.dead = map[string]bool{"worker-t1": true}
-	if err := v.st.Send(store.Message{ID: "1", From: "main", To: "worker-t1", Body: "hi", Created: v.clock.now}); err != nil {
+	if err := v.st.Send(store.Message{ID: "1", From: "lead", To: "worker-t1", Body: "hi", Created: v.clock.now}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1940,8 +1940,8 @@ func TestTickSendsNoNoticeAndNoResendForAnApprovedTask(t *testing.T) {
 	v.clock.now = v.clock.now.Add(10 * time.Minute)
 	v.tick(t)
 
-	if len(v.inbox(t, "main")) != 0 || len(v.l.sent) != 0 {
-		t.Fatalf("main got %+v, sent %v", v.inbox(t, "main"), v.l.sent)
+	if len(v.inbox(t, "lead")) != 0 || len(v.l.sent) != 0 {
+		t.Fatalf("main got %+v, sent %v", v.inbox(t, "lead"), v.l.sent)
 	}
 }
 
@@ -1960,5 +1960,5 @@ func TestSendToTheWorkerOfAnApprovedTaskFails(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 
-	mustFail(t, v.run("main", "", "send", "hi", "worker-t1"), "does not run")
+	mustFail(t, v.run("lead", "", "send", "hi", "worker-t1"), "does not run")
 }

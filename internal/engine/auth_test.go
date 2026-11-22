@@ -34,7 +34,7 @@ func (v env) runWithToken(agent, token string) protocol.Answer {
 func TestARefusalOfTheAuthenticatorBecomesAnErrorAnswer(t *testing.T) {
 	v := authEnv(t)
 
-	ans := v.runWithToken("main", "guess")
+	ans := v.runWithToken("lead", "guess")
 
 	if ans.OK || ans.Error != "refused by the authenticator" {
 		t.Fatalf("got %+v", ans)
@@ -55,7 +55,7 @@ func TestTheTokenDecidesWhoCalls(t *testing.T) {
 func TestAnEngineWithoutAnAuthenticatorTrustsTheClaimedName(t *testing.T) {
 	v := newEnv(t)
 
-	if ans := v.runWithToken("main", ""); !ans.OK {
+	if ans := v.runWithToken("lead", ""); !ans.OK {
 		t.Fatalf("the claimed name was refused: %s", ans.Error)
 	}
 }

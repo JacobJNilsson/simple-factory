@@ -18,7 +18,22 @@ var noon = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 func sample(id string, state task.State) task.Task {
 	return task.Task{
 		ID: id, Title: "Title " + id, Description: "Do it.", Goal: "Done.",
-		Protected: []string{"a/b"}, State: state, Round: 1, Source: "main", Updated: noon,
+		Protected: []string{"a/b"}, State: state, Round: 1, Source: "lead", Updated: noon,
+	}
+}
+
+func TestATaskThatTheLeadCreatedUnderItsOldNameHasTheSourceLead(t *testing.T) {
+	s := store.Files(t.TempDir())
+	in := sample("t1", task.Queued)
+	in.Source = "main"
+	if err := s.Create(in); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Task("t1")
+
+	if err != nil || got.Source != "lead" {
+		t.Fatalf("source %q, %v, want lead", got.Source, err)
 	}
 }
 
@@ -149,8 +164,8 @@ func TestAddVerdictReturnsErrNotFoundForAnUnknownTask(t *testing.T) {
 
 func TestUnreadReturnsOldestFirstAndMarkReadRemovesThem(t *testing.T) {
 	s := store.Files(t.TempDir())
-	late := store.Message{ID: "m1", From: "main", To: "worker-t1", Body: "late\nline two", Created: noon.Add(time.Minute)}
-	early := store.Message{ID: "m2", From: "main", To: "worker-t1", Body: "early", Created: noon}
+	late := store.Message{ID: "m1", From: "lead", To: "worker-t1", Body: "late\nline two", Created: noon.Add(time.Minute)}
+	early := store.Message{ID: "m2", From: "lead", To: "worker-t1", Body: "early", Created: noon}
 	for _, m := range []store.Message{late, early} {
 		if err := s.Send(m); err != nil {
 			t.Fatal(err)
@@ -177,7 +192,7 @@ func TestUnreadReturnsOldestFirstAndMarkReadRemovesThem(t *testing.T) {
 func TestUnreadIsEmptyForAnAgentWithoutAnInbox(t *testing.T) {
 	s := store.Files(t.TempDir())
 
-	got, err := s.Unread("main")
+	got, err := s.Unread("lead")
 
 	if err != nil || len(got) != 0 {
 		t.Fatalf("got %v, %v", got, err)
@@ -427,7 +442,7 @@ func TestStateFilesAreReadableOnlyByTheOwner(t *testing.T) {
 	if err := s.Create(sample("t1", task.Queued)); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Send(store.Message{ID: "m1", From: "main", To: "main", Body: "x", Created: noon}); err != nil {
+	if err := s.Send(store.Message{ID: "m1", From: "lead", To: "lead", Body: "x", Created: noon}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.WriteStatus("x"); err != nil {
@@ -437,10 +452,10 @@ func TestStateFilesAreReadableOnlyByTheOwner(t *testing.T) {
 	for path, want := range map[string]os.FileMode{
 		"tasks/t1/task.md":    0o600,
 		"tasks/t1/state.json": 0o600,
-		"inbox/main/m1.md":    0o600,
+		"inbox/lead/m1.md":    0o600,
 		"status.md":           0o600,
 		"tasks/t1":            0o700,
-		"inbox/main":          0o700,
+		"inbox/lead":          0o700,
 	} {
 		info, err := os.Stat(filepath.Join(dir, path))
 		if err != nil || info.Mode().Perm() != want {
@@ -451,7 +466,7 @@ func TestStateFilesAreReadableOnlyByTheOwner(t *testing.T) {
 
 func TestSendFailsWhenTheMessageIDExistsUnreadOrRead(t *testing.T) {
 	s := store.Files(t.TempDir())
-	m := store.Message{ID: "m1", From: "main", To: "w", Body: "x", Created: noon}
+	m := store.Message{ID: "m1", From: "lead", To: "w", Body: "x", Created: noon}
 	if err := s.Send(m); err != nil {
 		t.Fatal(err)
 	}

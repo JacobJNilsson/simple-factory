@@ -26,4 +26,23 @@ type Answer struct {
 	OK    bool
 	Text  string
 	Error string
+	// Warning is one line for stderr, such as a note that the request used an old name. The command still succeeds or fails as before.
+	Warning string
 }
+
+// Lead is the session name of the agent that leads a factory.
+const Lead = "lead"
+
+// OldLead is the name that the lead had before. sfy reads it as Lead until a later release removes it.
+const OldLead = "main"
+
+// AgentName returns name with the old name of the lead read as Lead. Every other name stays as it is.
+func AgentName(name string) string {
+	if name == OldLead {
+		return Lead
+	}
+	return name
+}
+
+// OldLeadWarning is the warning for a command that names the lead by its old name.
+const OldLeadWarning = "sfy: main is now lead. Run: sfy send lead <text>."

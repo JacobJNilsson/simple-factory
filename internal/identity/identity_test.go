@@ -16,12 +16,12 @@ const mainConversation = "11111111-2222-4333-8444-555555555555"
 func preTokenHome(t *testing.T) Folder {
 	t.Helper()
 	home := t.TempDir()
-	for _, name := range []string{"main", "worker-t1", "worker-t2"} {
+	for _, name := range []string{"lead", "worker-t1", "worker-t2"} {
 		if err := os.MkdirAll(filepath.Join(home, "sessions", name), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	id := filepath.Join(home, "sessions", "main", "conversation-id")
+	id := filepath.Join(home, "sessions", "lead", "conversation-id")
 	if err := os.WriteFile(id, []byte(mainConversation+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestALegacyTokenOpensOnlyItsOwnSession(t *testing.T) {
 func authFolder(t *testing.T) Folder {
 	t.Helper()
 	f := Folder{Home: t.TempDir()}
-	for _, name := range []string{"main", "worker-t1"} {
+	for _, name := range []string{"lead", "worker-t1"} {
 		if _, err := f.Issue(name); err != nil {
 			t.Fatal(err)
 		}
@@ -136,13 +136,42 @@ func authFolder(t *testing.T) Folder {
 	return f
 }
 
-func TestAuthenticateRefusesAWorkerThatClaimsToBeMain(t *testing.T) {
+func TestAuthenticateRefusesAWorkerThatClaimsToBeTheLead(t *testing.T) {
 	f := authFolder(t)
 
-	_, err := f.Authenticate(protocol.Caller{Agent: "main", Token: f.Token("worker-t1")})
+	for _, name := range []string{"lead", "main"} {
+		_, err := f.Authenticate(protocol.Caller{Agent: name, Token: f.Token("worker-t1")})
 
-	if !errors.Is(err, errBadToken) {
-		t.Fatalf("got %v", err)
+		if !errors.Is(err, errBadToken) {
+			t.Fatalf("%s: got %v", name, err)
+		}
+	}
+}
+
+func TestAuthenticateAcceptsTheOldNameOnlyForTheTokenOfTheLead(t *testing.T) {
+	f := authFolder(t)
+
+	got, err := f.Authenticate(protocol.Caller{Agent: "main", Token: f.Token("lead")})
+
+	if err != nil || got != "lead" {
+		t.Fatalf("got %q, %v, want lead", got, err)
+	}
+}
+
+func TestOwnerSkipsTheLinkOfTheOldFolderName(t *testing.T) {
+	f := authFolder(t)
+	if err := os.Symlink("lead", filepath.Join(f.Home, "sessions", "main")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []protocol.Caller{
+		{Token: f.Token("lead")},
+		{Agent: "lead", Token: f.Token("lead")},
+		{Agent: "main", Token: f.Token("lead")},
+	} {
+		if got, err := f.Authenticate(c); err != nil || got != "lead" {
+			t.Errorf("%+v: got %q, %v, want lead", c, got, err)
+		}
 	}
 }
 
@@ -172,8 +201,8 @@ func TestAuthenticateAcceptsTheOwnerAndTheOperator(t *testing.T) {
 		want   string
 	}{
 		"worker":                {protocol.Caller{Agent: "worker-t1", Token: f.Token("worker-t1")}, "worker-t1"},
-		"main":                  {protocol.Caller{Agent: "main", Token: f.Token("main")}, "main"},
-		"token without a name":  {protocol.Caller{Token: f.Token("main")}, "main"},
+		"lead":                  {protocol.Caller{Agent: "lead", Token: f.Token("lead")}, "lead"},
+		"token without a name":  {protocol.Caller{Token: f.Token("lead")}, "lead"},
 		"operator with no name": {protocol.Caller{}, ""},
 	} {
 		if got, err := f.Authenticate(c.caller); err != nil || got != c.want {
@@ -197,8 +226,9 @@ func TestResolveAndAuthenticateAgree(t *testing.T) {
 		want   string
 	}{
 		"started worker":  {started, Claim{Agent: "worker-t1", Token: started.Token("worker-t1")}, "worker-t1"},
-		"registered main": {registeredMain, Claim{Session: "s-main"}, "main"},
-		"pre-token main":  {preToken, Claim{Agent: "main", Session: mainConversation}, "main"},
+		"registered lead": {registeredMain, Claim{Session: "s-main"}, "lead"},
+		"pre-token lead":  {preToken, Claim{Agent: "lead", Session: mainConversation}, "lead"},
+		"pre-token main":  {preToken, Claim{Agent: "main", Session: mainConversation}, "lead"},
 		"pre-token agent": {preToken, Claim{Agent: "worker-t2"}, "worker-t2"},
 		"operator":        {started, Claim{}, ""},
 	} {
@@ -229,14 +259,14 @@ func TestResolveKeepsTheNameAndTokenOfAStartedAgent(t *testing.T) {
 func TestResolveMapsTheRegisteredSessionToMainWithItsToken(t *testing.T) {
 	f := Folder{Home: t.TempDir()}
 	registered(t, f)
-	token, err := f.Issue("main")
+	token, err := f.Issue("lead")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	got := f.Resolve(Claim{Session: "s-main"})
 
-	if want := (protocol.Caller{Agent: "main", Token: token}); got != want {
+	if want := (protocol.Caller{Agent: "lead", Token: token}); got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
 }

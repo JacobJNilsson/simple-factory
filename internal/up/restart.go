@@ -18,10 +18,10 @@ var ErrNotAllowed = errors.New("only the operator and the main agent run sfy res
 var ErrNotStopped = errors.New("the sfy process still answers after it was stopped. Stop it by hand and run sfy")
 
 // mainSession is the multiplexer session of the main agent.
-const mainSession = "main"
+const mainSession = protocol.Lead
 
 // mayRestart reports whether the agent may run sfy restart. The operator has no agent name.
-func mayRestart(agent string) bool { return agent == "" || agent == mainSession }
+func mayRestart(agent string) bool { return agent == "" || protocol.AgentName(agent) == mainSession }
 
 // restart stops the sfy process and starts it again as a plain sfy does.
 // The multiplexer ends the sfy session with a hangup, which the sfy process handles by removing its socket and lock file.

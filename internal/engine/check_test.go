@@ -140,7 +140,7 @@ func TestAFailedCheckCountsTowardTheReviewRounds(t *testing.T) {
 	if tk := v.state(t, "t1"); tk.State != task.Escalated || tk.Before != task.Feedback || tk.Round != 3 {
 		t.Fatalf("got %s before %s round %d", tk.State, tk.Before, tk.Round)
 	}
-	if msgs := v.inbox(t, "main"); len(msgs) != 1 || !strings.Contains(msgs[0].Body, "failed its check") {
+	if msgs := v.inbox(t, "lead"); len(msgs) != 1 || !strings.Contains(msgs[0].Body, "failed its check") {
 		t.Errorf("main inbox: %+v", msgs)
 	}
 	if !strings.Contains(workerBody(t, v), "no review started") {
@@ -188,7 +188,7 @@ func TestACancelledTaskIgnoresTheResultOfItsCheck(t *testing.T) {
 	v := newEnv(t)
 	fc := v.seedChecked(t, task.Working, 0)
 	mustOK(t, v.run("worker-t1", "t1", "report done", "x"))
-	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
 
 	fc.dones[0](engine.CheckResult{})
 
@@ -204,7 +204,7 @@ func TestAnEditThatChangesTheCheckDropsTheResultAndTellsTheWorker(t *testing.T) 
 	v := newEnv(t)
 	fc := v.seedChecked(t, task.Working, 0)
 	mustOK(t, v.run("worker-t1", "t1", "report done", "x"))
-	mustOK(t, v.run("main", "", "task edit", taskFile+"\n## Check\n\nmake other\n", "t1"))
+	mustOK(t, v.run("lead", "", "task edit", taskFile+"\n## Check\n\nmake other\n", "t1"))
 
 	fc.dones[0](engine.CheckResult{})
 

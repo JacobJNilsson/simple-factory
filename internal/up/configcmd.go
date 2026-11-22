@@ -18,14 +18,15 @@ import (
 )
 
 // promptKinds are the kinds that sfy config lists prompt files for, in the order it prints them.
-var promptKinds = []string{"main", "worker", prompts.WorkerRepoPart, "reviewer"}
+var promptKinds = []string{"lead", "worker", prompts.WorkerRepoPart, "reviewer"}
 
 // hiddenValue stands in for the value of a session_settings env variable, which may hold a token.
 const hiddenValue = "<set>"
 
 // ShowConfig prints the flat result of the factory that config.Home finds: the settings with the file behind each key,
-// the prompt files of each kind in append order, the skills, and the factory files. It reads files only and creates no factory.
-func ShowConfig(env func(string) string, stdout io.Writer) error {
+// the prompt files of each kind in append order, the skills, the factory files, and the old names. It reads files only and creates no factory.
+// Each old name also gets a warning line on stderr.
+func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	home, userHome := config.Home(env), env("HOME")
 	cfg, err := config.LoadFactory(home, userHome)
 	if err != nil {
@@ -63,8 +64,24 @@ func ShowConfig(env func(string) string, stdout io.Writer) error {
 	for _, name := range files {
 		fmt.Fprintf(&out, "# %s\n", name)
 	}
-	_, err = io.WriteString(stdout, out.String())
-	return err
+	old, err := config.OldNames(home, userHome)
+	if err != nil {
+		return err
+	}
+	// A later release removes the old names, and it waits until no factory lists one here.
+	out.WriteString("\n# Old names\n")
+	for _, line := range old {
+		fmt.Fprintf(&out, "# %s\n", line)
+	}
+	if _, err = io.WriteString(stdout, out.String()); err != nil {
+		return err
+	}
+	for _, line := range old {
+		if _, err := fmt.Fprintln(stderr, "sfy: warning: "+line); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeSettings writes each setting of cfg as a TOML line with a dotted key, followed by the file that set it last or default.

@@ -73,7 +73,7 @@ func (e *Engine) noteCancelledDeps(tasks []task.Task) error {
 				continue
 			}
 			note := fmt.Sprintf("Task %s waits for %s, which is cancelled. Edit or cancel task %s.", t.ID, dep, t.ID)
-			if err := e.message("main", "sfy", note); err != nil {
+			if err := e.message("lead", "sfy", note); err != nil {
 				errs = append(errs, err)
 				continue
 			}
@@ -168,7 +168,7 @@ func (e *Engine) resendNotes() error {
 	if err != nil {
 		return err
 	}
-	names := []string{"main"}
+	names := []string{"lead"}
 	for _, t := range tasks {
 		if t.State.Active() {
 			names = append(names, workerOf(t))

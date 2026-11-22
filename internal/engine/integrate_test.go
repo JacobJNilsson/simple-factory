@@ -16,14 +16,14 @@ func (v env) approvedRepoTask(t *testing.T) {
 	v.firstReview(t)
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
 	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed."))
-	v.inbox(t, "main")
+	v.inbox(t, "lead")
 }
 
 func TestIntegrateRunsTheGitStepsAndCompletesTheTask(t *testing.T) {
 	v := newEnv(t)
 	v.approvedRepoTask(t)
 
-	mustOK(t, v.run("main", "", "task integrate", "", "t1"))
+	mustOK(t, v.run("lead", "", "task integrate", "", "t1"))
 
 	if !slices.Equal(v.ws.integrated, []string{"t1"}) || v.state(t, "t1").State != task.Done {
 		t.Errorf("integrated %v, state %s", v.ws.integrated, v.state(t, "t1").State)
@@ -35,7 +35,7 @@ func TestIntegrateRefusesInANoMergeRepoAndNamesTheBranch(t *testing.T) {
 	v.e.SetRepoConfig(func(string) (config.Config, error) { return config.Config{NoMerge: true}, nil })
 	v.approvedRepoTask(t)
 
-	a := v.run("main", "", "task integrate", "", "t1")
+	a := v.run("lead", "", "task integrate", "", "t1")
 
 	mustFail(t, a, "Leave branch feat/t1-title for the operator")
 	if len(v.ws.integrated) != 0 || v.state(t, "t1").State != task.Approved {
@@ -48,7 +48,7 @@ func TestIntegrateRefusesWhenTheRepoConfigCannotBeRead(t *testing.T) {
 	v.e.SetRepoConfig(func(string) (config.Config, error) { return config.Config{}, errors.New("bad file") })
 	v.approvedRepoTask(t)
 
-	a := v.run("main", "", "task integrate", "", "t1")
+	a := v.run("lead", "", "task integrate", "", "t1")
 
 	mustFail(t, a, "bad file")
 	if len(v.ws.integrated) != 0 {
@@ -61,7 +61,7 @@ func TestAFailedIntegrationLeavesTheTaskApproved(t *testing.T) {
 	v.ws.integrateErr = errors.New("rebase conflict")
 	v.approvedRepoTask(t)
 
-	mustFail(t, v.run("main", "", "task integrate", "", "t1"), "rebase conflict")
+	mustFail(t, v.run("lead", "", "task integrate", "", "t1"), "rebase conflict")
 
 	if v.state(t, "t1").State != task.Approved {
 		t.Errorf("state = %s", v.state(t, "t1").State)
@@ -74,8 +74,8 @@ func TestIntegrateNeedsAnApprovedTaskWithARepo(t *testing.T) {
 	working := newEnv(t)
 	working.seedRepo(t, task.Working, 1)
 
-	mustFail(t, noRepo.run("main", "", "task integrate", "", "t1"), "no repo")
-	mustFail(t, working.run("main", "", "task integrate", "", "t1"), "approved")
+	mustFail(t, noRepo.run("lead", "", "task integrate", "", "t1"), "no repo")
+	mustFail(t, working.run("lead", "", "task integrate", "", "t1"), "approved")
 }
 
 func TestThePushNoteAsksForADraftPRWhenDraftPRIsSet(t *testing.T) {
@@ -138,7 +138,7 @@ func TestTheApprovalNoteSaysToIntegrateOrToLeaveTheBranch(t *testing.T) {
 			mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
 			mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed."))
 
-			notes := v.inbox(t, "main")
+			notes := v.inbox(t, "lead")
 
 			if len(notes) != 1 {
 				t.Fatalf("notes = %v", notes)

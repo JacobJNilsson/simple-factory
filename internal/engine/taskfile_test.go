@@ -34,7 +34,7 @@ func TestThePushWorkerStartsWithTheTaskFile(t *testing.T) {
 	mustOK(t, v.run("worker-t1", "t1", "report done", "Rebased."))
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
 
-	mustOK(t, v.run("main", "", "task push", "", "t1"))
+	mustOK(t, v.run("lead", "", "task push", "", "t1"))
 
 	last := v.l.started[len(v.l.started)-1]
 	if last.Kind != "worker" || last.TaskFile != v.taskFile() {

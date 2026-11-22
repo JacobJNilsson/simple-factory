@@ -19,7 +19,7 @@ func registeredEnv(t *testing.T, id string) func(string) string {
 }
 
 func TestAgentMapsTheRegisteredSessionToMain(t *testing.T) {
-	if got := Agent(registeredEnv(t, "s-main")); got != "main" {
+	if got := Agent(registeredEnv(t, "s-main")); got != "lead" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -47,7 +47,7 @@ func TestRegisteredSessionRunsCommandsAsMain(t *testing.T) {
 
 	code = Run([]string{"down"}, env, strings.NewReader(""), &out, &errb)
 
-	if code != exitFailed || !strings.Contains(errb.String(), "not for a main") {
+	if code != exitFailed || !strings.Contains(errb.String(), "not for a lead") {
 		t.Fatalf("down: code %d, stderr %q", code, errb.String())
 	}
 }
@@ -55,7 +55,7 @@ func TestRegisteredSessionRunsCommandsAsMain(t *testing.T) {
 func TestWithIdentitySetsTheAgentVariable(t *testing.T) {
 	env := WithIdentity(registeredEnv(t, "s-main"))
 
-	if got := env("SFY_AGENT"); got != "main" {
+	if got := env("SFY_AGENT"); got != "lead" {
 		t.Errorf("SFY_AGENT %q", got)
 	}
 	if got := env("CLAUDE_CODE_SESSION_ID"); got != "s-main" {

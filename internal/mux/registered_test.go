@@ -33,13 +33,13 @@ func addressFile(t *testing.T, content string) string {
 
 func TestRegisteredSendsTheMainCallsToTheRecordedAddress(t *testing.T) {
 	a := &aliveMux{alive: true}
-	m := Registered(a, "main", addressFile(t, "dev\n"))
+	m := Registered(a, "lead", addressFile(t, "dev\n"))
 
-	_ = m.Send("main", "hi")
-	_ = m.Notify("main", "n")
-	_ = m.Show("main")
-	_ = m.ShowMain("main")
-	_, _ = m.Alive("main")
+	_ = m.Send("lead", "hi")
+	_ = m.Notify("lead", "n")
+	_ = m.Show("lead")
+	_ = m.ShowMain("lead")
+	_, _ = m.Alive("lead")
 	_ = m.Send("worker-t1", "hi")
 
 	want := []string{"send dev", "notify dev", "show dev", "showmain dev", "alive dev", "send worker-t1"}
@@ -50,13 +50,13 @@ func TestRegisteredSendsTheMainCallsToTheRecordedAddress(t *testing.T) {
 
 func TestRegisteredLeavesTheCallsAloneWithoutARecord(t *testing.T) {
 	a := &aliveMux{alive: true}
-	m := Registered(a, "main", addressFile(t, ""))
+	m := Registered(a, "lead", addressFile(t, ""))
 
-	_ = m.Start("main", "/d", nil)
-	_ = m.Send("main", "hi")
-	_, _ = m.Alive("main")
+	_ = m.Start("lead", "/d", nil)
+	_ = m.Send("lead", "hi")
+	_, _ = m.Alive("lead")
 
-	want := []string{"start main", "send main", "alive main"}
+	want := []string{"start lead", "send lead", "alive lead"}
 	if !slices.Equal(a.calls, want) {
 		t.Fatalf("got %q, want %q", a.calls, want)
 	}
@@ -65,26 +65,26 @@ func TestRegisteredLeavesTheCallsAloneWithoutARecord(t *testing.T) {
 func TestRegisteredClearsTheRecordWhenTheAddressIsGone(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{alive: false}
-	m := Registered(a, "main", path)
+	m := Registered(a, "lead", path)
 
-	alive, err := m.Alive("main")
+	alive, err := m.Alive("lead")
 	if err != nil || alive {
 		t.Fatalf("got %v, %v, want false and no error", alive, err)
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the record must be gone, stat error: %v", err)
 	}
-	_ = m.Send("main", "hi")
-	if got := a.calls[len(a.calls)-1]; got != "send main" {
+	_ = m.Send("lead", "hi")
+	if got := a.calls[len(a.calls)-1]; got != "send lead" {
 		t.Fatalf("after the clear, send must use the name, got %q", got)
 	}
 }
 
 func TestRegisteredClearsTheExtraFilesWithTheAddress(t *testing.T) {
 	extra := addressFile(t, "{}")
-	m := Registered(&aliveMux{alive: false}, "main", addressFile(t, "dev"), extra)
+	m := Registered(&aliveMux{alive: false}, "lead", addressFile(t, "dev"), extra)
 
-	if _, err := m.Alive("main"); err != nil {
+	if _, err := m.Alive("lead"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(extra); !errors.Is(err, os.ErrNotExist) {
@@ -95,9 +95,9 @@ func TestRegisteredClearsTheExtraFilesWithTheAddress(t *testing.T) {
 func TestRegisteredKeepsTheRecordWhenAliveFails(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{err: errors.New("tool down")}
-	m := Registered(a, "main", path)
+	m := Registered(a, "lead", path)
 
-	if _, err := m.Alive("main"); err == nil {
+	if _, err := m.Alive("lead"); err == nil {
 		t.Fatal("want the error")
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -107,9 +107,9 @@ func TestRegisteredKeepsTheRecordWhenAliveFails(t *testing.T) {
 
 func TestRegisteredKeepsTheRecordWhileTheAddressRuns(t *testing.T) {
 	path := addressFile(t, "dev")
-	m := Registered(&aliveMux{alive: true}, "main", path)
+	m := Registered(&aliveMux{alive: true}, "lead", path)
 
-	if _, err := m.Alive("main"); err != nil {
+	if _, err := m.Alive("lead"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(path); err != nil {
@@ -120,9 +120,9 @@ func TestRegisteredKeepsTheRecordWhileTheAddressRuns(t *testing.T) {
 func TestRegisteredStopUsesTheAddressAndClearsTheRecord(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{alive: true}
-	m := Registered(a, "main", path)
+	m := Registered(a, "lead", path)
 
-	if err := m.Stop("main"); err != nil {
+	if err := m.Stop("lead"); err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"stop dev"}; !slices.Equal(a.calls, want) {
@@ -135,9 +135,9 @@ func TestRegisteredStopUsesTheAddressAndClearsTheRecord(t *testing.T) {
 
 func TestRegisteredInsidePrefixedKeepsTheAddressUnprefixed(t *testing.T) {
 	a := &aliveMux{alive: true}
-	m := Prefixed(Registered(a, "pre-main", addressFile(t, "dev")), "pre-")
+	m := Prefixed(Registered(a, "pre-lead", addressFile(t, "dev")), "pre-")
 
-	_ = m.Send("main", "hi")
+	_ = m.Send("lead", "hi")
 	_ = m.Send("worker-t1", "hi")
 
 	want := []string{"send dev", "send pre-worker-t1"}

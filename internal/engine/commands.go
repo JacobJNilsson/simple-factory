@@ -53,8 +53,8 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 		return "", err
 	}
 	t.State, t.Source = task.New, "operator"
-	if req.Caller.Agent == "main" {
-		t.State, t.Source = task.Queued, "main"
+	if req.Caller.Agent == "lead" {
+		t.State, t.Source = task.Queued, "lead"
 	}
 	if t.ID, err = e.st.NextID(); err != nil {
 		return "", err
@@ -80,7 +80,7 @@ func (e *Engine) taskNew(req protocol.Request) (string, error) {
 	}
 	if t.State == task.New {
 		note := fmt.Sprintf("New task %s: %s. Prepare it, then queue or cancel it. Run: sfy task show %s", t.ID, t.Title, t.ID) + warning
-		if err := e.message("main", "sfy", note); err != nil {
+		if err := e.message("lead", "sfy", note); err != nil {
 			return "", err
 		}
 	}
@@ -238,7 +238,7 @@ func (e *Engine) noteTaskFile(t task.Task, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := e.storeMessage(name, "main", "The task file for "+t.ID+" changed. Read "+path+" with the Read tool."); err != nil {
+	if err := e.storeMessage(name, "lead", "The task file for "+t.ID+" changed. Read "+path+" with the Read tool."); err != nil {
 		return err
 	}
 	return e.notes.Message(name, "task file changed")
@@ -450,15 +450,15 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 	}
 	from := req.Caller.Agent
 	if from == "" {
-		if req.Args[0] != "main" {
-			return "", errors.New("the operator may send only to main. Run: sfy send main <text>")
+		if req.Args[0] != "lead" {
+			return "", errors.New("the operator may send only to lead. Run: sfy send lead <text>")
 		}
 		from = "operator"
 	}
 	if err := e.live(req.Args[0]); err != nil {
 		return "", err
 	}
-	if req.Args[0] != "main" {
+	if req.Args[0] != "lead" {
 		if err := e.refuseGone(req.Args[0]); err != nil {
 			return "", err
 		}
@@ -481,7 +481,7 @@ func (e *Engine) refuseGone(agent string) error {
 
 // live fails unless the named agent runs now: main, a worker of a task in work, or a reviewer of the task's current round.
 func (e *Engine) live(agent string) error {
-	if agent == "main" {
+	if agent == "lead" {
 		return nil
 	}
 	k, _ := kindOf(agent)
@@ -581,7 +581,7 @@ func (e *Engine) reportBlocked(req protocol.Request) (string, error) {
 		return "", err
 	}
 	note := fmt.Sprintf("Task %s is blocked: %s", t.ID, text(req, req.Args))
-	return "", e.message("main", req.Caller.Agent, note)
+	return "", e.message("lead", req.Caller.Agent, note)
 }
 
 func (e *Engine) reportProgress(req protocol.Request) (string, error) {
@@ -703,7 +703,7 @@ func (e *Engine) approve(t task.Task, from string, pushed bool) error {
 			}
 		}
 	}
-	if err := e.message("main", from, note); err != nil {
+	if err := e.message("lead", from, note); err != nil {
 		return err
 	}
 	// The work is finished, so both sessions end. The workspace stays until main completes the task.
@@ -718,7 +718,7 @@ func (e *Engine) hold(t task.Task, from string) error {
 		return err
 	}
 	note := fmt.Sprintf("Task %s passed its review, and its push is on hold. Branch %s of the repo folder %s is not pushed. The push waits for the operator. Tell the operator, and run sfy task push %s only when the operator says to push.", t.ID, e.w.BranchOf(t), e.w.RepoFolder(t.Repo), t.ID)
-	if err := e.message("main", from, note); err != nil {
+	if err := e.message("lead", from, note); err != nil {
 		return err
 	}
 	return e.endSessions(t)
@@ -800,11 +800,11 @@ func (e *Engine) escalateTask(t task.Task, why string, tellMain bool) error {
 		return err
 	}
 	if tellMain {
-		if err := e.message("main", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
+		if err := e.message("lead", "sfy", fmt.Sprintf("Task %s is escalated. %s", t.ID, why)); err != nil {
 			return err
 		}
 	}
-	return e.l.Notify("main", fmt.Sprintf("Task %s needs the operator. %s", t.ID, why))
+	return e.l.Notify("lead", fmt.Sprintf("Task %s needs the operator. %s", t.ID, why))
 }
 
 func (e *Engine) status(protocol.Request) (string, error) {
@@ -820,7 +820,7 @@ const maxReminders = 2
 
 // runs reports whether a hook comes from a session that sfy still counts as running.
 func (e *Engine) runs(name string) bool {
-	return name == "main" || e.live(name) == nil
+	return name == "lead" || e.live(name) == nil
 }
 
 // hookTurnEnded runs when an agent's turn ends and its session waits for input.
@@ -858,7 +858,7 @@ func (e *Engine) restarted(req protocol.Request) (string, error) {
 	if strings.TrimSpace(req.Body) == "" {
 		return "", errors.New("restarted needs a note")
 	}
-	held, err := e.notes.Note("main", req.Body)
+	held, err := e.notes.Note("lead", req.Body)
 	if held {
 		return restartHeld, err
 	}
@@ -876,7 +876,7 @@ func (e *Engine) reminder(name string, s *agentState) (string, error) {
 		if s.reminders > maxReminders+1 {
 			return "", nil
 		}
-		return "", e.message("main", "sfy", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
+		return "", e.message("lead", "sfy", fmt.Sprintf("%s ended %d turns without a report.", name, maxReminders))
 	}
 	return noReportNote, nil
 }
@@ -888,12 +888,12 @@ func (e *Engine) reminder(name string, s *agentState) (string, error) {
 func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 	name := req.Caller.Agent
 	runs := e.runs(name)
-	if name == "main" {
+	if name == "lead" {
 		if !runs {
 			return "", nil
 		}
 		e.notes.Prompted(name)
-		return "", e.l.Notify("main", "Main waits at a permission prompt. "+req.Body)
+		return "", e.l.Notify("lead", "Main waits at a permission prompt. "+req.Body)
 	}
 	// A stale agent of a finished task gets the denial too, because its prompt would wait for nobody.
 	if runs {

@@ -112,9 +112,9 @@ func (f Folder) Resolve(c Claim) protocol.Caller {
 	if record, ok := registration.Read(f.Home); ok && c.Session != "" && record.ID == c.Session {
 		token := c.Token
 		if token == "" {
-			token = f.Token("main")
+			token = f.Token(protocol.Lead)
 		}
-		return protocol.Caller{Agent: "main", Token: token}
+		return protocol.Caller{Agent: protocol.Lead, Token: token}
 	}
 	return protocol.Caller{Token: c.Token}
 }
@@ -122,11 +122,12 @@ func (f Folder) Resolve(c Claim) protocol.Caller {
 // legacyToken returns the legacy token of a session that started before sessions had tokens, or an empty string.
 // The main agent must also name its own conversation id, so a worker that sets SFY_AGENT=main gets no token.
 func (f Folder) legacyToken(name, sessionID string) string {
+	name = protocol.AgentName(name)
 	if !sessionName.MatchString(name) {
 		return ""
 	}
-	if name == "main" {
-		recorded := readFile(filepath.Join(f.Home, "sessions", "main", "conversation-id"))
+	if name == protocol.Lead {
+		recorded := readFile(filepath.Join(f.Home, "sessions", protocol.Lead, "conversation-id"))
 		if recorded == "" || sessionID != recorded {
 			return ""
 		}
@@ -149,13 +150,15 @@ func (f Folder) Authenticate(c protocol.Caller) (string, error) {
 		return "", nil
 	}
 	name, ok := f.owner(c.Token)
-	if !ok || (c.Agent != "" && c.Agent != name) {
+	// A lead that started before the rename still claims the old name, and the token of the lead proves it.
+	if !ok || (c.Agent != "" && protocol.AgentName(c.Agent) != name) {
 		return "", errBadToken
 	}
 	return name, nil
 }
 
 // owner returns the session that owns token. It reports false for an empty or unknown token.
+// It skips links, because the link of an old folder name to its new folder must not make one token match two names.
 func (f Folder) owner(token string) (string, bool) {
 	if token == "" {
 		return "", false
@@ -166,6 +169,9 @@ func (f Folder) owner(token string) (string, bool) {
 	}
 	found := ""
 	for _, e := range entries {
+		if e.Type()&os.ModeSymlink != 0 {
+			continue
+		}
 		for _, stored := range []string{f.Token(e.Name()), readFile(f.legacyPath(e.Name()))} {
 			if stored != "" && subtle.ConstantTimeCompare([]byte(stored), []byte(token)) == 1 {
 				found = e.Name()

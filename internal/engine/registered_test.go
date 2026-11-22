@@ -40,7 +40,7 @@ func TestDownLeavesARegisteredMainRunningAndClearsTheRegistration(t *testing.T) 
 	if reg.cleared != 1 {
 		t.Errorf("cleared %d times", reg.cleared)
 	}
-	want := "Stopped worker-t1, review-t1-1 and the sfy process. Left main running and cleared its registration, because sfy did not start it."
+	want := "Stopped worker-t1, review-t1-1 and the sfy process. Left lead running and cleared its registration, because sfy did not start it."
 	if a.Text != want || !v.e.Stopping() {
 		t.Fatalf("text %q", a.Text)
 	}
@@ -57,7 +57,7 @@ func TestDownWithOnlyARegisteredMainStopsNoSession(t *testing.T) {
 	if len(v.l.stopped) != 0 {
 		t.Fatalf("stopped %v", v.l.stopped)
 	}
-	want := "Stopped the sfy process. Left main running and cleared its registration, because sfy did not start it."
+	want := "Stopped the sfy process. Left lead running and cleared its registration, because sfy did not start it."
 	if a.Text != want {
 		t.Fatalf("text %q", a.Text)
 	}
@@ -70,7 +70,7 @@ func TestDownStopsMainWhenNothingRegistered(t *testing.T) {
 	a := v.run("", "", "down", "")
 
 	mustOK(t, a)
-	if !slices.Equal(v.l.stopped, []string{"main"}) || a.Text != "Stopped main and the sfy process." {
+	if !slices.Equal(v.l.stopped, []string{"lead"}) || a.Text != "Stopped lead and the sfy process." {
 		t.Fatalf("stopped %v, text %q", v.l.stopped, a.Text)
 	}
 }

@@ -78,7 +78,7 @@ func (a adapter) Preflight(kind string) error {
 		return &engine.PreflightError{Cause: engine.CauseProgramMissing, Msg: "the claude binary is not on PATH and not at ~/.local/bin/claude. " +
 			"The process that runs sfy may have a shorter PATH than your shell. Install Claude Code, or start sfy with the folder of claude on PATH."}
 	}
-	if kind == "main" || a.goos != "linux" {
+	if kind == "lead" || a.goos != "linux" {
 		return nil
 	}
 	var missing []string

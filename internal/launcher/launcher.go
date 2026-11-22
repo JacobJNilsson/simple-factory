@@ -45,7 +45,7 @@ func New(m mux.Mux, p provider.Provider, log io.Writer) Launcher {
 // The main agent runs the show_main template and every other agent runs the show template.
 // A failed show leaves the start successful, because the agent runs either way.
 func (l launcher) Start(spec engine.SessionSpec) error {
-	if spec.Kind == "main" {
+	if spec.Kind == "lead" {
 		_, err := l.StartMain(spec)
 		return err
 	}
@@ -98,7 +98,7 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 		return err
 	}
 	show := l.Show
-	if spec.Kind == "main" {
+	if spec.Kind == "lead" {
 		show = l.ShowMain
 	}
 	if err := show(spec.Name); err != nil && l.log != nil {

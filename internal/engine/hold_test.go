@@ -11,7 +11,7 @@ import (
 // heldReview seeds a repo task with a push hold and runs its worker to a passed review.
 func (v env) heldReview(t *testing.T) {
 	t.Helper()
-	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", Repo: "some/repo", Hold: true, State: task.Queued, Source: "main"}
+	tk := task.Task{ID: "t1", Title: "Title", Description: "Do it.", Goal: "Done.", Repo: "some/repo", Hold: true, State: task.Queued, Source: "lead"}
 	if err := v.st.Create(tk); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestAPassedReviewOfAHeldTaskAsksForNoPushAndTellsMain(t *testing.T) {
 	if tk := v.state(t, "t1"); tk.State != task.Held || tk.Pushing {
 		t.Fatalf("got %+v", tk)
 	}
-	got := v.inbox(t, "main")
+	got := v.inbox(t, "lead")
 	if len(got) != 1 || !strings.Contains(got[0].Body, "waits for the operator") || !strings.Contains(got[0].Body, "sfy task push t1") {
 		t.Fatalf("main got %v", got)
 	}
@@ -49,7 +49,7 @@ func TestTaskPushReleasesTheHoldAndStartsAWorkerThatMayPush(t *testing.T) {
 	v := newEnv(t)
 	v.heldReview(t)
 
-	mustOK(t, v.run("main", "", "task push", "", "t1"))
+	mustOK(t, v.run("lead", "", "task push", "", "t1"))
 
 	if tk := v.state(t, "t1"); tk.State != task.Review || !tk.Pushing || !tk.Released {
 		t.Fatalf("got %+v", tk)
@@ -69,7 +69,7 @@ func TestThePushWorkerStartsWithTheSpecOfTheFirstWorker(t *testing.T) {
 	v.heldReview(t)
 	first := v.l.started[0]
 
-	mustOK(t, v.run("main", "", "task push", "", "t1"))
+	mustOK(t, v.run("lead", "", "task push", "", "t1"))
 
 	last := v.l.started[len(v.l.started)-1]
 	if !first.NoPush || last.NoPush {
@@ -86,7 +86,7 @@ func TestTaskPushNeedsAHeldTask(t *testing.T) {
 	v := newEnv(t)
 	v.seedRepo(t, task.Working, 1)
 
-	mustFail(t, v.run("main", "", "task push", "", "t1"), "needs held")
+	mustFail(t, v.run("lead", "", "task push", "", "t1"), "needs held")
 	mustFail(t, v.run("worker-t1", "t1", "task push", "", "t1"), "")
 }
 
@@ -108,7 +108,7 @@ func TestFeedbackOnAHeldTaskKeepsTheHold(t *testing.T) {
 func TestFeedbackAfterTheReleaseRestartsTheWorkerWithoutPush(t *testing.T) {
 	v := newEnv(t)
 	v.heldReview(t)
-	mustOK(t, v.run("main", "", "task push", "", "t1"))
+	mustOK(t, v.run("lead", "", "task push", "", "t1"))
 
 	v.feedback(t, fix)
 
@@ -138,7 +138,7 @@ func TestCancelEndsAHeldTask(t *testing.T) {
 	v := newEnv(t)
 	v.heldReview(t)
 
-	mustOK(t, v.run("main", "", "task cancel", "", "t1"))
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
 
 	if got := v.state(t, "t1").State; got != task.Cancelled {
 		t.Fatalf("got %s", got)

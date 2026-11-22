@@ -2,6 +2,7 @@ package up
 
 import (
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func configFactory(t *testing.T) (env func(string) string, userHome, home string
 func showConfig(t *testing.T, env func(string) string) string {
 	t.Helper()
 	var out strings.Builder
-	if err := ShowConfig(env, &out); err != nil {
+	if err := ShowConfig(env, &out, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	return out.String()
@@ -99,6 +100,30 @@ func TestShowConfigPrintsValidTOML(t *testing.T) {
 	}
 }
 
+func TestShowConfigListsAndWarnsOfEachOldName(t *testing.T) {
+	env, _, home := configFactory(t)
+	factory := filepath.Join(home, "config.toml")
+	writeTestFile(t, factory, "[models]\nmain = \"m\"\n")
+	writeTestFile(t, filepath.Join(home, "prompts", "main.d", "a.md"), "old a")
+	var out, warn strings.Builder
+
+	if err := ShowConfig(env, &out, &warn); err != nil {
+		t.Fatal(err)
+	}
+
+	key := factory + " sets models.main. sfy reads it as models.lead. Rename the key."
+	folder := filepath.Join(home, "prompts", "main.d") + " has the old name. sfy reads it as lead.d. Rename the folder."
+	if want := "\n# Old names\n# " + key + "\n# " + folder + "\n"; !strings.HasSuffix(out.String(), want) {
+		t.Errorf("output lacks %q:\n%s", want, out.String())
+	}
+	if !strings.Contains(out.String(), `models.lead = "m" # `+factory+"\n") {
+		t.Errorf("output lacks models.lead:\n%s", out.String())
+	}
+	if want := "sfy: warning: " + key + "\nsfy: warning: " + folder + "\n"; warn.String() != want {
+		t.Errorf("warnings %q, want %q", warn.String(), want)
+	}
+}
+
 func TestShowConfigListsThePromptFilesOfEachKindInAppendOrder(t *testing.T) {
 	env, userHome, home := configFactory(t)
 	machine := config.DefaultHome(userHome)
@@ -112,7 +137,7 @@ func TestShowConfigListsThePromptFilesOfEachKindInAppendOrder(t *testing.T) {
 	want := "# worker: base " + filepath.Join(home, "prompts", "worker.md") + "\n" +
 		"#   a.md: " + filepath.Join(machine, "prompts", "worker.d", "a.md") + "\n" +
 		"#   b.md: removed by " + filepath.Join(home, "prompts", "worker.d", "b.md") + "\n"
-	if !strings.Contains(got, want) || !strings.Contains(got, "# main: base default\n") {
+	if !strings.Contains(got, want) || !strings.Contains(got, "# lead: base default\n") {
 		t.Errorf("output lacks the prompt files:\n%s", got)
 	}
 }
@@ -121,7 +146,7 @@ func TestShowConfigFailsOnAFactoryConfigThatDoesNotParse(t *testing.T) {
 	env, _, home := configFactory(t)
 	writeTestFile(t, filepath.Join(home, "config.toml"), "max_workers = \n")
 
-	err := ShowConfig(env, &strings.Builder{})
+	err := ShowConfig(env, &strings.Builder{}, io.Discard)
 
 	var bad *config.FileError
 	if !errors.As(err, &bad) || bad.Path != filepath.Join(home, "config.toml") {

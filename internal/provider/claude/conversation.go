@@ -13,7 +13,7 @@ import (
 
 // conversationIDPath is the file that records the id of the main agent's conversation.
 func (a adapter) conversationIDPath() string {
-	return filepath.Join(a.home, "sessions", "main", "conversation-id")
+	return filepath.Join(a.home, "sessions", "lead", "conversation-id")
 }
 
 var conversationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -30,7 +30,7 @@ func (a adapter) recordedConversation() (string, bool) {
 
 // Resumes reports whether Command resumes the recorded conversation of the main agent.
 func (a adapter) Resumes(spec engine.SessionSpec) bool {
-	if spec.Kind != "main" || spec.Fresh {
+	if spec.Kind != "lead" || spec.Fresh {
 		return false
 	}
 	_, ok := a.recordedConversation()

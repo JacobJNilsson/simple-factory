@@ -202,7 +202,7 @@ func TestCommandRemovesTheNoteOfAnEarlierSessionWithTheSameName(t *testing.T) {
 func TestDeliverDeclinesASessionStartedWithOldSettings(t *testing.T) {
 	p, home := setup(t, bin)
 	// An older sfy wrote the settings without the note hooks, so no SessionStart hook ever ran.
-	path, _ := claude.NotePath(home, "main")
+	path, _ := claude.NotePath(home, "lead")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestDeliverDeclinesASessionStartedWithOldSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ok, err := p.Deliver("main", "hi", "")
+	ok, err := p.Deliver("lead", "hi", "")
 
 	if err != nil || ok {
 		t.Fatalf("ok %v, err %v", ok, err)
@@ -278,7 +278,7 @@ func TestANoteFileFromAnOlderSfyCountsAsOnePlainNote(t *testing.T) {
 
 func TestStuckTextOfASessionWithoutHooksIsDrainedWithoutItsMessages(t *testing.T) {
 	p, home := setup(t, bin)
-	path, _ := claude.NotePath(home, "main")
+	path, _ := claude.NotePath(home, "lead")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -288,16 +288,16 @@ func TestStuckTextOfASessionWithoutHooksIsDrainedWithoutItsMessages(t *testing.T
 	if err := claude.AppendNote(path, "m1", "From worker-t1:\nblocked"); err != nil {
 		t.Fatal(err)
 	}
-	if !p.Stuck("main") {
+	if !p.Stuck("lead") {
 		t.Fatal("the text does not count as stuck")
 	}
 
-	got, err := p.Drain("main")
+	got, err := p.Drain("lead")
 
 	if err != nil || got != "Task t1 is approved." {
 		t.Fatalf("got %q, %v", got, err)
 	}
-	if p.Stuck("main") {
+	if p.Stuck("lead") {
 		t.Fatal("the text stayed stuck after the drain")
 	}
 }
@@ -305,7 +305,7 @@ func TestStuckTextOfASessionWithoutHooksIsDrainedWithoutItsMessages(t *testing.T
 func TestDrainOfAnAgentWithoutASessionFolderReturnsNothing(t *testing.T) {
 	p, _ := setup(t, bin)
 
-	got, err := p.Drain("main")
+	got, err := p.Drain("lead")
 
 	if err != nil || got != "" {
 		t.Fatalf("got %q, %v", got, err)
@@ -348,7 +348,7 @@ func TestTextForASessionWithHooksIsNotStuck(t *testing.T) {
 func TestDeliverDeclinesASessionThatSfyDidNotSetUp(t *testing.T) {
 	p, home := setup(t, bin)
 
-	ok, err := p.Deliver("main", "hi", "")
+	ok, err := p.Deliver("lead", "hi", "")
 
 	if err != nil || ok {
 		t.Fatalf("ok %v, err %v", ok, err)
@@ -426,7 +426,7 @@ func TestMainSettingsHaveTheNoteHooksToo(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, mainSpec())
 
-	s := readSettings(t, home, "main")
+	s := readSettings(t, home, "lead")
 
 	if !hookOf(t, s, "FileChanged").AsyncRewake || hookOf(t, s, "SessionStart").Command == "" || hookOf(t, s, "CwdChanged").Command == "" {
 		t.Fatalf("hooks %+v", s.Hooks)

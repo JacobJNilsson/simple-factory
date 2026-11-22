@@ -189,7 +189,7 @@ func TestHeadlessStartWaitsForAProcessThatStartsInAWindow(t *testing.T) {
 
 func TestHeadlessRestartHandsOverToANewProcess(t *testing.T) {
 	r := headlessRig(t)
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 	if err := r.o.startServe(); err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func (m windowMux) Stop(name string) error {
 
 func TestRestartMovesAWindowedProcessToHeadless(t *testing.T) {
 	r := headlessRig(t)
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 	// The process started as it did before the config said headless.
 	p, err := spawnDetached(r.o.home, serveEnv(r.o.environ, r.o.home), []string{r.o.bin, "serve"}, filepath.Join(r.o.home, "sfy.log"))
 	if err != nil {

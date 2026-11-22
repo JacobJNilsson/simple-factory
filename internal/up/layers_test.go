@@ -22,8 +22,8 @@ func writeTestFile(t *testing.T, path, body string) {
 func TestRecordMainPromptJoinsTheMachineAndTheFactoryAdditions(t *testing.T) {
 	userHome := t.TempDir()
 	home := filepath.Join(config.FactoriesDir(userHome), "acme")
-	writeTestFile(t, filepath.Join(config.DefaultHome(userHome), "prompts", "main.d", "a.md"), "machine addition")
-	writeTestFile(t, filepath.Join(home, "prompts", "main.d", "b.md"), "factory addition")
+	writeTestFile(t, filepath.Join(config.DefaultHome(userHome), "prompts", "lead.d", "a.md"), "machine addition")
+	writeTestFile(t, filepath.Join(home, "prompts", "lead.d", "b.md"), "factory addition")
 
 	if _, err := recordMainPrompt(home, config.Layers(home, userHome)); err != nil {
 		t.Fatal(err)
@@ -34,6 +34,6 @@ func TestRecordMainPromptJoinsTheMachineAndTheFactoryAdditions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.HasSuffix(string(b), "\n\nmachine addition\n\nfactory addition") {
-		t.Fatalf("main-prompt.md ends with %q", b[max(0, len(b)-80):])
+		t.Fatalf("lead-prompt.md ends with %q", b[max(0, len(b)-80):])
 	}
 }

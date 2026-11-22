@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 )
 
 // Record names the session that registered and the folder it works in.
@@ -15,7 +17,7 @@ type Record struct {
 	Dir string `json:"dir"`
 }
 
-func mainFolder(home string) string { return filepath.Join(home, "sessions", "main") }
+func mainFolder(home string) string { return filepath.Join(home, "sessions", protocol.Lead) }
 
 // Path is the file that holds the record.
 func Path(home string) string { return filepath.Join(mainFolder(home), "registered.json") }

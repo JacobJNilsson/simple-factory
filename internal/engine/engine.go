@@ -215,7 +215,7 @@ type kind string
 
 const (
 	operator kind = ""
-	main     kind = "main"
+	main     kind = protocol.Lead
 	worker   kind = "worker"
 	reviewer kind = "reviewer"
 )
@@ -232,12 +232,12 @@ var (
 	reviewerName = regexp.MustCompile(`^review-t[0-9]+-[0-9]+$`)
 )
 
-// kindOf reads the kind from a session name. Only the empty name is the operator.
+// kindOf reads the kind from a session name. Only the empty name is the operator. The old name of the lead reads as the lead.
 func kindOf(agent string) (kind, bool) {
 	switch {
 	case agent == "":
 		return operator, true
-	case agent == "main":
+	case protocol.AgentName(agent) == protocol.Lead:
 		return main, true
 	case workerName.MatchString(agent):
 		return worker, true
@@ -301,19 +301,30 @@ func (e *Engine) Handle(req protocol.Request) protocol.Answer {
 	if err != nil {
 		return protocol.Answer{Error: err.Error()}
 	}
+	req.Caller.Agent = protocol.AgentName(req.Caller.Agent)
 	k, known := kindOf(req.Caller.Agent)
 	if !known {
-		return protocol.Answer{Error: fmt.Sprintf("unknown caller %q. Agent names are main, worker-<id> and review-<id>-<round>", req.Caller.Agent)}
+		return protocol.Answer{Error: fmt.Sprintf("unknown caller %q. Agent names are lead, worker-<id> and review-<id>-<round>", req.Caller.Agent)}
 	}
 	if !allowed(cmd.kind, k) {
 		return protocol.Answer{Error: fmt.Sprintf("%q is not for %s. You may run: %s", req.Command, k.label(), allowedBy(k))}
 	}
+	req, warning := oldTarget(req)
 	text, err := cmd.run(e, req)
 	if err != nil {
-		return protocol.Answer{Error: err.Error()}
+		return protocol.Answer{Error: err.Error(), Warning: warning}
 	}
 	e.noteCommand(req)
-	return protocol.Answer{OK: true, Text: text}
+	return protocol.Answer{OK: true, Text: text, Warning: warning}
+}
+
+// oldTarget reads the old name of the lead as the target of send, and returns the warning for it.
+func oldTarget(req protocol.Request) (protocol.Request, string) {
+	if req.Command != "send" || len(req.Args) == 0 || req.Args[0] != protocol.OldLead {
+		return req, ""
+	}
+	req.Args = append([]string{protocol.Lead}, req.Args[1:]...)
+	return req, protocol.OldLeadWarning
 }
 
 func allowed(kinds []kind, k kind) bool {

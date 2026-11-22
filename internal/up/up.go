@@ -49,12 +49,12 @@ func resumePrompt(home string) string {
 }
 
 // mainPromptPath is the file that holds the prompt of the running main agent.
-func mainPromptPath(home string) string { return filepath.Join(home, "main-prompt.md") }
+func mainPromptPath(home string) string { return filepath.Join(home, "lead-prompt.md") }
 
 // recordMainPrompt saves the main prompt that a build uses now, and reports whether it differs from the saved one.
 // A missing file counts as a change, because the main agent may predate the file.
 func recordMainPrompt(home string, layers []string) (changed bool, err error) {
-	text, err := prompts.For("main", layers)
+	text, err := prompts.For(protocol.Lead, layers)
 	if err != nil {
 		return false, err
 	}
@@ -175,7 +175,7 @@ func (o options) ensure(inPlace bool) (started []string, mainAlive bool, err err
 			return nil, false, err
 		}
 		spec := engine.SessionSpec{
-			Name: "main", Kind: "main", Dir: o.mainDir(), Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
+			Name: mainSession, Kind: protocol.Lead, Dir: o.mainDir(), Model: o.config.Models.Main, Prompt: mainPrompt(o.home),
 			ResumePrompt: resumePrompt(o.home),
 		}
 		if inPlace {

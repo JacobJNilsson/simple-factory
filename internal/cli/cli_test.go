@@ -106,7 +106,7 @@ func TestParseReadsStdinForAWorkerAndAFileForMain(t *testing.T) {
 	if err != nil || w.Body != "IN" {
 		t.Fatalf("reviewer: %+v, %v", w, err)
 	}
-	m, err := parse([]string{"task", "new", file}, envOf(map[string]string{"SFY_AGENT": "main"}), strings.NewReader(""))
+	m, err := parse([]string{"task", "new", file}, envOf(map[string]string{"SFY_AGENT": "lead"}), strings.NewReader(""))
 	if err != nil || m.Body != "FILE" {
 		t.Fatalf("main: %+v, %v", m, err)
 	}
@@ -191,6 +191,17 @@ func TestRunPrintsAnswerText(t *testing.T) {
 	}
 }
 
+func TestRunPrintsTheWarningOfAnAnswerOnStderr(t *testing.T) {
+	env := liveServer(t)
+	var out, errb bytes.Buffer
+
+	code := Run([]string{"send", "main", "x"}, env, strings.NewReader(""), &out, &errb)
+
+	if code != exitOK || out.Len() != 0 || errb.String() != "sfy: main is now lead. Run: sfy send lead <text>.\n" {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), errb.String())
+	}
+}
+
 func TestRunPrintsAnswerError(t *testing.T) {
 	env := liveServer(t)
 	var out, errb bytes.Buffer
@@ -239,10 +250,10 @@ func escalatedTask(t *testing.T) func(agent, task string, args ...string) (int, 
 		code := Run(args, env, strings.NewReader("# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n"), &out, &errb)
 		return code, errb.String()
 	}
-	if code, msg := run("main", "", "task", "new", "-"); code != exitOK {
+	if code, msg := run("lead", "", "task", "new", "-"); code != exitOK {
 		t.Fatalf("task new: %d %s", code, msg)
 	}
-	if code, msg := run("main", "", "escalate", "t1", "why"); code != exitOK {
+	if code, msg := run("lead", "", "escalate", "t1", "why"); code != exitOK {
 		t.Fatalf("escalate: %d %s", code, msg)
 	}
 	return run

@@ -85,7 +85,7 @@ func (p *fakeProvider) Deliver(name, text, _ string) (bool, error) {
 }
 
 func (p *fakeProvider) Resumes(spec engine.SessionSpec) bool {
-	return p.resumable && spec.Kind == "main" && !spec.Fresh
+	return p.resumable && spec.Kind == "lead" && !spec.Fresh
 }
 
 func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
@@ -108,7 +108,7 @@ func TestAFailedPreflightStartsNoSession(t *testing.T) {
 func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {
 	resumeGrace = 0
 	m, p := &fakeMux{}, &fakeProvider{}
-	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "main", Kind: "main"})
+	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -120,7 +120,7 @@ func TestStartMainStartsFreshWhenNothingResumes(t *testing.T) {
 func TestStartMainResumesWhenTheSessionStaysAlive(t *testing.T) {
 	resumeGrace = 0
 	m, p := &fakeMux{endAfterStart: map[string]bool{}}, &fakeProvider{resumable: true}
-	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "main", Kind: "main"})
+	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || !resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -131,8 +131,8 @@ func TestStartMainResumesWhenTheSessionStaysAlive(t *testing.T) {
 
 func TestStartMainStartsFreshWhenTheResumedSessionEndsAtOnce(t *testing.T) {
 	resumeGrace = 0
-	m, p := &fakeMux{endAfterStart: map[string]bool{"main": true}}, &fakeProvider{resumable: true}
-	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "main", Kind: "main"})
+	m, p := &fakeMux{endAfterStart: map[string]bool{"lead": true}}, &fakeProvider{resumable: true}
+	resumed, err := New(m, p, nil).StartMain(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -210,10 +210,10 @@ func TestMuxBuiltinAndUnknown(t *testing.T) {
 func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
 	m := &fakeMux{showErr: errors.New("no pane")}
 	var log bytes.Buffer
-	if err := New(m, &fakeProvider{}, &log).Start(engine.SessionSpec{Name: "main", Kind: "main", Dir: "/w"}); err != nil {
+	if err := New(m, &fakeProvider{}, &log).Start(engine.SessionSpec{Name: "lead", Kind: "lead", Dir: "/w"}); err != nil {
 		t.Fatalf("start failed: %v", err)
 	}
-	if !strings.Contains(log.String(), "show of main failed: no pane") {
+	if !strings.Contains(log.String(), "show of lead failed: no pane") {
 		t.Errorf("log %q", log.String())
 	}
 }
@@ -221,17 +221,17 @@ func TestFailedShowIsLoggedAndStartSucceeds(t *testing.T) {
 func TestStartShowsTheMainAgentWithShowMain(t *testing.T) {
 	m := &fakeMux{}
 	l := New(m, &fakeProvider{}, nil)
-	if err := l.Start(engine.SessionSpec{Name: "main", Kind: "main"}); err != nil {
+	if err := l.Start(engine.SessionSpec{Name: "lead", Kind: "lead"}); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(m.shownMain, []string{"main"}) || len(m.shown) != 0 {
+	if !reflect.DeepEqual(m.shownMain, []string{"lead"}) || len(m.shown) != 0 {
 		t.Errorf("shownMain %v, shown %v", m.shownMain, m.shown)
 	}
 }
 
 func TestMainCommandReturnsTheArgvAndStartsNoSession(t *testing.T) {
 	m, p := &fakeMux{}, &fakeProvider{resumable: true}
-	argv, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "main", Kind: "main"})
+	argv, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "lead", Kind: "lead"})
 	if err != nil || !resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}
@@ -245,7 +245,7 @@ func TestMainCommandReturnsTheArgvAndStartsNoSession(t *testing.T) {
 
 func TestMainCommandOfAFreshSpecDoesNotResume(t *testing.T) {
 	m, p := &fakeMux{}, &fakeProvider{resumable: true}
-	_, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "main", Kind: "main", Fresh: true})
+	_, resumed, err := New(m, p, nil).MainCommand(engine.SessionSpec{Name: "lead", Kind: "lead", Fresh: true})
 	if err != nil || resumed {
 		t.Fatalf("resumed %v, err %v", resumed, err)
 	}

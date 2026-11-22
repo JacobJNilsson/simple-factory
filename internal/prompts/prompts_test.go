@@ -21,7 +21,7 @@ func TestForReturnsTheEmbeddedWorkerPrompt(t *testing.T) {
 }
 
 func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
-	for _, kind := range []string{"main", "worker", "reviewer"} {
+	for _, kind := range []string{"lead", "worker", "reviewer"} {
 		got, err := prompts.For(kind, []string{t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
@@ -145,12 +145,12 @@ func TestRoleAppendsAdditionsToTheWorkerRepoPart(t *testing.T) {
 
 func TestForFailsOnAnUnreadableAddition(t *testing.T) {
 	home := t.TempDir()
-	writePrompt(t, home, "main.d/a.md", "x")
-	if err := os.Chmod(filepath.Join(home, "prompts", "main.d", "a.md"), 0); err != nil {
+	writePrompt(t, home, "lead.d/a.md", "x")
+	if err := os.Chmod(filepath.Join(home, "prompts", "lead.d", "a.md"), 0); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := prompts.For("main", []string{home}); err == nil {
+	if _, err := prompts.For("lead", []string{home}); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -165,7 +165,7 @@ func TestForRejectsAnUnknownKind(t *testing.T) {
 var allowed = map[string][]string{
 	"worker":   {"report done", "report blocked", "report progress", "report pushed", "inbox", "task list", "task show", "status"},
 	"reviewer": {"verdict pass", "verdict fail", "report blocked", "inbox", "task list", "task show", "status"},
-	"main": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task feedback", "task complete", "task integrate", "task push", "task archive",
+	"lead": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task feedback", "task complete", "task integrate", "task push", "task archive",
 		"send", "escalate", "inbox", "status", "restart"},
 }
 
@@ -202,7 +202,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 	required := map[string][]string{
 		"worker":   {"report done", "report blocked", "report progress", "report pushed", "inbox"},
 		"reviewer": {"verdict pass", "verdict fail", "inbox"},
-		"main":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "task integrate", "send", "escalate", "inbox", "restart"},
+		"lead":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "task integrate", "send", "escalate", "inbox", "restart"},
 	}
 	for kind, cmds := range required {
 		text, err := prompts.Role(kind, []string{t.TempDir()}, true)
@@ -273,7 +273,7 @@ func TestWorkerPromptWithARepoHasBothParts(t *testing.T) {
 }
 
 func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
-	for _, kind := range []string{"main", "worker", "reviewer", prompts.WorkerRepoPart} {
+	for _, kind := range []string{"lead", "worker", "reviewer", prompts.WorkerRepoPart} {
 		text, err := prompts.For(kind, []string{t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
@@ -285,7 +285,7 @@ func TestDefaultPromptsNeedNeitherGhNorPullRequests(t *testing.T) {
 }
 
 func TestMainPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
-	text, err := prompts.For("main", []string{t.TempDir()})
+	text, err := prompts.For("lead", []string{t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +297,7 @@ func TestMainPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
 }
 
 func TestOnlyTheWorkerGetsTheRepoPart(t *testing.T) {
-	for _, kind := range []string{"main", "reviewer"} {
+	for _, kind := range []string{"lead", "reviewer"} {
 		withRepo, err := prompts.Role(kind, []string{t.TempDir()}, true)
 		if err != nil {
 			t.Fatal(err)

@@ -20,7 +20,7 @@ func registerRig(t *testing.T) *rig {
 
 func TestRegisterRefusesWhenAMainAgentRuns(t *testing.T) {
 	r := registerRig(t)
-	r.m.alive["main"] = true
+	r.m.alive["lead"] = true
 
 	err := register(r.o)
 
@@ -84,8 +84,8 @@ func TestRegisterRecordsTheSessionAndTheAddressAndStartsTheSfyProcess(t *testing
 	if len(r.l.specs) != 0 || len(r.l.commands) != 0 {
 		t.Errorf("sfy started a main agent: %v %v", r.l.specs, r.l.commands)
 	}
-	if _, err := os.Stat(filepath.Join(r.o.home, "main-prompt.md")); err != nil {
-		t.Errorf("main-prompt.md: %v", err)
+	if _, err := os.Stat(filepath.Join(r.o.home, "lead-prompt.md")); err != nil {
+		t.Errorf("lead-prompt.md: %v", err)
 	}
 }
 
@@ -104,7 +104,7 @@ func TestRegisterKeepsARunningSfyProcess(t *testing.T) {
 
 func TestRegisterPrintsThePromptWithAdditions(t *testing.T) {
 	r := registerRig(t)
-	dir := filepath.Join(r.o.home, "prompts", "main.d")
+	dir := filepath.Join(r.o.home, "prompts", "lead.d")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

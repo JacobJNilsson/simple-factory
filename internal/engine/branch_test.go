@@ -86,12 +86,12 @@ func TestTheApprovalNoteAndShowNameTheBranch(t *testing.T) {
 	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
 	mustOK(t, v.run("worker-t1", "t1", "report pushed", "Pushed."))
 
-	notes := v.inbox(t, "main")
+	notes := v.inbox(t, "lead")
 
 	if len(notes) != 1 || !strings.Contains(notes[0].Body, "Integrate branch feat/t1-title of") {
 		t.Errorf("no approval note names the branch:\n%v", notes)
 	}
-	if out := v.run("main", "", "task show", "", "t1").Text; !strings.Contains(out, "Branch: feat/t1-title\n") {
+	if out := v.run("lead", "", "task show", "", "t1").Text; !strings.Contains(out, "Branch: feat/t1-title\n") {
 		t.Errorf("task show lacks the branch:\n%s", out)
 	}
 }
@@ -100,7 +100,7 @@ func TestTaskShowNamesTheLegacyBranchOfAStartedTask(t *testing.T) {
 	v := newEnv(t)
 	v.seedRepo(t, task.Working, 1)
 
-	if out := v.run("main", "", "task show", "", "t1").Text; !strings.Contains(out, "Branch: sfy/t1\n") {
+	if out := v.run("lead", "", "task show", "", "t1").Text; !strings.Contains(out, "Branch: sfy/t1\n") {
 		t.Errorf("task show lacks the branch:\n%s", out)
 	}
 }

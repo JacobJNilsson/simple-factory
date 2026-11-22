@@ -224,7 +224,7 @@ func (d *Delivery) Tick(names []string) error {
 func (d *Delivery) tickOne(name string) error {
 	s := d.session(name)
 	down := false
-	if name == "main" {
+	if name == "lead" {
 		down = d.d.Probe(name)
 		if !down {
 			s.skipLogged = false
@@ -411,7 +411,7 @@ func (d *Delivery) typeAfterHook(name string, s *session) error {
 
 // deliver asks the channel to deliver text. A registered main agent has no sfy session folder, so it gets no delivery.
 func (d *Delivery) deliver(name, text, messageID string) (bool, error) {
-	if d.d.Channel == nil || (name == "main" && d.d.Registered()) {
+	if d.d.Channel == nil || (name == "lead" && d.d.Registered()) {
 		return false, nil
 	}
 	return d.d.Channel.Deliver(name, text, messageID)
