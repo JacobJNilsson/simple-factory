@@ -58,7 +58,9 @@ func (a app) run(args []string) int {
 		}
 	}
 	// Home falls back to the default factory when the lookup fails, so a command reports a failed lookup here.
-	if !slices.Contains(noFactory, args[0]) {
+	// Only factory-folder --create makes a factory, so it skips the lookup like up does.
+	makesFactory := slices.Equal(args, []string{"factory-folder", "--create"})
+	if !slices.Contains(noFactory, args[0]) && !makesFactory {
 		if _, err := config.Lookup(a.getenv); err != nil {
 			return a.report(err)
 		}
