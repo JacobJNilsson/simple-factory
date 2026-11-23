@@ -2,9 +2,7 @@ package claude
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -21,38 +19,44 @@ type manifest struct {
 }
 
 // pluginArgs writes the plugin of the factory's skills into sessionDir and returns the flag that loads it.
+// The plugin's skills folder holds one link for each skill name, to the folder of the nearest layer that has it.
 // A plugin directory gives the session no edit rights there, unlike a directory that --add-dir adds.
-// Without a skills folder it removes an earlier plugin and returns no flag.
+// Without a skill it removes an earlier plugin and returns no flag.
 func (a adapter) pluginArgs(sessionDir string) ([]string, error) {
 	dir := filepath.Join(sessionDir, "plugin")
-	// RemoveAll removes the link and leaves the skills that it points at.
+	// RemoveAll removes the links and leaves the skills that they point at.
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
-	skills, err := filepath.Abs(config.SkillsDir(a.home))
+	skills, err := config.Skills(a.layers)
 	if err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
-	st, err := os.Stat(skills)
-	if errors.Is(err, fs.ErrNotExist) || err == nil && !st.IsDir() {
+	if len(skills) == 0 {
 		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("claude: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o700); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
-	b, err := json.MarshalIndent(manifest{Name: pluginName, Description: "The skills of the sfy factory folder."}, "", "  ")
+	b, err := json.MarshalIndent(manifest{Name: pluginName, Description: "The skills of the sfy factory."}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), append(b, '\n'), 0o600); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
 	}
-	// The link keeps one copy of the skills, so an edit in the factory folder reaches the next session.
-	if err := os.Symlink(skills, filepath.Join(dir, "skills")); err != nil {
+	if err := os.Mkdir(filepath.Join(dir, "skills"), 0o700); err != nil {
 		return nil, fmt.Errorf("claude: %w", err)
+	}
+	// Each link keeps one copy of the skill, so an edit in a layer reaches the next session.
+	for _, s := range skills {
+		target, err := filepath.Abs(s.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("claude: %w", err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "skills", s.Name)); err != nil {
+			return nil, fmt.Errorf("claude: %w", err)
+		}
 	}
 	return []string{"--plugin-dir", dir}, nil
 }

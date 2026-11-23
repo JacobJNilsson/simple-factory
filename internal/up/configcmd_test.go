@@ -71,11 +71,27 @@ func TestShowConfigListsTheSkillsAndNotTheSkillsFolderAsAFactoryFile(t *testing.
 
 	got := showConfig(t, env)
 
-	if want := "\n# Skills\n# review\n\n# Factory files\n"; !strings.Contains(got, want) {
+	if want := "\n# Skills\n# review: " + filepath.Join(home, "skills", "review") + "\n\n# Factory files\n"; !strings.Contains(got, want) {
 		t.Errorf("output lacks %q:\n%s", want, got)
 	}
 	if strings.Contains(got, "# draft") || strings.Contains(got, "# skills\n") {
 		t.Errorf("output lists a folder without a skill file or the skills folder:\n%s", got)
+	}
+}
+
+func TestShowConfigNamesTheLayerOfASkillThatAnOverrideReplaces(t *testing.T) {
+	env, userHome, home := configFactory(t)
+	work := filepath.Join(userHome, "Developer", "acme")
+	writeTestFile(t, filepath.Join(home, "folder"), work+"\n")
+	writeTestFile(t, filepath.Join(home, "skills", "review", "SKILL.md"), "factory\n")
+	writeTestFile(t, filepath.Join(home, "skills", "plain", "SKILL.md"), "factory\n")
+	writeTestFile(t, filepath.Join(work, config.OverrideDir, "skills", "review", "SKILL.md"), "override\n")
+
+	got := showConfig(t, env)
+
+	want := "\n# Skills\n# plain: " + filepath.Join(home, "skills", "plain") + "\n# review: " + filepath.Join(work, config.OverrideDir, "skills", "review") + "\n"
+	if !strings.Contains(got, want) {
+		t.Errorf("output lacks %q:\n%s", want, got)
 	}
 }
 

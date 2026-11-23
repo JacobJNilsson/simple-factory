@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -242,7 +243,7 @@ func TestFactoryFilesOfTheDefaultFactoryLeaveOutStateDefinitionAndFactories(t *t
 
 func TestSkillsListsTheFoldersWithASkillFileAndFollowsLinks(t *testing.T) {
 	home := t.TempDir()
-	if got, err := config.Skills(home); err != nil || got != nil {
+	if got, err := config.Skills([]string{home}); err != nil || got != nil {
 		t.Fatalf("no skills folder: got %v, %v", got, err)
 	}
 	shared := mkdir(t, t.TempDir(), "shared")
@@ -255,10 +256,29 @@ func TestSkillsListsTheFoldersWithASkillFileAndFollowsLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := config.Skills(home)
+	got, err := config.Skills([]string{home})
 
-	if err != nil || !equal(got, []string{"linked"}) {
-		t.Fatalf("got %v, %v, want linked", got, err)
+	if want := []config.Skill{{Name: "linked", Dir: filepath.Join(skills, "linked")}}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, %v, want %v", got, err, want)
+	}
+}
+
+func TestSkillsTakeTheNearestLayerForAName(t *testing.T) {
+	far, near := t.TempDir(), t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(far, "skills", "review"), filepath.Join(far, "skills", "draft"), filepath.Join(near, "skills", "review"),
+	} {
+		writeFile(t, filepath.Join(dir, "SKILL.md"), "x\n")
+	}
+
+	got, err := config.Skills([]string{far, near})
+
+	want := []config.Skill{
+		{Name: "draft", Dir: filepath.Join(far, "skills", "draft")},
+		{Name: "review", Dir: filepath.Join(near, "skills", "review")},
+	}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, %v, want %v", got, err, want)
 	}
 }
 

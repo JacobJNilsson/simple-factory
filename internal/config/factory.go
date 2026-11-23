@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,30 +28,34 @@ var StateNames = []string{
 // definitionNames are the names in a factory folder that say how sfy behaves.
 var definitionNames = []string{"config.toml", "config.d", "prompts", skillsName}
 
-// skillsName is the folder in a factory folder that holds the skills of the factory's sessions.
+// skillsName is the folder in a layer that holds the skills of the factory's sessions.
 const skillsName = "skills"
 
-// SkillsDir returns the skills folder of the factory folder home. The machine layer has none of its own.
-func SkillsDir(home string) string { return filepath.Join(home, skillsName) }
+// Skill is a skill folder that a layer holds. Name is the folder's name, and Dir is its path in the layer.
+type Skill struct{ Name, Dir string }
 
-// Skills lists the names of the folders in the skills folder of home that hold a SKILL.md, in name order.
-// It follows links, and a missing skills folder gives no names.
-func Skills(home string) ([]string, error) {
-	entries, err := os.ReadDir(SkillsDir(home))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var out []string
-	for _, e := range entries {
-		st, err := os.Stat(filepath.Join(SkillsDir(home), e.Name(), "SKILL.md"))
-		if err == nil && st.Mode().IsRegular() {
-			out = append(out, e.Name())
+// Skills lists the skills of the layers, one for each name, in name order.
+// A skill is a folder below skills/ of a layer that holds a SKILL.md. The nearest layer wins for a name, so layers go lowest first.
+// It follows links, and a layer without a skills folder adds none.
+func Skills(layers []string) ([]Skill, error) {
+	byName := map[string]Skill{}
+	for _, layer := range layers {
+		dir := filepath.Join(layer, skillsName)
+		entries, err := os.ReadDir(dir)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			st, err := os.Stat(filepath.Join(dir, e.Name(), "SKILL.md"))
+			if err == nil && st.Mode().IsRegular() {
+				byName[e.Name()] = Skill{Name: e.Name(), Dir: filepath.Join(dir, e.Name())}
+			}
 		}
 	}
-	return out, nil
+	return slices.SortedFunc(maps.Values(byName), func(a, b Skill) int { return strings.Compare(a.Name, b.Name) }), nil
 }
 
 // FactoryFiles lists the names in the factory folder home that are neither state nor definition, such as a checks folder that a factory repo installed.
