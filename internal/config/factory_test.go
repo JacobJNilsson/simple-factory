@@ -179,7 +179,7 @@ func TestHomeOrdersSFYHOMEThenFactoryThenDefault(t *testing.T) {
 	}
 }
 
-func TestLoadFactoryReadsTheOperatorsConfigAndTheFactoryOverrides(t *testing.T) {
+func TestLoadFactoryReadsTheOperatorsConfigOverTheFactoryFolder(t *testing.T) {
 	home := userHome(t)
 	state := mkdir(t, home, ".sfy", "factories", "work")
 	write := func(path, body string) {
@@ -197,13 +197,13 @@ func TestLoadFactoryReadsTheOperatorsConfigAndTheFactoryOverrides(t *testing.T) 
 		t.Errorf("without an override: max_workers %d review_rounds %d, want 5 and 4", got.MaxWorkers, got.ReviewRounds)
 	}
 
-	write(filepath.Join(state, "config.toml"), "max_workers = 1\n")
+	write(filepath.Join(state, "config.toml"), "max_workers = 1\nresend_minutes = 7\n")
 	got, err = config.LoadFactory(state, home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.MaxWorkers != 1 || got.ReviewRounds != 4 {
-		t.Errorf("with an override: max_workers %d review_rounds %d, want 1 and 4", got.MaxWorkers, got.ReviewRounds)
+	if got.MaxWorkers != 5 || got.ReviewRounds != 4 || got.ResendMinutes != 7 {
+		t.Errorf("with a factory folder file: max_workers %d review_rounds %d resend_minutes %d, want 5, 4 and 7", got.MaxWorkers, got.ReviewRounds, got.ResendMinutes)
 	}
 }
 

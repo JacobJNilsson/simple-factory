@@ -38,9 +38,18 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	layers := config.Layers(home, userHome)
+	layers, err := config.Layers(home, userHome)
+	if err != nil {
+		return err
+	}
+	skipped, err := config.Skipped(home, userHome)
+	if err != nil {
+		return err
+	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "# %s\n# Layers, lowest first: %s\n\n# Settings\n", config.Header(home, env), strings.Join(layers, ", "))
+	fmt.Fprintf(&out, "# %s\n", config.Header(home, env))
+	writeLayers(&out, layers, skipped)
+	out.WriteString("\n# Settings\n")
 	if err := writeSettings(&out, cfg, sources); err != nil {
 		return err
 	}
@@ -85,6 +94,37 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// writeLayers writes the layers, lowest first, each with its role, and then each skipped override with its reason.
+// The first folder is the factory folder, and the others are overrides.
+func writeLayers(out *strings.Builder, layers []string, skipped []config.Override) {
+	out.WriteString("# Layers, lowest first:\n# - built-in defaults\n")
+	for i, dir := range layers {
+		role := "override"
+		if i == 0 {
+			role = "factory folder"
+		}
+		fmt.Fprintf(out, "# - %s (%s)\n", dir, role)
+	}
+	if len(skipped) == 0 {
+		return
+	}
+	out.WriteString("# Skipped overrides, which sfy does not read:\n")
+	for _, o := range skipped {
+		fmt.Fprintf(out, "# - %s: %s\n", o.Dir, o.Skip)
+	}
+}
+
+// warnSkipped prints one warning line for each override that sfy skips. A failure is a warning too and never stops sfy.
+func warnSkipped(warn io.Writer, home, userHome string) {
+	skipped, err := config.Skipped(home, userHome)
+	if err != nil {
+		_, _ = fmt.Fprintln(warn, "sfy: warning: no check of overrides: "+err.Error())
+	}
+	for _, o := range skipped {
+		_, _ = fmt.Fprintf(warn, "sfy: warning: skipped the override %s: %s\n", o.Dir, o.Skip)
+	}
 }
 
 // writeProcess writes the task process: the start list, each list with its joined agents and branches, and each agent.

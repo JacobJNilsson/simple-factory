@@ -3,6 +3,7 @@ package up
 import (
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,7 +48,7 @@ func TestShowConfigNamesTheSourceOfEachKeyAndListsTheFactoryFiles(t *testing.T) 
 
 	for _, want := range []string{
 		"review_rounds = 4 # " + machine + "\n",
-		"max_workers = 1 # " + factory + "\n",
+		"max_workers = 3 # " + machine + "\n",
 		"resend_minutes = 5 # default\n",
 		`session_settings.worker.env.TOKEN = "<set>" # ` + factory + "\n",
 		"\n# Factory files\n# checks\n",
@@ -127,18 +128,39 @@ func TestShowConfigListsAndWarnsOfEachOldName(t *testing.T) {
 func TestShowConfigListsThePromptFilesOfEachKindInAppendOrder(t *testing.T) {
 	env, userHome, home := configFactory(t)
 	machine := config.DefaultHome(userHome)
-	writeTestFile(t, filepath.Join(machine, "prompts", "worker.d", "a.md"), "machine a")
-	writeTestFile(t, filepath.Join(machine, "prompts", "worker.d", "b.md"), "machine b")
-	writeTestFile(t, filepath.Join(home, "prompts", "worker.d", "b.md"), "")
+	writeTestFile(t, filepath.Join(home, "prompts", "worker.d", "a.md"), "factory a")
+	writeTestFile(t, filepath.Join(home, "prompts", "worker.d", "b.md"), "factory b")
+	writeTestFile(t, filepath.Join(machine, "prompts", "worker.d", "b.md"), "")
 	writeTestFile(t, filepath.Join(home, "prompts", "worker.md"), "base")
 
 	got := showConfig(t, env)
 
 	want := "# worker: base " + filepath.Join(home, "prompts", "worker.md") + "\n" +
-		"#   a.md: " + filepath.Join(machine, "prompts", "worker.d", "a.md") + "\n" +
-		"#   b.md: removed by " + filepath.Join(home, "prompts", "worker.d", "b.md") + "\n"
+		"#   a.md: " + filepath.Join(home, "prompts", "worker.d", "a.md") + "\n" +
+		"#   b.md: removed by " + filepath.Join(machine, "prompts", "worker.d", "b.md") + "\n"
 	if !strings.Contains(got, want) || !strings.Contains(got, "# lead: base default\n") {
 		t.Errorf("output lacks the prompt files:\n%s", got)
+	}
+}
+
+func TestShowConfigListsTheLayersWithTheirRolesAndEachSkippedOverrideWithItsReason(t *testing.T) {
+	env, userHome, home := configFactory(t)
+	work := filepath.Join(userHome, "Developer", "acme")
+	writeTestFile(t, filepath.Join(home, "folder"), work+"\n")
+	good := filepath.Join(userHome, "Developer", config.OverrideDir)
+	bad := filepath.Join(work, config.OverrideDir)
+	writeTestFile(t, filepath.Join(good, "config.toml"), "max_workers = 5\n")
+	writeTestFile(t, filepath.Join(bad, "config.toml"), "max_workers = 9\n")
+	if err := os.Chmod(bad, 0o770); err != nil {
+		t.Fatal(err)
+	}
+
+	got := showConfig(t, env)
+
+	want := "# Layers, lowest first:\n# - built-in defaults\n# - " + home + " (factory folder)\n# - " + config.DefaultHome(userHome) + " (override)\n# - " + good + " (override)\n" +
+		"# Skipped overrides, which sfy does not read:\n# - " + bad + ": mode 0770 lets group or others write\n"
+	if !strings.Contains(got, want) || !strings.Contains(got, "max_workers = 5 # "+filepath.Join(good, "config.toml")+"\n") {
+		t.Errorf("output lacks the layers or the override setting:\n%s", got)
 	}
 }
 

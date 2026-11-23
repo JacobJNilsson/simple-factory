@@ -11,18 +11,19 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 )
 
-// These tests pin how the machine file and the factory file combine in the three map tables.
-// The tables merge at every depth, so a key that only the machine file sets stays.
+// These tests pin how two config files combine in the three map tables.
+// The tables merge at every depth, so a key that only the lower file sets stays.
 
-// loadTwo writes the machine config.toml and a factory's config.toml, then loads the factory.
-func loadTwo(t *testing.T, machine, factory string) (config.Config, error) {
+// loadTwo writes the config.toml of a factory folder and the config.toml of ~/.sfy, then loads the factory.
+// ~/.sfy is an override, so it sits above the factory folder and wins.
+func loadTwo(t *testing.T, lower, higher string) (config.Config, error) {
 	t.Helper()
 	home := userHome(t)
 	state := mkdir(t, home, ".sfy", "factories", "acme")
-	if err := os.WriteFile(filepath.Join(home, ".sfy", "config.toml"), []byte(machine), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(state, "config.toml"), []byte(lower), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(state, "config.toml"), []byte(factory), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".sfy", "config.toml"), []byte(higher), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return config.LoadFactory(state, home)
@@ -118,7 +119,7 @@ func TestLoadFactoryFailsNamingAnUnknownKeyOfEitherFile(t *testing.T) {
 }
 
 func TestLoadFactoryNamesTheFileOfAValueWithTheWrongType(t *testing.T) {
-	_, err := loadTwo(t, "", "max_workers = \"two\"\n")
+	_, err := loadTwo(t, "max_workers = \"two\"\n", "")
 
 	var bad *config.FileError
 	if !errors.As(err, &bad) || !strings.HasSuffix(bad.Path, filepath.Join("factories", "acme", "config.toml")) {
@@ -126,24 +127,24 @@ func TestLoadFactoryNamesTheFileOfAValueWithTheWrongType(t *testing.T) {
 	}
 }
 
-func TestLayersOfAFactoryAreTheMachineFolderThenTheFactoryFolder(t *testing.T) {
+func TestLayersOfAFactoryAreTheFactoryFolderThenTheMachineFolder(t *testing.T) {
 	home := userHome(t)
-	state := filepath.Join(home, ".sfy", "factories", "acme")
+	state := mkdir(t, home, ".sfy", "factories", "acme")
 
-	got := config.Layers(state, home)
+	got, err := config.Layers(state, home)
 
-	if want := []string{filepath.Join(home, ".sfy"), state}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("layers %v, want %v", got, want)
+	if want := []string{state, filepath.Join(home, ".sfy")}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("layers %v, %v, want %v", got, err, want)
 	}
 }
 
 func TestLayersOfTheDefaultFactoryAreOneFolder(t *testing.T) {
 	home := userHome(t)
 
-	got := config.Layers(filepath.Join(home, ".sfy")+"/", home)
+	got, err := config.Layers(filepath.Join(home, ".sfy")+"/", home)
 
-	if want := []string{filepath.Join(home, ".sfy")}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("layers %v, want %v", got, want)
+	if want := []string{filepath.Join(home, ".sfy")}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("layers %v, %v, want %v", got, err, want)
 	}
 }
 
@@ -152,10 +153,10 @@ func TestSourcesNamesTheLastFileThatSetsEachKey(t *testing.T) {
 	state := mkdir(t, home, ".sfy", "factories", "acme")
 	machine := filepath.Join(home, ".sfy", "config.toml")
 	factory := filepath.Join(state, "config.toml")
-	if err := os.WriteFile(machine, []byte("review_rounds = 4\nmax_workers = 3\n[models]\nworker = \"w\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(machine, []byte("review_rounds = 4\n[models]\nworker = \"w\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(factory, []byte("max_workers = 1\n"), 0o600); err != nil {
+	if err := os.WriteFile(factory, []byte("max_workers = 1\nreview_rounds = 2\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

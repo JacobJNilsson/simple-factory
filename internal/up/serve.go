@@ -91,7 +91,10 @@ func newParts(env func(string) string) (parts, error) {
 	move := func() error { return moveToLead(home, prefix, m.Alive) }
 	m = mux.Prefixed(mux.Registered(m, prefix+leadSession, leadAddressPath(home), registration.Path(home)), prefix)
 	who, _ := m.(mux.Whoamier)
-	layers := config.Layers(home, env("HOME"))
+	layers, err := config.Layers(home, env("HOME"))
+	if err != nil {
+		return parts{}, err
+	}
 	agent := claude.New(cfg, home, bin, layers)
 	adapters := map[string]provider.Provider{"claude": agent}
 	if err := checkHarnesses(cfg, proc, adapters); err != nil {
@@ -111,7 +114,11 @@ func loadDefinition(home, userHome string) (config.Config, process.Process, erro
 	if err := engine.Runnable(proc); err != nil {
 		return cfg, proc, err
 	}
-	if err := checkPrompts(proc, config.Layers(home, userHome)); err != nil {
+	layers, err := config.Layers(home, userHome)
+	if err != nil {
+		return cfg, proc, err
+	}
+	if err := checkPrompts(proc, layers); err != nil {
 		return cfg, proc, err
 	}
 	tasks, err := store.Files(home).Tasks()
@@ -327,6 +334,7 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 		return err
 	}
 	warnOldNames(o.warn, o.home, env("HOME"))
+	warnSkipped(o.warn, o.home, env("HOME"))
 	return run(o)
 }
 
@@ -404,6 +412,7 @@ func restartWith(u updater, environ []string, env func(string) string, stdout, s
 		return err
 	}
 	warnOldNames(o.warn, o.home, env("HOME"))
+	warnSkipped(o.warn, o.home, env("HOME"))
 	return restart(o)
 }
 
