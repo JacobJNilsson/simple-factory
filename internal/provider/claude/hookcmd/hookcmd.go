@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,9 +38,9 @@ type UsageError struct{ Msg string }
 
 func (e *UsageError) Error() string { return e.Msg }
 
-// Sender sends a request to the sfy process, prints the answer and returns the exit code.
+// Sender sends a request to the sfy process of the factory folder home, prints the answer and returns the exit code.
 // It passes the answer text through reply first. A nil reply keeps the text.
-type Sender func(req protocol.Request, reply func(string) string) int
+type Sender func(home string, req protocol.Request, reply func(string) string) int
 
 // Own reports whether args, the words after "hook", are a form that a started session's own hooks run.
 // The user settings run "hook --user <event>" in every session, and that form stays silent for a started agent.
@@ -71,7 +72,7 @@ func Run(args []string, env func(string) string, stdin io.Reader, stdout, stderr
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
 		return exitFailed, nil
 	}
-	return send(req, replyFor(args[0])), nil
+	return send(config.Home(env), req, replyFor(args[0])), nil
 }
 
 // request builds the request that reports a hook event to the sfy process. It reads all of stdin.
@@ -102,12 +103,30 @@ func userHook(event string, env func(string) string, stdin io.Reader, send Sende
 	if err != nil {
 		return exitFailed, err
 	}
-	c := identity.Folder{Home: config.Home(env)}.Resolve(identity.Claim{Session: claude.HookSession(body)})
-	if c.Agent != protocol.Lead {
-		return exitOK, nil
+	session := claude.HookSession(body)
+	for _, home := range userHookHomes(env) {
+		c := identity.Folder{Home: home}.Resolve(identity.Claim{Session: session})
+		if c.Agent != protocol.Lead {
+			continue
+		}
+		req := protocol.Request{Caller: c, Command: "hook " + event, Body: claude.HookBody(event, body)}
+		return send(home, req, replyFor(event)), nil
 	}
-	req := protocol.Request{Caller: c, Command: "hook " + event, Body: claude.HookBody(event, body)}
-	return send(req, replyFor(event)), nil
+	return exitOK, nil
+}
+
+// userHookHomes returns the factory folders that the user hook tries, in order.
+// SFY_HOME names one. Otherwise they are all the factory folders of the working folder, and the default factory when it has none.
+func userHookHomes(env func(string) string) []string {
+	if h := env("SFY_HOME"); h != "" {
+		return []string{h}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		if homes := config.FactoriesAt(env("HOME"), cwd); len(homes) > 0 {
+			return homes
+		}
+	}
+	return []string{config.DefaultHome(env("HOME"))}
 }
 
 // mergeGuardHook is the PreToolUse hook of the lead. It exits with exitWake, which blocks the tool call, for a hand push, merge or rebase in a no-merge repo.
@@ -219,7 +238,7 @@ func turnEndedHook(env func(string) string, stdin io.Reader, stderr io.Writer, c
 			return exitWake, nil
 		}
 	}
-	return send(req, replyFor("turn-ended")), nil
+	return send(config.Home(env), req, replyFor("turn-ended")), nil
 }
 
 // takeDelivered returns the text of the entries that still wait and marks their messages read.
