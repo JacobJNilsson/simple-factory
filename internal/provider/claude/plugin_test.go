@@ -9,8 +9,10 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
+	"github.com/JacobJNilsson/simple-factory/internal/provider/claude"
 )
 
 // withSkills gives the factory folder home a skills folder with one skill.
@@ -45,7 +47,7 @@ func TestEachSessionKindLoadsTheFactorySkillsAsAPlugin(t *testing.T) {
 	}
 }
 
-func TestThePluginHoldsAManifestAndALinkToTheSkills(t *testing.T) {
+func TestThePluginHoldsAManifestAndALinkForEachSkill(t *testing.T) {
 	p, home := setup(t, bin)
 	skills := withSkills(t, home)
 
@@ -61,8 +63,40 @@ func TestThePluginHoldsAManifestAndALinkToTheSkills(t *testing.T) {
 	if err := json.Unmarshal(b, &m); err != nil || m.Name != "factory" {
 		t.Errorf("manifest %s: %v", b, err)
 	}
-	if got, err := os.Readlink(filepath.Join(pluginDir(home, "worker-t1"), "skills")); err != nil || got != skills {
-		t.Errorf("link %q, %v, want %q", got, err, skills)
+	want := filepath.Join(skills, "review")
+	if got, err := os.Readlink(filepath.Join(pluginDir(home, "worker-t1"), "skills", "review")); err != nil || got != want {
+		t.Errorf("link %q, %v, want %q", got, err, want)
+	}
+}
+
+func TestSkillsOfTwoLayersGiveOneLinkForEachNameToTheNearerLayer(t *testing.T) {
+	home := t.TempDir()
+	override := t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(home, "skills", "review"), filepath.Join(home, "skills", "draft"), filepath.Join(override, "skills", "review"),
+	} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := claude.New(config.Config{Allow: []string{"git"}}, home, bin, []string{home, override})
+
+	command(t, p, worker())
+
+	skills := filepath.Join(pluginDir(home, "worker-t1"), "skills")
+	for name, want := range map[string]string{
+		"review": filepath.Join(override, "skills", "review"),
+		"draft":  filepath.Join(home, "skills", "draft"),
+	} {
+		if got, err := os.Readlink(filepath.Join(skills, name)); err != nil || got != want {
+			t.Errorf("link %s: %q, %v, want %q", name, got, err, want)
+		}
+	}
+	if entries, err := os.ReadDir(skills); err != nil || len(entries) != 2 {
+		t.Errorf("the plugin holds %d links, %v, want 2", len(entries), err)
 	}
 }
 

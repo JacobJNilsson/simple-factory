@@ -60,13 +60,13 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 			return err
 		}
 	}
-	skills, err := config.Skills(home)
+	skills, err := config.Skills(layers)
 	if err != nil {
 		return err
 	}
 	out.WriteString("\n# Skills\n")
-	for _, name := range skills {
-		fmt.Fprintf(&out, "# %s\n", name)
+	for _, s := range skills {
+		fmt.Fprintf(&out, "# %s: %s\n", s.Name, s.Dir)
 	}
 	files, err := config.FactoryFiles(home, userHome)
 	if err != nil {
