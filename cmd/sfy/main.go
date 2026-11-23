@@ -52,7 +52,7 @@ func (a app) run(args []string) int {
 	}
 	// The environment can be faked, so the allow rules of the settings are the real barrier. This check backs them up.
 	switch args[0] {
-	case "run", "serve", "register", "restart", "config":
+	case "run", "serve", "register", "restart", "config", "factory-folder":
 		if cli.Restricted(a.getenv) {
 			return a.report(cli.ErrRestricted)
 		}
@@ -87,6 +87,12 @@ func (a app) run(args []string) int {
 		return a.report(up.Serve(ctx, a.getenv, a.stderr))
 	case "config":
 		return a.report(up.ShowConfig(a.getenv, a.stdout, a.stderr))
+	case "factory-folder":
+		create := len(args) == 2 && args[1] == "--create"
+		if len(args) > 1 && !create {
+			return a.report(fmt.Errorf("usage: sfy factory-folder [--create]"))
+		}
+		return a.report(up.FactoryFolder(a.getenv, a.stdout, a.stderr, create))
 	case "run":
 		// On success the process becomes the command, so run returns only on an error.
 		return a.report(envrun.Run(args[1:]))
