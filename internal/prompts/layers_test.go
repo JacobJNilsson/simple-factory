@@ -106,7 +106,11 @@ func TestForReadsEachFileOfTheDefaultFactoryOnce(t *testing.T) {
 	def := config.DefaultHome(userHome)
 	writePrompt(t, def, "worker.d/a.md", "once")
 
-	got, err := prompts.For("worker", config.Layers(def, userHome))
+	layers, err := config.Layers(def, userHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := prompts.For("worker", layers)
 
 	if err != nil || strings.Count(got, "once") != 1 {
 		t.Fatalf("got %q, %v", got, err)
@@ -134,6 +138,52 @@ func TestSourcesNamesTheBaseAndEachAdditionInAppendOrder(t *testing.T) {
 	}
 	if !reflect.DeepEqual(additions, want) {
 		t.Errorf("additions %+v, want %+v", additions, want)
+	}
+}
+
+// overrideLayers returns the layers of a factory whose working folder holds an override, lowest first.
+func overrideLayers(t *testing.T) (layers []string, factory, override string) {
+	t.Helper()
+	userHome := t.TempDir()
+	work := filepath.Join(userHome, "Developer", "acme")
+	factory = filepath.Join(config.FactoriesDir(userHome), "acme")
+	override = filepath.Join(work, config.OverrideDir)
+	for _, dir := range []string{factory, override} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(factory, "folder"), []byte(work+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	layers, err := config.Layers(factory, userHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return layers, factory, override
+}
+
+func TestForJoinsTheAdditionOfAnOverrideToTheWorkerPrompt(t *testing.T) {
+	layers, factory, override := overrideLayers(t)
+	writePrompt(t, factory, "worker.d/a.md", "factory addition")
+	writePrompt(t, override, "worker.d/x.md", "override addition")
+
+	got, err := prompts.For("worker", layers)
+
+	if err != nil || !strings.HasSuffix(got, "factory addition\n\noverride addition") {
+		t.Fatalf("got %q, %v, want both additions, the factory folder's first", got, err)
+	}
+}
+
+func TestForTakesAnEmptyFileOfANearerOverrideAsTheRemovalOfTheFactoryFoldersFile(t *testing.T) {
+	layers, factory, override := overrideLayers(t)
+	writePrompt(t, factory, "worker.d/x.md", "factory addition")
+	writePrompt(t, override, "worker.d/x.md", "")
+
+	got, err := prompts.For("worker", layers)
+
+	if err != nil || strings.Contains(got, "factory addition") {
+		t.Fatalf("got %q, %v, want no factory addition", got, err)
 	}
 }
 

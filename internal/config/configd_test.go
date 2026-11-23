@@ -40,18 +40,18 @@ func TestLoadFactoryReadsConfigDFilesInNameOrderBeforeConfigToml(t *testing.T) {
 	}
 }
 
-func TestLoadFactoryPutsAFactoryConfigDFileOverTheMachineConfigToml(t *testing.T) {
+func TestLoadFactoryPutsTheMachineConfigTomlOverAFactoryConfigDFile(t *testing.T) {
 	home := userHome(t)
 	state := mkdir(t, home, ".sfy", "factories", "acme")
 	writeFile(t, filepath.Join(home, ".sfy", "config.toml"), "[models]\nlead = \"m\"\nworker = \"w\"\n")
-	writeFile(t, filepath.Join(state, "config.d", "50-shared.toml"), "[models]\nworker = \"shared\"\n")
+	writeFile(t, filepath.Join(state, "config.d", "50-shared.toml"), "[models]\nworker = \"shared\"\nreviewer = \"shared\"\n")
 
 	got, err := config.LoadFactory(state, home)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := (config.Models{Lead: "m", Worker: "shared", Reviewer: "sonnet"}); got.Models != want {
+	if want := (config.Models{Lead: "m", Worker: "w", Reviewer: "shared"}); got.Models != want {
 		t.Fatalf("models %+v, want %+v", got.Models, want)
 	}
 }

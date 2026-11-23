@@ -204,20 +204,14 @@ func Load(home string) (Config, error) {
 	return load(getconfTempDir, filepath.Join(home, "config.toml"))
 }
 
-// Layers returns the folders that hold a factory's definition, lowest first: the machine layer ~/.sfy, then the factory folder.
-// The default factory's folder is ~/.sfy, so it gets one folder.
-func Layers(home, userHome string) []string {
-	machine := DefaultHome(userHome)
-	if filepath.Clean(home) == filepath.Clean(machine) {
-		return []string{machine}
-	}
-	return []string{machine, home}
-}
-
 // configFiles returns the config files of each layer, lowest first: the .toml files of config.d in name order, then config.toml.
 func configFiles(home, userHome string) ([]string, error) {
+	layers, err := Layers(home, userHome)
+	if err != nil {
+		return nil, err
+	}
 	var paths []string
-	for _, dir := range Layers(home, userHome) {
+	for _, dir := range layers {
 		parts, err := configParts(filepath.Join(dir, "config.d"))
 		if err != nil {
 			return nil, err

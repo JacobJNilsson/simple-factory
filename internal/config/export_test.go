@@ -9,3 +9,8 @@ type BothKeysError = bothKeysError
 func LoadWithTempLookup(home string, userTempDir func() (string, error)) (Config, error) {
 	return load(userTempDir, filepath.Join(home, "config.toml"))
 }
+
+// OverridesAs lists the overrides as the user with the id uid sees them, so a test can name an owner that it cannot create.
+func OverridesAs(home, userHome string, uid int) ([]Override, error) {
+	return overrides(home, userHome, uid)
+}

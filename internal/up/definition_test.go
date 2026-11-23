@@ -153,7 +153,11 @@ func TestTheStartOfTheSfyProcessWritesTheDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := definitionReport(home, cfg, config.Layers(home, userHome))
+	layers, err := config.Layers(home, userHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := definitionReport(home, cfg, layers)
 	if err != nil {
 		t.Fatal(err)
 	}

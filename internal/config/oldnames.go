@@ -107,7 +107,11 @@ func OldNames(home, userHome string) ([]string, error) {
 			lines = append(lines, fmt.Sprintf("%s sets %s. sfy reads it as %s. Rename the key.", path, r.old, r.new))
 		}
 	}
-	for _, layer := range Layers(home, userHome) {
+	layers, err := Layers(home, userHome)
+	if err != nil {
+		return nil, err
+	}
+	for _, layer := range layers {
 		for _, p := range oldPrompts {
 			path := filepath.Join(layer, "prompts", p.old)
 			_, err := os.Stat(path)

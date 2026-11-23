@@ -25,7 +25,11 @@ func TestRecordLeadPromptJoinsTheMachineAndTheFactoryAdditions(t *testing.T) {
 	writeTestFile(t, filepath.Join(config.DefaultHome(userHome), "prompts", "lead.d", "a.md"), "machine addition")
 	writeTestFile(t, filepath.Join(home, "prompts", "lead.d", "b.md"), "factory addition")
 
-	if _, err := recordLeadPrompt(home, config.Layers(home, userHome)); err != nil {
+	layers, err := config.Layers(home, userHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := recordLeadPrompt(home, layers); err != nil {
 		t.Fatal(err)
 	}
 

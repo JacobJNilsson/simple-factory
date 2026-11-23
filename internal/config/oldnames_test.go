@@ -32,14 +32,14 @@ func TestLoadFactoryReadsTheOldKeysAsTheNewOnes(t *testing.T) {
 	}
 }
 
-func TestAFactoryFileWithTheOldKeyChangesTheNewKeyOfTheMachineFile(t *testing.T) {
-	got, err := loadTwo(t, "[models]\nlead = \"machine\"\n", "[models]\nmain = \"factory\"\n")
+func TestAHigherFileWithTheOldKeyChangesTheNewKeyOfALowerFile(t *testing.T) {
+	got, err := loadTwo(t, "[models]\nlead = \"lower\"\n", "[models]\nmain = \"higher\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got.Models.Lead != "factory" {
-		t.Errorf("models.lead %q, want factory", got.Models.Lead)
+	if got.Models.Lead != "higher" {
+		t.Errorf("models.lead %q, want higher", got.Models.Lead)
 	}
 }
 
@@ -76,10 +76,10 @@ func TestOldNamesListsEachOldKeyAndPromptName(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		machine + " sets multiplexers.set.show_main. sfy reads it as multiplexers.set.show_lead. Rename the key.",
 		factory + " sets models.main. sfy reads it as models.lead. Rename the key.",
-		filepath.Join(home, ".sfy", "prompts", "main.md") + " has the old name. sfy reads it as lead.md. Rename the file.",
+		machine + " sets multiplexers.set.show_main. sfy reads it as multiplexers.set.show_lead. Rename the key.",
 		filepath.Join(state, "prompts", "main.d") + " has the old name. sfy reads it as lead.d. Rename the folder.",
+		filepath.Join(home, ".sfy", "prompts", "main.md") + " has the old name. sfy reads it as lead.md. Rename the file.",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got\n%q\nwant\n%q", got, want)
