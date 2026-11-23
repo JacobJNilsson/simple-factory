@@ -15,9 +15,12 @@ import (
 // folderFile is the file in a factory folder that records the absolute path of its working folder.
 const folderFile = "folder"
 
+// namePrefixFile is the file in a factory folder that records its name prefix. A factory folder without it has an empty name prefix.
+const namePrefixFile = "name-prefix"
+
 // StateNames are the names that sfy owns in a factory folder. A factory repo's install must not write them.
 var StateNames = []string{
-	"tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "lead-prompt.md", "main-prompt.md", "definition.toml",
+	namePrefixFile, "tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "lead-prompt.md", "main-prompt.md", "definition.toml",
 	"sfy.log", "sfy.sock", "sfy.lock", "sfy.pid", "drop",
 }
 
@@ -196,21 +199,43 @@ func FactoriesAt(userHome, dir string) []string {
 	}
 }
 
-// FindFactory returns the first factory folder of the nearest working folder at or above dir.
-// The user's home folder is never a working folder.
-func FindFactory(userHome, dir string) (string, bool) {
-	states := FactoriesAt(userHome, dir)
-	if len(states) == 0 {
-		return "", false
+// namePrefixOf returns the name prefix that the factory folder home records, or an empty string when it records none.
+func namePrefixOf(home string) string {
+	b, err := os.ReadFile(filepath.Join(home, namePrefixFile))
+	if err != nil {
+		return ""
 	}
-	return states[0], true
+	return strings.TrimSpace(string(b))
+}
+
+// FindFactory returns the first factory folder with the name prefix of the nearest working folder at or above dir that has one.
+// The user's home folder is never a working folder.
+func FindFactory(userHome, dir, prefix string) (string, bool) {
+	known := registered(userHome)
+	userHome = CanonicalPath(userHome)
+	for d := CanonicalPath(dir); ; d = filepath.Dir(d) {
+		if d != userHome {
+			for _, state := range known[d] {
+				if namePrefixOf(state) == prefix {
+					return state, true
+				}
+			}
+		}
+		if d == filepath.Dir(d) {
+			return "", false
+		}
+	}
 }
 
 // CreateFactory makes the factory folder of a new factory for the working folder dir and records dir in it.
-// Two folders with one base name get the names web and web-2.
-func CreateFactory(userHome, dir string) (string, error) {
+// The name starts with the name prefix, and the whole name is cut to maxNameLength characters.
+// Two folders with one base name get the names web and web-2. A non-empty name prefix is recorded in the file name-prefix.
+func CreateFactory(userHome, dir, prefix string) (string, error) {
 	dir = CanonicalPath(dir)
-	base := FactoryName(dir)
+	base := prefix + FactoryName(dir)
+	if len(base) > maxNameLength {
+		base = base[:maxNameLength]
+	}
 	if err := os.MkdirAll(FactoriesDir(userHome), 0o700); err != nil {
 		return "", err
 	}
@@ -226,6 +251,12 @@ func CreateFactory(userHome, dir string) (string, error) {
 		}
 		if err != nil {
 			return "", err
+		}
+		// The name prefix comes first, because the folder file makes the factory findable.
+		if prefix != "" {
+			if err := os.WriteFile(filepath.Join(state, namePrefixFile), []byte(prefix+"\n"), 0o600); err != nil {
+				return "", err
+			}
 		}
 		if err := os.WriteFile(filepath.Join(state, folderFile), []byte(dir+"\n"), 0o600); err != nil {
 			return "", err

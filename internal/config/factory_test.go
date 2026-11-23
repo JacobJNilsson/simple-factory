@@ -47,7 +47,7 @@ func TestCreateFactoryRecordsTheFolderAndWritesNothingThere(t *testing.T) {
 	home := userHome(t)
 	dir := mkdir(t, home, "Developer", "acme")
 
-	state, err := config.CreateFactory(home, dir)
+	state, err := config.CreateFactory(home, dir, "")
 
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestSecondFolderWithTheSameBaseNameGetsASuffix(t *testing.T) {
 
 	var names []string
 	for _, dir := range []string{first, second, third} {
-		state, err := config.CreateFactory(home, dir)
+		state, err := config.CreateFactory(home, dir, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,19 +103,19 @@ func TestFindFactoryTakesTheNearestFolderAbove(t *testing.T) {
 	outer := mkdir(t, home, "Developer", "acme")
 	inner := mkdir(t, outer, "web")
 	deep := mkdir(t, inner, "src")
-	outerState, _ := config.CreateFactory(home, outer)
+	outerState, _ := config.CreateFactory(home, outer, "")
 
-	got, ok := config.FindFactory(home, deep)
+	got, ok := config.FindFactory(home, deep, "")
 	if !ok || got != outerState {
 		t.Fatalf("below the outer folder: got %q %v, want %q", got, ok, outerState)
 	}
 
-	innerState, _ := config.CreateFactory(home, inner)
-	got, ok = config.FindFactory(home, deep)
+	innerState, _ := config.CreateFactory(home, inner, "")
+	got, ok = config.FindFactory(home, deep, "")
 	if !ok || got != innerState {
 		t.Fatalf("below the inner folder: got %q %v, want %q", got, ok, innerState)
 	}
-	got, ok = config.FindFactory(home, outer)
+	got, ok = config.FindFactory(home, outer, "")
 	if !ok || got != outerState {
 		t.Fatalf("in the outer folder: got %q %v, want %q", got, ok, outerState)
 	}
@@ -125,15 +125,15 @@ func TestFindFactoryIgnoresUnrelatedFoldersAndTheHomeFolder(t *testing.T) {
 	home := userHome(t)
 	dir := mkdir(t, home, "work")
 	other := mkdir(t, home, "other")
-	if _, err := config.CreateFactory(home, dir); err != nil {
+	if _, err := config.CreateFactory(home, dir, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := config.CreateFactory(home, home); err != nil {
+	if _, err := config.CreateFactory(home, home, ""); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, folder := range []string{other, home, filepath.Join(other, "x")} {
-		if state, ok := config.FindFactory(home, folder); ok {
+		if state, ok := config.FindFactory(home, folder, ""); ok {
 			t.Errorf("FindFactory(%q) = %q, want none", folder, state)
 		}
 	}
@@ -142,7 +142,7 @@ func TestFindFactoryIgnoresUnrelatedFoldersAndTheHomeFolder(t *testing.T) {
 func TestHomeOrdersSFYHOMEThenFactoryThenDefault(t *testing.T) {
 	home := userHome(t)
 	dir := mkdir(t, home, "work")
-	state, _ := config.CreateFactory(home, dir)
+	state, _ := config.CreateFactory(home, dir, "")
 	other := mkdir(t, home, "other")
 	envOf := func(sfyHome string) func(string) string {
 		return func(k string) string {
@@ -265,7 +265,7 @@ func TestSkillsListsTheFoldersWithASkillFileAndFollowsLinks(t *testing.T) {
 func TestHeaderNamesTheFactoryAndItsFolder(t *testing.T) {
 	home := userHome(t)
 	dir := mkdir(t, home, "work")
-	state, _ := config.CreateFactory(home, dir)
+	state, _ := config.CreateFactory(home, dir, "")
 	env := func(k string) string {
 		if k == "HOME" {
 			return home
@@ -341,7 +341,7 @@ func TestFactoriesAtListsEveryFactoryFolderOfTheNearestWorkingFolder(t *testing.
 	if !slices.Equal(got, want) {
 		t.Fatalf("FactoriesAt = %v, want %v", got, want)
 	}
-	if first, ok := config.FindFactory(home, dir); !ok || first != want[0] {
+	if first, ok := config.FindFactory(home, dir, ""); !ok || first != want[0] {
 		t.Errorf("FindFactory = %q %v, want the first, %q", first, ok, want[0])
 	}
 	if other := config.FactoriesAt(home, mkdir(t, home, "other")); other != nil {

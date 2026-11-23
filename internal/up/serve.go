@@ -318,7 +318,7 @@ func checkSocketPath(path string) error {
 
 // Command runs a plain sfy for the factory folder that env names.
 func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
-	env, err := factoryEnv(env, os.Getwd)
+	env, err := factoryEnv(env, os.Getwd, stderr)
 	if err != nil {
 		return err
 	}
@@ -344,9 +344,15 @@ func warnOldNames(warn io.Writer, home, userHome string) {
 // factoryEnv returns env with SFY_HOME set to the factory that sfy up starts in the current folder.
 // SFY_HOME wins. The user's home folder and a folder with no factory above it work as the rules say:
 // the first gets the default factory, and the second gets a new factory in the factories folder.
-func factoryEnv(env func(string) string, getwd func() (string, error)) (func(string) string, error) {
+// The factory has the name prefix of SFY_NAME_PREFIX, and the user's home folder has no factory with a name prefix.
+// A new factory in a folder that has a factory of another name prefix prints one line to note that names the other factory folder.
+func factoryEnv(env func(string) string, getwd func() (string, error), note io.Writer) (func(string) string, error) {
 	if env("SFY_HOME") != "" {
 		return env, nil
+	}
+	prefix, err := config.NamePrefix(env)
+	if err != nil {
+		return nil, err
 	}
 	userHome := env("HOME")
 	cwd, err := getwd()
@@ -354,14 +360,21 @@ func factoryEnv(env func(string) string, getwd func() (string, error)) (func(str
 		return nil, err
 	}
 	state := config.DefaultHome(userHome)
-	if config.CanonicalPath(cwd) != config.CanonicalPath(userHome) {
-		found, ok := config.FindFactory(userHome, cwd)
+	switch {
+	case config.CanonicalPath(cwd) != config.CanonicalPath(userHome):
+		found, ok := config.FindFactory(userHome, cwd, prefix)
 		if !ok {
-			if found, err = config.CreateFactory(userHome, cwd); err != nil {
+			others := config.FactoriesAt(userHome, cwd)
+			if found, err = config.CreateFactory(userHome, cwd, prefix); err != nil {
 				return nil, err
+			}
+			if len(others) > 0 {
+				_, _ = fmt.Fprintf(note, "sfy: this folder has another factory at %s. This command made its own, %s.\n", others[0], found)
 			}
 		}
 		state = found
+	case prefix != "":
+		return nil, &config.NoFactoryError{Prefix: prefix}
 	}
 	return func(key string) string {
 		if key == "SFY_HOME" {
