@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -404,19 +405,73 @@ func firstUnknown(md toml.MetaData) (string, bool) {
 	return "", false
 }
 
-// Home returns the factory folder.
-// SFY_HOME wins. Otherwise the factory of the nearest registered working folder at or above the current folder wins.
-// Without either, the default factory folder, .sfy in the user's home folder, wins.
-func Home(env func(string) string) string {
+// NamePrefixEnv is the variable that scopes the factory lookup by a name prefix.
+const NamePrefixEnv = "SFY_NAME_PREFIX"
+
+// maxNamePrefix is the longest name prefix, so a factory name keeps room for the working folder's name.
+const maxNamePrefix = 16
+
+// namePrefixForm matches a non-empty name prefix: lowercase letters, digits and -, ending in -.
+var namePrefixForm = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*-$`)
+
+// NamePrefix returns the name prefix of the environment, or an empty string when SFY_NAME_PREFIX is unset or empty.
+// A value that is too long or has other characters than lowercase letters, digits and -, or does not end in -, fails and names the variable.
+func NamePrefix(env func(string) string) (string, error) {
+	prefix := env(NamePrefixEnv)
+	if prefix == "" {
+		return "", nil
+	}
+	if len(prefix) > maxNamePrefix || !namePrefixForm.MatchString(prefix) {
+		return "", &NamePrefixError{Value: prefix}
+	}
+	return prefix, nil
+}
+
+// NamePrefixError reports a SFY_NAME_PREFIX value of the wrong form.
+type NamePrefixError struct{ Value string }
+
+func (e *NamePrefixError) Error() string {
+	return fmt.Sprintf("%s must hold lowercase letters, digits and -, end in -, and have at most %d characters, but it is %q", NamePrefixEnv, maxNamePrefix, e.Value)
+}
+
+// Lookup returns the factory folder of the environment.
+// SFY_HOME wins. Otherwise the factory of the nearest registered working folder at or above the current folder wins,
+// among the factory folders with the name prefix of SFY_NAME_PREFIX.
+// Without any, the default factory folder, .sfy in the user's home folder, wins. A name prefix has no default factory, so it fails there.
+func Lookup(env func(string) string) (string, error) {
 	if h := env("SFY_HOME"); h != "" {
-		return h
+		return h, nil
+	}
+	prefix, err := NamePrefix(env)
+	if err != nil {
+		return "", err
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		if state, ok := FindFactory(env("HOME"), cwd); ok {
-			return state
+		if state, ok := FindFactory(env("HOME"), cwd, prefix); ok {
+			return state, nil
 		}
 	}
-	return DefaultHome(env("HOME"))
+	if prefix != "" {
+		return "", &NoFactoryError{Prefix: prefix}
+	}
+	return DefaultHome(env("HOME")), nil
+}
+
+// NoFactoryError reports a lookup with a name prefix that finds no factory folder with that name prefix.
+type NoFactoryError struct{ Prefix string }
+
+func (e *NoFactoryError) Error() string {
+	return fmt.Sprintf("no factory with the name prefix %s here", e.Prefix)
+}
+
+// Home returns the factory folder that Lookup finds. A caller that must report a failed lookup runs Lookup first.
+// When Lookup fails, Home returns the default factory folder.
+func Home(env func(string) string) string {
+	home, err := Lookup(env)
+	if err != nil {
+		return DefaultHome(env("HOME"))
+	}
+	return home
 }
 
 // Prefix returns the text that goes in front of every terminal session name and worker branch of a factory folder.

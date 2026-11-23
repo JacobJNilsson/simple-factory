@@ -7,9 +7,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/JacobJNilsson/simple-factory/internal/cli"
+	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
@@ -33,6 +35,9 @@ type app struct {
 	start func() error
 }
 
+// noFactory lists the commands that need no factory folder, so a failed factory lookup does not stop them.
+var noFactory = []string{"--version", "help", "--help", "run", "hooks"}
+
 func (a app) run(args []string) int {
 	if len(args) == 0 || args[0] == "up" {
 		if len(args) > 1 {
@@ -50,6 +55,12 @@ func (a app) run(args []string) int {
 	case "run", "serve", "register", "restart", "config":
 		if cli.Restricted(a.getenv) {
 			return a.report(cli.ErrRestricted)
+		}
+	}
+	// Home falls back to the default factory when the lookup fails, so a command reports a failed lookup here.
+	if !slices.Contains(noFactory, args[0]) {
+		if _, err := config.Lookup(a.getenv); err != nil {
+			return a.report(err)
 		}
 	}
 	switch args[0] {
