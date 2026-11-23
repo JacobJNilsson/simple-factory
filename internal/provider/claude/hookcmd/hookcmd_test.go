@@ -40,7 +40,7 @@ func envOf(m map[string]string) func(string) string {
 func runWith(env func(string) string, args []string, stdin string) (code int, out, errb string) {
 	var o, e bytes.Buffer
 	caller := func() protocol.Caller { return protocol.Caller{Agent: env("SFY_AGENT")} }
-	send := func(req protocol.Request, reply func(string) string) int {
+	send := func(_ string, req protocol.Request, reply func(string) string) int {
 		ans, err := server.Call(filepath.Join(env("SFY_HOME"), "sfy.sock"), req)
 		if err != nil {
 			return exitFailed
@@ -376,7 +376,7 @@ func TestUserHookRequestCarriesTheTokenOfTheLead(t *testing.T) {
 	}
 	env := envOf(map[string]string{"SFY_HOME": home})
 	var sent []protocol.Request
-	send := func(req protocol.Request, _ func(string) string) int {
+	send := func(_ string, req protocol.Request, _ func(string) string) int {
 		sent = append(sent, req)
 		return exitOK
 	}
@@ -388,6 +388,52 @@ func TestUserHookRequestCarriesTheTokenOfTheLead(t *testing.T) {
 	}
 	if want := (protocol.Caller{Agent: "lead", Token: token}); sent[0].Caller != want {
 		t.Fatalf("caller %+v, want %+v", sent[0].Caller, want)
+	}
+}
+
+func TestUserHookActsForTheFactoryThatRegisteredTheSessionAmongTwoOfOneFolder(t *testing.T) {
+	user, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := filepath.Join(user, "web")
+	if err := os.MkdirAll(work, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	plain := filepath.Join(user, ".sfy", "factories", "web")
+	other := filepath.Join(user, ".sfy", "factories", "ex-web")
+	for _, home := range []string{plain, other} {
+		if err := os.MkdirAll(home, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, "folder"), []byte(work+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := (identity.Folder{Home: home}).Issue("lead"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := registration.Write(plain, registration.Record{ID: "s-main"}); err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(work); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(old) })
+	var homes []string
+	send := func(home string, _ protocol.Request, _ func(string) string) int {
+		homes = append(homes, home)
+		return exitOK
+	}
+
+	code, err := Run([]string{"--user", "idle"}, envOf(map[string]string{"HOME": user}), strings.NewReader(`{"session_id":"s-main"}`), &bytes.Buffer{}, &bytes.Buffer{}, nil, send)
+
+	if err != nil || code != exitOK || !slices.Equal(homes, []string{plain}) {
+		t.Fatalf("code %d, err %v, sent to %v, want only %s", code, err, homes, plain)
 	}
 }
 

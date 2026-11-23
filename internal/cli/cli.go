@@ -263,8 +263,8 @@ func runHook(args []string, env func(string) string, stdin io.Reader, stdout, st
 	if Restricted(env) && !hookcmd.Own(args) {
 		return exitFailed, ErrRestricted
 	}
-	sender := func(req protocol.Request, reply func(string) string) int {
-		return send(req, env, stdout, stderr, reply)
+	sender := func(home string, req protocol.Request, reply func(string) string) int {
+		return sendTo(home, req, env, stdout, stderr, reply)
 	}
 	code, err := hookcmd.Run(args, env, stdin, stdout, stderr, func() protocol.Caller { return caller(env) }, sender)
 	var ue *hookcmd.UsageError
@@ -285,7 +285,11 @@ func runCommand(args []string, env func(string) string, stdin io.Reader, stdout,
 
 // send calls the sfy process and prints its answer. It passes the answer text through reply first, and a nil reply keeps the text.
 func send(req protocol.Request, env func(string) string, stdout, stderr io.Writer, reply func(string) string) int {
-	home := config.Home(env)
+	return sendTo(config.Home(env), req, env, stdout, stderr, reply)
+}
+
+// sendTo is send for the sfy process of the factory folder home.
+func sendTo(home string, req protocol.Request, env func(string) string, stdout, stderr io.Writer, reply func(string) string) int {
 	ans, err := server.Call(filepath.Join(home, "sfy.sock"), req)
 	var nr *server.NotRunningError
 	if errors.As(err, &nr) && req.Command == "down" {
