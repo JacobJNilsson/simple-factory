@@ -249,7 +249,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	}
 	eng := engine.New(store.Files(p.home), p.launcher, p.agent, workspace.NewPrefixed(p.home, config.Prefix(p.home, env)), p.cfg, systemClock{})
 	eng.SetLog(log)
-	eng.SetRepoConfig(repoConfig(p.cfg, env))
+	eng.SetRepoConfig(repoConfig(p.cfg, p.home, env))
 	eng.SetChecker(checker(ctx, p, env("HOME")))
 	eng.SetProcess(p.proc)
 	eng.SetRegistration(registration.Folder{Home: p.home})
@@ -435,9 +435,11 @@ func newOptions(environ []string, env func(string) string, stdout, stderr io.Wri
 	}, nil
 }
 
-// repoConfig returns the lookup of the per-repo config: the .sfy.toml files from a repo folder up to the user's home folder, on top of cfg.
-func repoConfig(cfg config.Config, env func(string) string) func(folder string) (config.Config, error) {
+// repoConfig returns the lookup of the per-repo config of the factory with the factory folder home:
+// the .sfy folders and .sfy.toml files from a repo folder up to the walk of the factory's working folder, on top of cfg.
+func repoConfig(cfg config.Config, home string, env func(string) string) func(folder string) (config.Config, error) {
+	work := config.WorkFolder(home)
 	return func(folder string) (config.Config, error) {
-		return config.ForRepo(cfg, env("HOME"), folder)
+		return config.ForRepo(cfg, env("HOME"), work, folder)
 	}
 }

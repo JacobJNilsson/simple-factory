@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,11 +15,8 @@ import (
 // RepoFile is the name of the per-repo config file.
 const RepoFile = ".sfy.toml"
 
-// RepoDir and RepoConfigFile name the settings folder and file at the root of a repo folder.
-const (
-	RepoDir        = ".sfy"
-	RepoConfigFile = "config.toml"
-)
+// RepoConfigFile names the config file in a per-repo override. The override folder is OverrideDir.
+const RepoConfigFile = "config.toml"
 
 // repoSettings lists the settings that a per-repo file may hold. A nil field means the file leaves the setting out.
 // A new setting needs a field here, a line in fill and a line in apply.
@@ -68,12 +66,31 @@ func (e *RepoFileError) Error() string {
 	return fmt.Sprintf("config: %s: unknown setting %s", e.File, e.Setting)
 }
 
+// OverrideError reports a per-repo override that sfy does not trust, because the user does not own it or group or others can write it.
+// A skipped per-repo override could drop a no_merge setting without notice, so ForRepo fails instead.
+type OverrideError struct{ Dir, Reason string }
+
+func (e *OverrideError) Error() string {
+	return fmt.Sprintf("config: the per-repo override %s is not safe to read: %s", e.Dir, e.Reason)
+}
+
 // ForRepo applies the per-repo files of a repo folder on top of base.
-// The file .sfy/config.toml in folder wins. Then come the .sfy.toml files in folder and in each parent folder up to userHome, nearest first.
+// base holds the settings of the factory's layers, so the overrides on the walk of workFolder already reach it.
+// The files .sfy/config.toml in folder and in each parent folder up to userHome come first, nearest first.
+// The parent folders stop before the first folder on the walk of workFolder. An override that sfy does not trust fails with an OverrideError.
+// Then come the .sfy.toml files in folder and in each parent folder up to userHome, nearest first.
 // A folder outside userHome counts alone, with no parent folder. Each setting comes from the first file that sets it.
-func ForRepo(base Config, userHome, folder string) (Config, error) {
-	files := []string{filepath.Join(folder, RepoDir, RepoConfigFile)}
-	for _, dir := range repoFolders(userHome, folder) {
+func ForRepo(base Config, userHome, workFolder, folder string) (Config, error) {
+	return forRepo(base, userHome, workFolder, folder, os.Geteuid())
+}
+
+func forRepo(base Config, userHome, workFolder, folder string, uid int) (Config, error) {
+	folders := repoFolders(userHome, folder)
+	files, err := repoOverrideFiles(folders, walkFolders(workFolder, userHome), uid)
+	if err != nil {
+		return Config{}, err
+	}
+	for _, dir := range folders {
 		files = append(files, filepath.Join(dir, RepoFile))
 	}
 	merged := repoSettings{}
@@ -86,6 +103,34 @@ func ForRepo(base Config, userHome, folder string) (Config, error) {
 	}
 	merged.apply(&base)
 	return base, nil
+}
+
+// repoOverrideFiles returns the config.toml of the .sfy folder in each of folders, nearest first, up to the first folder of the walk.
+// A folder without a .sfy folder adds nothing, and a .sfy folder that sfy does not trust is an OverrideError.
+func repoOverrideFiles(folders, walk []string, uid int) ([]string, error) {
+	onWalk := map[string]bool{}
+	for _, dir := range walk {
+		onWalk[CanonicalPath(dir)] = true
+	}
+	var files []string
+	for _, dir := range folders {
+		if onWalk[CanonicalPath(dir)] {
+			break
+		}
+		override := filepath.Join(dir, OverrideDir)
+		st, err := os.Stat(override)
+		if errors.Is(err, fs.ErrNotExist) || (err == nil && !st.IsDir()) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
+		if reason := skipReason(st, uid); reason != "" {
+			return nil, &OverrideError{Dir: override, Reason: reason}
+		}
+		files = append(files, filepath.Join(override, RepoConfigFile))
+	}
+	return files, nil
 }
 
 // readRepoFile decodes one per-repo file. A missing file gives empty settings.

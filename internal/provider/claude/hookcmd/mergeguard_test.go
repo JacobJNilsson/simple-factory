@@ -61,6 +61,33 @@ func TestMergeGuardBlocksFromTheNoMergeFolderAndItsSubfolder(t *testing.T) {
 	}
 }
 
+func TestMergeGuardBlocksARepoBelowAnOverrideThatSetsNoMerge(t *testing.T) {
+	home := t.TempDir()
+	work := filepath.Join(home, "work")
+	state := filepath.Join(home, ".sfy", "factories", "acme")
+	for dir, files := range map[string]map[string]string{
+		filepath.Join(work, "app"):  nil,
+		filepath.Join(work, ".sfy"): {"config.toml": "no_merge = true\n"},
+		state:                       {"folder": work + "\n"},
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for name, body := range files {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	env := envOf(map[string]string{"HOME": home, "SFY_HOME": state})
+
+	code, errb := guard(t, env, filepath.Join(work, "app"), "git push")
+
+	if code != exitWake || !strings.Contains(errb, "no-merge") {
+		t.Errorf("code %d, stderr %q, want a block", code, errb)
+	}
+}
+
 func TestMergeGuardAllowsMergesOutsideNoMergeRepos(t *testing.T) {
 	env, home := guardEnv(t)
 	own := filepath.Join(home, "own", "app")

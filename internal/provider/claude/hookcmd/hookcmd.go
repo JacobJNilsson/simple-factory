@@ -142,7 +142,8 @@ func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) 
 	if len(targets) == 0 {
 		return exitOK
 	}
-	cfg, err := config.LoadFactory(config.Home(env), env("HOME"))
+	home := config.Home(env)
+	cfg, err := config.LoadFactory(home, env("HOME"))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sfy: merge guard cannot read the config, so it blocks %s: %v\n", targets[0].Command, err)
 		return exitWake
@@ -152,9 +153,9 @@ func mergeGuardHook(env func(string) string, stdin io.Reader, stderr io.Writer) 
 			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s, because its folder comes from a shell expansion and sfy cannot check whether the repo is no-merge. Write the folder out.\n", t.Command)
 			return exitWake
 		}
-		repo, err := config.ForRepo(cfg, env("HOME"), t.Folder)
+		repo, err := config.ForRepo(cfg, env("HOME"), config.WorkFolder(home), t.Folder)
 		if err != nil || repo.NoMerge {
-			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s in %s. The repo is set to no-merge, or its .sfy.toml cannot be read. Leave the merge to the operator and tell the operator.\n", t.Command, t.Folder)
+			_, _ = fmt.Fprintf(stderr, "sfy: blocked %s in %s. The repo is set to no-merge, or its per-repo settings cannot be read. Leave the merge to the operator and tell the operator.\n", t.Command, t.Folder)
 			return exitWake
 		}
 	}

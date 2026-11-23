@@ -343,7 +343,7 @@ func (e *NoMergeError) Error() string {
 }
 
 // taskIntegrate brings the branch of an approved task into the default branch, then completes the task.
-// A repo with no_merge set refuses, and so does a repo whose .sfy.toml files cannot be read.
+// A repo with no_merge set refuses, and so does a repo whose per-repo files cannot be read or are not safe to read.
 func (e *Engine) taskIntegrate(req protocol.Request) (string, error) {
 	t, err := e.load(req)
 	if err != nil {
