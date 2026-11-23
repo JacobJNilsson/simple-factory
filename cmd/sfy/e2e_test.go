@@ -120,8 +120,13 @@ stop = "` + tm + ` kill-session -t ={name}"
 		_ = exec.CommandContext(context.Background(), "tmux", "-S", sock, "kill-server").Run()
 	})
 
+	// A private HOME keeps the sfy processes from reading the config.d overrides of the user's own ~/.sfy.
+	userHome := filepath.Join(tmp, "u")
+	if err := os.MkdirAll(userHome, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	env := append(withoutSfyVars(os.Environ()),
-		"SFY_HOME="+home, "TMUX=",
+		"HOME="+userHome, "SFY_HOME="+home, "TMUX=",
 		"PATH="+fakeDir+string(os.PathListSeparator)+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
 	return home, func(agent, stdin string, args ...string) (string, error) {
