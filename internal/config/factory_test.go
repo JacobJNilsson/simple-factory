@@ -315,3 +315,36 @@ func TestSessionFoldersNamesTheDefaultFactoryAndEveryCreatedFactory(t *testing.T
 		t.Errorf("SessionFolders = %v, want %v", got, want)
 	}
 }
+
+// twoFactoriesAt makes two factory folders that record the working folder dir, and returns them in name order.
+func twoFactoriesAt(t *testing.T, home, dir string) []string {
+	t.Helper()
+	states := []string{filepath.Join(config.FactoriesDir(home), "ex-web"), filepath.Join(config.FactoriesDir(home), "web")}
+	for _, state := range states {
+		if err := os.MkdirAll(state, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(state, "folder"), []byte(dir+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return states
+}
+
+func TestFactoriesAtListsEveryFactoryFolderOfTheNearestWorkingFolder(t *testing.T) {
+	home := userHome(t)
+	dir := mkdir(t, home, "work", "web")
+	want := twoFactoriesAt(t, home, dir)
+
+	got := config.FactoriesAt(home, mkdir(t, dir, "src"))
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("FactoriesAt = %v, want %v", got, want)
+	}
+	if first, ok := config.FindFactory(home, dir); !ok || first != want[0] {
+		t.Errorf("FindFactory = %q %v, want the first, %q", first, ok, want[0])
+	}
+	if other := config.FactoriesAt(home, mkdir(t, home, "other")); other != nil {
+		t.Errorf("FactoriesAt in an unrelated folder = %v, want none", other)
+	}
+}
