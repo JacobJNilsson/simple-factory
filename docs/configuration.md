@@ -81,55 +81,82 @@ From then on the agent's own `sfy` commands run as `lead`, and the operator-only
 
 ## Prompts
 
-sfy reads prompts from two places: the machine layer `~/.sfy/prompts/`, which reaches every factory, and `prompts/` in the factory folder. A file `prompts/<kind>.md` replaces the default prompt of a kind of agent, and the factory's file wins over the machine's. The kinds are `lead`, `worker`, `reviewer` and `worker-repo`.
+sfy reads prompts from every layer of a factory: its factory folder and each `.sfy/` folder on the walk, as the section Override a factory from a folder describes. A file `prompts/<kind>.md` replaces the default prompt of a kind of agent, and the file of the nearest layer wins. The kinds are `lead`, `worker`, `reviewer` and `worker-repo`.
 
-To add lines without a copy of the whole prompt, put files that end in `.md` in `prompts/<kind>.d/` of either place. sfy merges the two folders by file name. A factory file replaces the machine file with the same name, and an empty factory file removes it. sfy appends the result in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the lead when an addition to its prompt changed.
+To add lines without a copy of the whole prompt, put files that end in `.md` in `prompts/<kind>.d/` of any layer. sfy merges the folders by file name. A file of a nearer layer replaces the file with the same name in a farther layer, and an empty file removes it. sfy appends the result in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the lead when an addition to its prompt changed.
 
-For example, a writing rule for every factory goes in `~/.sfy/prompts/worker.d/writing.md`. A factory that needs another rule puts its own `writing.md` in `~/.sfy/factories/acme/prompts/worker.d/`. A factory that needs no rule puts an empty `writing.md` there.
+For example, a writing rule for every factory goes in `~/.sfy/prompts/worker.d/writing.md`. A working folder that needs another rule puts its own `writing.md` in `<working folder>/.sfy/prompts/worker.d/`. A working folder that needs no rule puts an empty `writing.md` there.
 
 ## Skills
 
-To give the sessions of one factory their own skills, put skill folders in `skills/` of the factory folder. Each skill folder holds a `SKILL.md`:
+To give the sessions of a factory their own skills, put skill folders in `skills/` of any layer: the factory folder or a `.sfy/` folder on the walk. Each skill folder holds a `SKILL.md`:
 
 ```
-~/.sfy/factories/acme/skills/release-notes/SKILL.md
+~/Developer/acme/.sfy/skills/release-notes/SKILL.md
 ```
 
-The lead, the workers and the reviewers of that factory all get the skills. Claude Code shows each one as `factory:<skill>`, as in `factory:release-notes`. A skill for every session on the machine belongs in `~/.claude/skills` instead, so the machine layer `~/.sfy` has no `skills/` for other factories. The default factory reads `~/.sfy/skills/`, because `~/.sfy` is its factory folder.
+The lead, the workers and the reviewers of that factory all get the skills of every layer. For a name that two layers hold, the nearest layer wins. Claude Code shows each skill as `factory:<skill>`, as in `factory:release-notes`. A skill in `~/.sfy/skills/` reaches every factory of the machine, because `~/.sfy` is the farthest override.
 
-At each session start, sfy writes a small plugin into `sessions/<name>/plugin/` of the factory folder and passes it to claude with `--plugin-dir`. The plugin holds a manifest and a link to `skills/`, so an edit to a skill applies at the next session start. A plugin folder gives a session no edit rights, so no session can change the skills without a permission grant. A link in `skills/` is fine. Run `sfy config` to see the skills that sfy found.
+At each session start, sfy writes a small plugin into `sessions/<name>/plugin/` of the factory folder and passes it to claude with `--plugin-dir`. The plugin holds a manifest and a `skills/` folder with one link for each skill, so an edit to a skill applies at the next session start. A plugin folder gives a session no edit rights, so no session can change the skills without a permission grant. A link in `skills/` is fine. Run `sfy config` to see the skills that sfy found.
 
 ## A factory per folder
 
 A factory has a factory folder with its own tasks, notes, sfy process and lead. It also has a working folder, which you work in and the lead runs in. Stand in a folder and run `sfy up` to get the factory of that working folder. For example, `sfy up` in `~/Developer/acme` creates the factory `acme` and starts its lead with `~/Developer/acme` as its working directory.
 
-sfy writes no file in the working folder. It keeps the factory folder in `~/.sfy/factories/<name>/`. The name is the base name of the working folder in lower case, with each character outside `a-z0-9-` replaced by `-`. A second working folder with the same base name gets a suffix, as in `web-2`. The file `folder` in the factory folder records the absolute path of the working folder.
+sfy writes no file in the working folder. It keeps the factory folder in `~/.sfy/factories/<name>/`. The name is the name prefix, then the base name of the working folder in lower case, with each character outside `a-z0-9-` replaced by `-`. A second working folder with the same base name gets a suffix, as in `web-2`. The file `folder` in the factory folder records the absolute path of the working folder.
+
+The name prefix comes from the variable `SFY_NAME_PREFIX`, which a wrapper command around sfy can set. It holds lowercase letters, digits and `-`, ends in `-`, and has at most 16 characters, such as `ex-`. Without the variable, the name prefix is empty. A factory that sfy creates with a name prefix records it in the file `name-prefix` in its factory folder. So one working folder can have a factory `web` and a factory `ex-web`, each with its own tasks, lead and terminal session names. A factory folder without the file has the empty name prefix.
 
 Each command picks its factory folder in this order:
 
 1. `SFY_HOME`, when set. Agents get it from sfy.
-2. The factory of the nearest registered working folder at or above the current folder. The home folder is never a working folder.
-3. The default factory, `~/.sfy`.
+2. The factory with the same name prefix of the nearest registered working folder at or above the current folder that has one. The home folder is never a working folder.
+3. The default factory, `~/.sfy`, when the name prefix is empty. With a name prefix, the command fails with "no factory with the name prefix `<prefix>` here".
 
-So `sfy status` in `~/Developer/acme/web/src` shows `acme`, and `sfy up` in `~/Developer/acme/web` joins `acme` without a new factory. In the home folder or in an unrelated folder, a command uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
+So `sfy status` in `~/Developer/acme/web/src` shows `acme`, and `sfy up` in `~/Developer/acme/web` joins `acme` without a new factory. In the home folder or in an unrelated folder, a command with an empty name prefix uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
 
-Every factory reads `~/.sfy/config.toml`. A `config.toml` in the factory folder is optional. The two files merge key by key at every depth, so the factory file can change one key of a table and keep the others. A list in the factory file replaces the machine file's list.
+When a folder has a factory of another name prefix only, `sfy up` makes its own factory and prints one line on stderr that names the other factory folder. A wrapper command can ask for the factory folder with `sfy factory-folder`, or with `sfy factory-folder --create` to make it as `sfy up` would. That command prints the folder and nothing else.
 
-Each of the two places can also hold a `config.d/` folder. sfy reads its `.toml` files in name order before the `config.toml` of the same place, and they merge the same way. A link in `config.d/` lets several factories share one file and keep their own `config.toml` on top:
+## Override a factory from a folder
+
+A factory reads its definition from layers, lowest first: the built-in defaults of sfy, its factory folder, and the folder overrides on a walk. A folder override is a `.sfy/` folder with the shape of a factory folder: `config.toml`, `config.d/`, `prompts/` and `skills/`. The walk starts at the working folder and goes up through its parents to your home folder, and each folder adds its `.sfy/`. The nearest override wins, key by key. `~/.sfy` is the `.sfy/` of the home folder, so it is the farthest override. It reaches every factory, and it keeps the settings of the machine, such as the terminal template sets.
+
+For example, the factory `acme` has the working folder `~/Developer/acme`. It reads these layers, lowest first:
+
+1. The built-in defaults.
+2. `~/.sfy/factories/acme/`, its factory folder.
+3. `~/.sfy/`.
+4. `~/Developer/.sfy/`, when it exists.
+5. `~/Developer/acme/.sfy/`, when it exists.
+
+A file in `~/Developer/acme/.sfy/config.toml` that sets `max_workers = 3` changes only the factories whose working folder lies there or below:
+
+```toml
+# ~/Developer/acme/.sfy/config.toml
+max_workers = 3
+```
+
+The files merge key by key at every depth, so an override can change one key of a table and keep the others. A list in an override replaces the farther layer's list as a whole. Each layer can also hold a `config.d/` folder. sfy reads its `.toml` files in name order before the `config.toml` of the same layer, and they merge the same way. A link in `config.d/` lets several factories share one file and keep their own `config.toml` on top:
 
 ```
-ln -s ~/shared/factory.toml ~/.sfy/factories/acme/config.d/50-shared.toml
+ln -s ~/shared/factory.toml ~/Developer/acme/.sfy/config.d/50-shared.toml
 ```
+
+sfy reads an override only when you own its `.sfy/` folder and no one else can write it. It skips any other override, and `sfy config` names it with the reason. `sfy up` and `sfy restart` print a warning for each. The `.sfy/` folder of a repo that is not on the walk follows the rule in the section Per-repo config. sfy writes no file in an override.
 
 sfy skips a file whose name does not end in `.toml`. A file that does not parse is an error that names the file. Run `sfy config` to see the merged result:
 
 ```
 $ sfy config
 # Factory: acme (/home/you/Developer/acme)
-# Layers, lowest first: /home/you/.sfy, /home/you/.sfy/factories/acme
+# Layers, lowest first:
+# - built-in defaults
+# - /home/you/.sfy/factories/acme (factory folder)
+# - /home/you/.sfy (override)
+# - /home/you/Developer/acme/.sfy (override)
 
 # Settings
-max_workers = 1 # /home/you/.sfy/factories/acme/config.toml
+max_workers = 3 # /home/you/Developer/acme/.sfy/config.toml
 review_rounds = 3 # default
 ...
 
@@ -147,7 +174,7 @@ review_rounds = 3 # default
 ...
 
 # Skills
-# release-notes
+# release-notes: /home/you/Developer/acme/.sfy/skills/release-notes
 
 # Factory files
 # checks
@@ -155,7 +182,7 @@ review_rounds = 3 # default
 # Old names
 ```
 
-Each settings line names the file that set it last, or `default`. The process part lists each list with its agents, its branches and the file that set its agents last, then each agent. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The skills part lists each folder in `skills/` that holds a `SKILL.md`. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
+Each settings line names the file that set it last, or `default`. The process part lists each list with its agents, its branches and the file that set its agents last, then each agent. The prompts part lists the files of each kind in the order that sfy appends them, and a removed file names the file that removed it. The header lists each layer with its role, and each skipped override with its reason. The skills part lists each skill with the folder of the nearest layer that holds it. The factory files are the names in the factory folder that sfy neither owns as state nor reads as definition. The old names part lists each old name of the lead that the factory still uses, as the section Old names of the lead describes. `sfy config` reads files only and needs no sfy process. It exits with an error when a file does not load, so a script can run it as a check. It prints the values of `session_settings.<kind>.env` as `<set>`.
 
 To pick any other folder as a factory folder, set `SFY_HOME`:
 
@@ -171,7 +198,7 @@ The prefix goes in front of every terminal session name, so the lead of `~/.sfy-
 
 ## Session settings
 
-sfy writes a settings file for each agent session. To add keys to the file of one kind of session, use a `[session_settings.<kind>]` table in `~/.sfy/config.toml` or in the factory's `config.toml`. The kinds are `lead`, `worker` and `reviewer`. sfy copies the keys to the top level of that kind's file, and the provider decides what they mean. This example stops notifications from workers and reviewers:
+sfy writes a settings file for each agent session. To add keys to the file of one kind of session, use a `[session_settings.<kind>]` table in the `config.toml` of any layer, such as `~/.sfy/config.toml`. The kinds are `lead`, `worker` and `reviewer`. sfy copies the keys to the top level of that kind's file, and the provider decides what they mean. This example stops notifications from workers and reviewers:
 
 ```toml
 [session_settings.worker]
@@ -204,21 +231,22 @@ Worker and reviewer files set `"promptSuggestionEnabled": false` by default, whi
 
 ## Per-repo config
 
-Per-repo keys come from two kinds of file.
+Per-repo keys come from `.sfy/` folders.
 
 - `<repo folder>/.sfy/config.toml` holds the settings of one repo. You can keep `.sfy/` out of git with `core.excludesFile`, or commit it. sfy reads it only from the repo folder, never from a task's worktree or branch, so a worker cannot change its own settings.
-- A `.sfy.toml` file in the repo folder or in a parent folder up to `$HOME` covers every repo below it.
+- A `.sfy/config.toml` in a parent folder of the repo covers every repo below it. sfy stops before the first folder on the walk of the factory's working folder. The `.sfy/` of a folder on the walk is a layer of the factory instead, as the section Override a factory from a folder describes, and its `no_merge` and `draft_pr` reach every repo of the factory.
+- The old `.sfy.toml` file still works in the repo folder and in a parent folder up to `$HOME`. `sfy config` lists each one on the walk and warns until you move it to `.sfy/config.toml` in the same folder.
 
 For a task whose repo is a URL, the repo folder is the clone in `repos/` of the factory folder. A committed `.sfy/` arrives with each fetch of the default branch. You can also put an untracked one there by hand.
 
-Key by key, the first file that sets a key wins. The order is `.sfy/config.toml`, then each `.sfy.toml` from the nearest up, then the factory `config.toml`, then `~/.sfy/config.toml`. A file that does not parse counts as an error, and the repo then counts as no-merge. SPEC.md describes the lookup in full.
+Key by key, the first file that sets a key wins. The order is the `.sfy/config.toml` files from the nearest up, then each `.sfy.toml` from the nearest up, then the factory's layers. A file that does not parse counts as an error, and the repo then counts as no-merge. So does a per-repo `.sfy/` folder that you do not own or that others can write, and the error names the folder. sfy fails there instead of skipping the folder, because a skipped `no_merge = true` would let the lead merge. SPEC.md describes the lookup in full.
 
 The keys are `no_merge` and `draft_pr`. With `draft_pr = true`, the note that asks the worker to push also says that any PR must be a draft, with `gh pr create --draft`. sfy opens no PR itself. The default is `false`.
 
 With `no_merge = true`, `sfy task integrate` refuses, and the approval note tells the lead to leave the branch for you. You merge it by hand, then the lead runs `sfy task complete`. One file covers every work repo below its folder:
 
 ```toml
-# ~/Developer/work/.sfy.toml
+# ~/Developer/work/.sfy/config.toml
 no_merge = true
 ```
 
@@ -273,7 +301,7 @@ A task may have a `## Check` section with one command line. When the worker repo
 
 The command runs in a sandbox with the worker's `allow_write` and `deny_read` lists. It uses `bwrap` on Linux and `sandbox-exec` on macOS, and it leaves the network open. A check that needs another write path, such as a build cache, needs that path in `allow_write`.
 
-`check_timeout` in `~/.sfy/config.toml` sets how long a check may run. The value is a Go duration. The default is `20m`. It is a global setting, so `.sfy.toml` refuses it.
+`check_timeout` in `~/.sfy/config.toml` sets how long a check may run. The value is a Go duration. The default is `20m`. It is a global setting, so a per-repo file refuses it.
 
 ```toml
 check_timeout = "40m"
