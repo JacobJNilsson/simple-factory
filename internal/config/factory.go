@@ -161,9 +161,9 @@ func WorkFolder(home string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// registered maps each recorded working folder to its factory folder.
-func registered(userHome string) map[string]string {
-	out := map[string]string{}
+// registered maps each recorded working folder to the factory folders that record it, in name order.
+func registered(userHome string) map[string][]string {
+	out := map[string][]string{}
 	entries, err := os.ReadDir(FactoriesDir(userHome))
 	if err != nil {
 		return out
@@ -171,28 +171,39 @@ func registered(userHome string) map[string]string {
 	for _, e := range entries {
 		state := filepath.Join(FactoriesDir(userHome), e.Name())
 		if folder := WorkFolder(state); folder != "" {
-			out[CanonicalPath(folder)] = state
+			key := CanonicalPath(folder)
+			out[key] = append(out[key], state)
 		}
 	}
 	return out
 }
 
-// FindFactory returns the factory folder of the nearest working folder at or above dir.
+// FactoriesAt returns every factory folder of the nearest working folder at or above dir.
 // The user's home folder is never a working folder.
-func FindFactory(userHome, dir string) (string, bool) {
+func FactoriesAt(userHome, dir string) []string {
 	known := registered(userHome)
 	if len(known) == 0 {
-		return "", false
+		return nil
 	}
 	userHome = CanonicalPath(userHome)
 	for d := CanonicalPath(dir); ; d = filepath.Dir(d) {
-		if state, ok := known[d]; ok && d != userHome {
-			return state, true
+		if states, ok := known[d]; ok && d != userHome {
+			return states
 		}
 		if d == filepath.Dir(d) {
-			return "", false
+			return nil
 		}
 	}
+}
+
+// FindFactory returns the first factory folder of the nearest working folder at or above dir.
+// The user's home folder is never a working folder.
+func FindFactory(userHome, dir string) (string, bool) {
+	states := FactoriesAt(userHome, dir)
+	if len(states) == 0 {
+		return "", false
+	}
+	return states[0], true
 }
 
 // CreateFactory makes the factory folder of a new factory for the working folder dir and records dir in it.
