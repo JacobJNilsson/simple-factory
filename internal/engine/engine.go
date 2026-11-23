@@ -106,7 +106,7 @@ type Engine struct {
 	w   Workspaces
 	cfg config.Config
 	c   Clock
-	// repoConfig returns the config for a repo folder. It adds the .sfy.toml files to cfg.
+	// repoConfig returns the config for a repo folder. It adds the per-repo files to cfg.
 	repoConfig func(folder string) (config.Config, error)
 
 	log     io.Writer

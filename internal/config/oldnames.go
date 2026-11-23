@@ -124,5 +124,16 @@ func OldNames(home, userHome string) ([]string, error) {
 			lines = append(lines, fmt.Sprintf("%s has the old name. sfy reads it as %s. Rename the %s.", path, p.new, p.what))
 		}
 	}
+	for _, folder := range walkFolders(WorkFolder(home), userHome) {
+		path := filepath.Join(folder, RepoFile)
+		_, err := os.Stat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("config: %w", err)
+		}
+		lines = append(lines, fmt.Sprintf("%s has the old name. sfy still reads it for the repos below it. Move it to %s.", path, filepath.Join(folder, OverrideDir, RepoConfigFile)))
+	}
 	return lines, nil
 }
