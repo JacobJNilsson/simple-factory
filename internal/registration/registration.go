@@ -26,6 +26,9 @@ func Path(home string) string { return filepath.Join(leadFolder(home), "register
 // A lead that sfy runs in the operator's terminal has one too, and it has no record.
 func AddressPath(home string) string { return filepath.Join(leadFolder(home), "address") }
 
+// PidPath is the file that names the process of a lead that sfy runs in the operator's terminal.
+func PidPath(home string) string { return filepath.Join(leadFolder(home), "pid") }
+
 // Read returns the record. It reports false when the file is missing or holds no id.
 func Read(home string) (Record, bool) {
 	b, err := os.ReadFile(Path(home))
@@ -60,10 +63,10 @@ func (f Folder) Registered() bool {
 	return ok
 }
 
-// Clear removes the record and the recorded address. Missing files are not an error.
+// Clear removes the record, the recorded address and the process record. Missing files are not an error.
 func (f Folder) Clear() error {
 	var errs []error
-	for _, path := range []string{Path(f.Home), AddressPath(f.Home)} {
+	for _, path := range []string{Path(f.Home), AddressPath(f.Home), PidPath(f.Home)} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, err)
 		}

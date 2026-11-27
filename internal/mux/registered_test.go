@@ -33,7 +33,7 @@ func addressFile(t *testing.T, content string) string {
 
 func TestRegisteredSendsTheLeadCallsToTheRecordedAddress(t *testing.T) {
 	a := &aliveMux{alive: true}
-	m := Registered(a, "lead", addressFile(t, "dev\n"))
+	m := Registered(a, "lead", addressFile(t, "dev\n"), nil)
 
 	_ = m.Send("lead", "hi")
 	_ = m.Notify("lead", "n")
@@ -50,7 +50,7 @@ func TestRegisteredSendsTheLeadCallsToTheRecordedAddress(t *testing.T) {
 
 func TestRegisteredLeavesTheCallsAloneWithoutARecord(t *testing.T) {
 	a := &aliveMux{alive: true}
-	m := Registered(a, "lead", addressFile(t, ""))
+	m := Registered(a, "lead", addressFile(t, ""), nil)
 
 	_ = m.Start("lead", "/d", nil)
 	_ = m.Send("lead", "hi")
@@ -65,7 +65,7 @@ func TestRegisteredLeavesTheCallsAloneWithoutARecord(t *testing.T) {
 func TestRegisteredClearsTheRecordWhenTheAddressIsGone(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{alive: false}
-	m := Registered(a, "lead", path)
+	m := Registered(a, "lead", path, nil)
 
 	alive, err := m.Alive("lead")
 	if err != nil || alive {
@@ -82,7 +82,7 @@ func TestRegisteredClearsTheRecordWhenTheAddressIsGone(t *testing.T) {
 
 func TestRegisteredClearsTheExtraFilesWithTheAddress(t *testing.T) {
 	extra := addressFile(t, "{}")
-	m := Registered(&aliveMux{alive: false}, "lead", addressFile(t, "dev"), extra)
+	m := Registered(&aliveMux{alive: false}, "lead", addressFile(t, "dev"), nil, extra)
 
 	if _, err := m.Alive("lead"); err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestRegisteredClearsTheExtraFilesWithTheAddress(t *testing.T) {
 func TestRegisteredKeepsTheRecordWhenAliveFails(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{err: errors.New("tool down")}
-	m := Registered(a, "lead", path)
+	m := Registered(a, "lead", path, nil)
 
 	if _, err := m.Alive("lead"); err == nil {
 		t.Fatal("want the error")
@@ -107,7 +107,7 @@ func TestRegisteredKeepsTheRecordWhenAliveFails(t *testing.T) {
 
 func TestRegisteredKeepsTheRecordWhileTheAddressRuns(t *testing.T) {
 	path := addressFile(t, "dev")
-	m := Registered(&aliveMux{alive: true}, "lead", path)
+	m := Registered(&aliveMux{alive: true}, "lead", path, nil)
 
 	if _, err := m.Alive("lead"); err != nil {
 		t.Fatal(err)
@@ -117,10 +117,105 @@ func TestRegisteredKeepsTheRecordWhileTheAddressRuns(t *testing.T) {
 	}
 }
 
+// goneFunc returns a gone function that answers gone and err, and counts its calls in calls.
+func goneFunc(gone bool, err error, calls *int) func() (bool, error) {
+	return func() (bool, error) {
+		*calls++
+		return gone, err
+	}
+}
+
+func exists(t *testing.T, path string) bool {
+	t.Helper()
+	_, err := os.Stat(path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return err == nil
+}
+
+func TestRegisteredForgetsAnAddressWhoseAgentIsGone(t *testing.T) {
+	path, extra := addressFile(t, "dev"), addressFile(t, "{}")
+	calls := 0
+	m := Registered(&aliveMux{alive: true}, "lead", path, goneFunc(true, nil, &calls), extra)
+
+	alive, err := m.Alive("lead")
+	if err != nil || alive {
+		t.Fatalf("got %v, %v, want false and no error", alive, err)
+	}
+	if calls != 1 {
+		t.Errorf("gone ran %d times, want 1", calls)
+	}
+	if exists(t, path) || exists(t, extra) {
+		t.Error("the address and the extra file must be gone")
+	}
+}
+
+func TestRegisteredKeepsAnAddressWhoseAgentRuns(t *testing.T) {
+	path, extra := addressFile(t, "dev"), addressFile(t, "{}")
+	calls := 0
+	m := Registered(&aliveMux{alive: true}, "lead", path, goneFunc(false, nil, &calls), extra)
+
+	alive, err := m.Alive("lead")
+	if err != nil || !alive {
+		t.Fatalf("got %v, %v, want true and no error", alive, err)
+	}
+	if calls != 1 {
+		t.Errorf("gone ran %d times, want 1", calls)
+	}
+	if !exists(t, path) || !exists(t, extra) {
+		t.Error("the address and the extra file must stay")
+	}
+}
+
+func TestRegisteredKeepsTheAddressWhenGoneFails(t *testing.T) {
+	path, extra := addressFile(t, "dev"), addressFile(t, "{}")
+	calls := 0
+	m := Registered(&aliveMux{alive: true}, "lead", path, goneFunc(false, errors.New("no ps"), &calls), extra)
+
+	if _, err := m.Alive("lead"); err == nil {
+		t.Fatal("want the error")
+	}
+	if calls != 1 {
+		t.Errorf("gone ran %d times, want 1", calls)
+	}
+	if !exists(t, path) || !exists(t, extra) {
+		t.Error("the address and the extra file must stay")
+	}
+}
+
+func TestRegisteredAsksNotForTheAgentWhenTheTerminalIsGone(t *testing.T) {
+	path := addressFile(t, "dev")
+	calls := 0
+	m := Registered(&aliveMux{alive: false}, "lead", path, goneFunc(false, nil, &calls))
+
+	if alive, err := m.Alive("lead"); err != nil || alive {
+		t.Fatalf("got %v, %v, want false and no error", alive, err)
+	}
+	if calls != 0 {
+		t.Errorf("gone ran %d times, want 0", calls)
+	}
+	if exists(t, path) {
+		t.Error("the address must be gone")
+	}
+}
+
+func TestRegisteredAsksNotForTheAgentWithoutAnAddress(t *testing.T) {
+	calls := 0
+	m := Registered(&aliveMux{alive: true}, "lead", addressFile(t, ""), goneFunc(true, nil, &calls))
+
+	if alive, err := m.Alive("lead"); err != nil || !alive {
+		t.Fatalf("got %v, %v, want true and no error", alive, err)
+	}
+	if calls != 0 {
+		t.Errorf("gone ran %d times, want 0", calls)
+	}
+}
+
 func TestRegisteredStopUsesTheAddressAndClearsTheRecord(t *testing.T) {
 	path := addressFile(t, "dev")
 	a := &aliveMux{alive: true}
-	m := Registered(a, "lead", path)
+	m := Registered(a, "lead", path, nil)
 
 	if err := m.Stop("lead"); err != nil {
 		t.Fatal(err)
@@ -135,7 +230,7 @@ func TestRegisteredStopUsesTheAddressAndClearsTheRecord(t *testing.T) {
 
 func TestRegisteredInsidePrefixedKeepsTheAddressUnprefixed(t *testing.T) {
 	a := &aliveMux{alive: true}
-	m := Prefixed(Registered(a, "pre-lead", addressFile(t, "dev")), "pre-")
+	m := Prefixed(Registered(a, "pre-lead", addressFile(t, "dev"), nil), "pre-")
 
 	_ = m.Send("lead", "hi")
 	_ = m.Send("worker-t1", "hi")

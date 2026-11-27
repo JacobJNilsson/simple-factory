@@ -35,7 +35,7 @@ func TestReadIgnoresAFileWithoutAnID(t *testing.T) {
 	}
 }
 
-func TestClearRemovesTheRecordAndTheAddress(t *testing.T) {
+func TestClearRemovesTheRecordTheAddressAndThePid(t *testing.T) {
 	home := t.TempDir()
 	if err := Write(home, Record{ID: "abc"}); err != nil {
 		t.Fatal(err)
@@ -43,12 +43,15 @@ func TestClearRemovesTheRecordAndTheAddress(t *testing.T) {
 	if err := os.WriteFile(AddressPath(home), []byte("dev\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(PidPath(home), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := (Folder{Home: home}).Clear(); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, path := range []string{Path(home), AddressPath(home)} {
+	for _, path := range []string{Path(home), AddressPath(home), PidPath(home)} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("%s still exists: %v", path, err)
 		}

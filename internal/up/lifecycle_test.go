@@ -20,7 +20,7 @@ func registeredRig(t *testing.T) *rig {
 		t.Fatal(err)
 	}
 	r.m.alive["dev"] = true
-	m := mux.Registered(r.m, "lead", leadAddressPath(r.o.home), registration.Path(r.o.home))
+	m := mux.Registered(r.m, "lead", leadAddressPath(r.o.home), nil, registration.Path(r.o.home))
 	r.o.mux = m
 	r.o.launcher = registeredLauncher{r.l, m}
 	r.out.Reset()

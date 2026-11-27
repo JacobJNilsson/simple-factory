@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
@@ -127,6 +128,11 @@ func (o options) leadDir() string {
 // leadAddressPath is the file that records the address of a lead that runs in the operator's terminal.
 func leadAddressPath(home string) string { return registration.AddressPath(home) }
 
+// leadGone reports whether the process of a lead that runs in the operator's terminal has ended.
+func leadGone(home string) func() (bool, error) {
+	return func() (bool, error) { return agentproc.Gone(registration.PidPath(home)) }
+}
+
 // run starts what is missing: notes.md, the sfy process and the lead.
 // A lead that is missing runs in this terminal when the set can name it.
 // When the lead already runs, run shows it again, so the operator gets it where they started sfy.
@@ -218,7 +224,7 @@ func (o options) ensure(inPlace bool) (started []string, leadAlive bool, err err
 
 // startInPlace turns this terminal into the lead. It reports false when it did not, so the caller starts the lead through the set.
 // It does not when the set has no whoami template, when whoami fails or prints nothing, or when the replacement fails.
-// A failed whoami goes to warn. The address is recorded before the replacement, and removed when the replacement fails.
+// A failed whoami goes to warn. The address and the process record are written before the replacement, and removed when it fails.
 // After it records the address, startInPlace runs show_lead. A failure of show_lead goes to warn and does not stop the start.
 // A real replacement never returns. A test replacement returns nil, and startInPlace then reports true.
 func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, error) {
@@ -244,6 +250,14 @@ func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, 
 	if err := os.WriteFile(path, []byte(address+"\n"), 0o600); err != nil {
 		return false, err
 	}
+	// The exec keeps the pid and the start time, so the record names the lead process that replaces sfy.
+	self, err := agentproc.Self()
+	if err == nil {
+		err = agentproc.Write(registration.PidPath(o.home), self)
+	}
+	if err != nil {
+		return false, errors.Join(err, forgetInPlace(o.home))
+	}
 	if len(started) > 0 {
 		if err := reportList(o.out, "Started", started); err != nil {
 			return false, err
@@ -256,9 +270,20 @@ func (o options) startInPlace(spec engine.SessionSpec, started []string) (bool, 
 	_, _ = fmt.Fprintln(o.out, "Starting the lead in this terminal.")
 	if err := o.exec(spec.Dir, argv); err != nil {
 		_, _ = fmt.Fprintln(o.warn, "sfy: warning: could not start the lead in this terminal, so it starts through the set: "+err.Error())
-		return false, os.Remove(path)
+		return false, forgetInPlace(o.home)
 	}
 	return true, nil
+}
+
+// forgetInPlace removes the address and the process record that startInPlace writes.
+func forgetInPlace(home string) error {
+	var errs []error
+	for _, path := range []string{leadAddressPath(home), registration.PidPath(home)} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func report(out io.Writer, started []string) error {
