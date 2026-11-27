@@ -36,6 +36,8 @@ func TestParse(t *testing.T) {
 	}{
 		{"task new", []string{"task", "new", file}, protocol.Request{Command: "task new", Body: "FILE"}},
 		{"task new stdin", []string{"task", "new", "-"}, protocol.Request{Command: "task new", Body: "IN"}},
+		{"task new factory", []string{"task", "new", "--factory", "b", file}, protocol.Request{Command: "task new", Args: []string{"--factory", "b"}, Body: "FILE"}},
+		{"task new factory stdin", []string{"task", "new", "--factory", "b", "-"}, protocol.Request{Command: "task new", Args: []string{"--factory", "b"}, Body: "IN"}},
 		{"task list", []string{"task", "list"}, protocol.Request{Command: "task list"}},
 		{"task show", []string{"task", "show", "t1"}, protocol.Request{Command: "task show", Args: []string{"t1"}}},
 		{"task edit", []string{"task", "edit", "t1", file}, protocol.Request{Command: "task edit", Args: []string{"t1"}, Body: "FILE"}},
@@ -113,7 +115,7 @@ func TestParseReadsStdinForAWorkerAndAFileForTheLead(t *testing.T) {
 }
 
 func TestRunBadForm(t *testing.T) {
-	for _, args := range [][]string{nil, {"bogus"}, {"task"}, {"task", "show"}, {"task", "list", "x"}, {"report", "done"}, {"verdict", "maybe", "f"}, {"verdict", "pass"}, {"inbox", "x"}} {
+	for _, args := range [][]string{nil, {"bogus"}, {"task"}, {"task", "show"}, {"task", "list", "x"}, {"task", "new", "--factory"}, {"task", "new", "--factory", "b"}, {"report", "done"}, {"verdict", "maybe", "f"}, {"verdict", "pass"}, {"inbox", "x"}} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {
 			var out, errb bytes.Buffer
 			code := Run(args, envOf(nil), strings.NewReader(""), &out, &errb)
