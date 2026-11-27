@@ -34,6 +34,7 @@ const usage = `usage:
   sfy config           print the factory's merged settings and prompt files, with the file behind each
   sfy help
   sfy task new <file|->
+  sfy task new --factory <factory> <file|->
   sfy task list [--archived]
   sfy task show <id>
   sfy task edit <id> <file>
@@ -87,6 +88,8 @@ type form struct {
 	file bool
 	// flags lists the flags that may follow the fixed arguments.
 	flags []string
+	// option is a flag that takes one value and may come before the fixed arguments.
+	option string
 	// text is true when the rest of the line is free text.
 	text bool
 	// verdict is true when the rest of the line is the Body text and "-" reads it from standard input.
@@ -94,7 +97,7 @@ type form struct {
 }
 
 var forms = map[string]form{
-	"task new":        {words: 2, ids: 1, file: true},
+	"task new":        {words: 2, ids: 1, file: true, option: "--factory"},
 	"task list":       {words: 2, flags: []string{"--archived"}},
 	"task show":       {words: 2, ids: 1},
 	"task edit":       {words: 2, ids: 2, file: true},
@@ -164,6 +167,13 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 	if f.verdict {
 		return parseVerdict(req, name, rest, stdin)
 	}
+	var option []string
+	if f.option != "" && len(rest) > 0 && rest[0] == f.option {
+		if len(rest) < 2 {
+			return req, &usageError{fmt.Sprintf("%s needs a value", f.option)}
+		}
+		option, rest = []string{rest[0], rest[1]}, rest[2:]
+	}
 	if len(f.flags) > 0 && len(rest) == need+1 && slices.Contains(f.flags, rest[need]) {
 		req.Command, req.Args = name, rest[need:]
 		return req, nil
@@ -184,8 +194,8 @@ func parse(args []string, env func(string) string, stdin io.Reader) (protocol.Re
 		req.Body = body
 		rest = rest[:need-1]
 	}
-	if len(rest) > 0 {
-		req.Args = rest
+	if option = append(option, rest...); len(option) > 0 {
+		req.Args = option
 	}
 	return req, nil
 }
