@@ -264,6 +264,21 @@ func (s *sessions) resume(t task.Task, agent, note string) error {
 	return s.launch(t, spec)
 }
 
+// resumeLead stops what remains of the lead's session and starts the lead from spec.
+// The launcher resumes the lead's conversation, and starts a new one when the resume ends at once.
+func (s *sessions) resumeLead(spec SessionSpec) error {
+	if err := s.stop(spec.Name); err != nil {
+		return err
+	}
+	// A start that fails may still leave a session, so the clear comes first.
+	delete(s.gone, spec.Name)
+	if err := s.l.Start(spec); err != nil {
+		return err
+	}
+	s.forget(spec.Name)
+	return nil
+}
+
 // launch starts a session from its spec and the task's task file, and resets what sfy knows of the session.
 func (s *sessions) launch(t task.Task, spec SessionSpec) error {
 	file, err := s.taskFile(t.ID)

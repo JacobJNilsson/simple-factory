@@ -36,6 +36,8 @@ type fakeLauncher struct {
 	started   []engine.SessionSpec
 	stopped   []string
 	notified  []string
+	// notifyErr makes Notify fail.
+	notifyErr error
 	// escaped lists the sessions where Escape pressed the key, and escapeErr makes Escape fail.
 	escaped   []string
 	escapeErr error
@@ -112,6 +114,9 @@ func (f *fakeLauncher) Stop(name string) error {
 	return nil
 }
 func (f *fakeLauncher) Notify(name, text string) error {
+	if f.notifyErr != nil {
+		return f.notifyErr
+	}
 	f.notified = append(f.notified, name+": "+text)
 	return nil
 }

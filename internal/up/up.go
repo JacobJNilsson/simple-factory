@@ -49,6 +49,29 @@ func resumePrompt(home string) string {
 	return "sfy started again. Read notes.md and status.md in " + home + " with the Read tool."
 }
 
+// leadWakePrompt is the first message of a lead that sfy woke for a message.
+func leadWakePrompt(home string) string {
+	return "sfy woke you, because a message arrived. Read notes.md and status.md in " + home + " with the Read tool. Then run sfy inbox."
+}
+
+// leadSpec returns the spec of the lead, with resume as the first message of a resumed conversation.
+func (o options) leadSpec(resume string) engine.SessionSpec {
+	return engine.SessionSpec{
+		Name: leadSession, Kind: protocol.Lead, Dir: o.leadDir(), Model: o.config.Models.Lead, Prompt: leadPrompt(o.home),
+		ResumePrompt: resume,
+	}
+}
+
+// wakeSpec returns the func that gives the engine the spec of a lead wake. It records the prompt first, as every lead start does.
+func (o options) wakeSpec() func() (engine.SessionSpec, error) {
+	return func() (engine.SessionSpec, error) {
+		if _, err := recordLeadPrompt(o.home, o.layers); err != nil {
+			return engine.SessionSpec{}, err
+		}
+		return o.leadSpec(leadWakePrompt(o.home)), nil
+	}
+}
+
 // leadPromptPath is the file that holds the prompt of the running lead.
 func leadPromptPath(home string) string { return filepath.Join(home, "lead-prompt.md") }
 
@@ -193,10 +216,7 @@ func (o options) ensure(inPlace bool) (started []string, leadAlive bool, err err
 		if _, err := recordLeadPrompt(o.home, o.layers); err != nil {
 			return nil, false, err
 		}
-		spec := engine.SessionSpec{
-			Name: leadSession, Kind: protocol.Lead, Dir: o.leadDir(), Model: o.config.Models.Lead, Prompt: leadPrompt(o.home),
-			ResumePrompt: resumePrompt(o.home),
-		}
+		spec := o.leadSpec(resumePrompt(o.home))
 		if inPlace {
 			placed, err := o.startInPlace(spec, started)
 			if err != nil {
