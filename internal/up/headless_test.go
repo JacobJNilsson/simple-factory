@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 )
@@ -290,6 +292,112 @@ func TestStopHeadlessIgnoresAStalePidFile(t *testing.T) {
 	}
 	if _, ok := server.HolderPid(r.o.home); ok {
 		t.Error("a stale pid file counts as a running process")
+	}
+}
+
+func TestRestartHeadlessStartsNoMissingLead(t *testing.T) {
+	r := runningRig(t)
+	r.m.alive["lead"] = false
+	r.o.headless = true
+	var got []string
+	r.o.spawn = fakeSpawn(r, &got)
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(r.l.specs) != 0 || len(r.l.commands) != 0 || len(r.l.trustAsked) != 0 {
+		t.Errorf("specs %v, commands %v, trust %v", r.l.specs, r.l.commands, r.l.trustAsked)
+	}
+	if len(got) == 0 || len(r.m.starts) != 0 || len(r.m.stops) != 1 || r.m.stops[0] != serveSession {
+		t.Errorf("spawn %v, windows %v, stops %v", got, r.m.starts, r.m.stops)
+	}
+	want := "Stopped the sfy process.\nStarted the sfy process (headless, log in " + filepath.Join(r.o.home, "sfy.log") + ").\n"
+	if !strings.HasPrefix(r.out.String(), want) {
+		t.Errorf("output %q, want the prefix %q", r.out.String(), want)
+	}
+}
+
+func TestRestartHeadlessNotesARunningLead(t *testing.T) {
+	r := runningRig(t)
+	r.o.headless = true
+	var got []string
+	r.o.spawn = fakeSpawn(r, &got)
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := []protocol.Request{noteRequest("sfy restarted.")}; !reflect.DeepEqual(r.calls, want) {
+		t.Errorf("requests %q, want %q", r.calls, want)
+	}
+	if len(r.l.specs) != 0 || len(r.m.shownLead) != 0 {
+		t.Errorf("specs %v, shown %v", r.l.specs, r.m.shownLead)
+	}
+}
+
+func TestRestartHeadlessLeavesARegisteredLeadAlone(t *testing.T) {
+	r := runningRig(t)
+	r.m.alive["lead"] = false
+	r.o.headless = true
+	var got []string
+	r.o.spawn = fakeSpawn(r, &got)
+	if err := registration.Write(r.o.home, registration.Record{ID: "s-main"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(registration.AddressPath(r.o.home), []byte("gone\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{registration.Path(r.o.home), registration.AddressPath(r.o.home)} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s: %v", path, err)
+		}
+	}
+	if want := []protocol.Request{noteRequest("sfy restarted.")}; !reflect.DeepEqual(r.calls, want) {
+		t.Errorf("requests %q, want %q", r.calls, want)
+	}
+	if len(r.l.specs) != 0 {
+		t.Errorf("specs %v", r.l.specs)
+	}
+}
+
+func TestRestartHeadlessMovesAWindowedProcessToDetached(t *testing.T) {
+	r := headlessRig(t)
+	r.o.config.Headless = false
+	r.o.headless = true
+	p, err := spawnDetached(r.o.home, serveEnv(r.o.environ, r.o.home), []string{r.o.bin, "serve"}, filepath.Join(r.o.home, "sfy.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.m.alive[serveSession] = true
+	r.o.mux = windowMux{fakeMux: r.m, home: r.o.home}
+	for !r.o.answers() {
+		time.Sleep(5 * time.Millisecond)
+	}
+	old := holder(t, r.o.home)
+
+	if err := restart(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	<-p.exited
+	if len(r.m.stops) != 1 || r.m.stops[0] != serveSession || len(r.m.starts) != 0 {
+		t.Errorf("stops %v, starts %v", r.m.stops, r.m.starts)
+	}
+	now := holder(t, r.o.home)
+	if now == old || !r.o.answers() {
+		t.Errorf("new holder %d (old %d), answers %v", now, old, r.o.answers())
+	}
+	if pgid, err := syscall.Getpgid(now); err != nil || pgid != now {
+		t.Errorf("process group of %d = %d, %v, want its own group", now, pgid, err)
+	}
+	if len(r.l.specs) != 0 {
+		t.Errorf("specs %v", r.l.specs)
 	}
 }
 

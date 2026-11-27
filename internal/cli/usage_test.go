@@ -16,7 +16,7 @@ func TestUsageNamesEveryFlag(t *testing.T) {
 	text := printedUsage()
 	for _, line := range []string{
 		"sfy up [--headless]",
-		"sfy restart [--update]",
+		"sfy restart [--update] [--headless]",
 		"sfy task new [--factory <factory>] <file|->",
 		"sfy task list [--archived]",
 	} {

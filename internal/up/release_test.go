@@ -220,10 +220,13 @@ func TestUpdateAndRestartPicksTheInstallMethod(t *testing.T) {
 				ran = append(ran, "release")
 				return "/new/sfy", nil
 			},
-			rerun: func(bin string, _ []string, _, _ io.Writer) error { ran = append(ran, "rerun "+bin); return nil },
+			rerun: func(bin string, _ bool, _ []string, _, _ io.Writer) error {
+				ran = append(ran, "rerun "+bin)
+				return nil
+			},
 		}
 		var out, errOut strings.Builder
-		if err := u.updateAndRestart(nil, &out, &errOut); err != nil {
+		if err := u.updateAndRestart(nil, &out, &errOut, false); err != nil {
 			t.Fatal(err)
 		}
 		if brew && (!f.upgraded() || strings.Join(ran, ",") != "rerun ") {
@@ -241,10 +244,10 @@ func TestUpdateAndRestartKeepsTheProcessWhenTheReleaseUpdateFails(t *testing.T) 
 	u := updater{
 		brewInstalled: func() bool { return false },
 		release:       func(context.Context, io.Writer) (string, error) { return "", errOffline },
-		rerun:         func(string, []string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil },
+		rerun:         func(string, bool, []string, io.Writer, io.Writer) error { t.Fatal("the new binary ran"); return nil },
 	}
 	var out, errOut strings.Builder
-	if err := u.updateAndRestart(nil, &out, &errOut); !errors.Is(err, errOffline) {
+	if err := u.updateAndRestart(nil, &out, &errOut, false); !errors.Is(err, errOffline) {
 		t.Fatalf("err = %v", err)
 	}
 }

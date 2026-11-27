@@ -27,6 +27,7 @@ func mayRestart(agent string) bool { return agent == "" || protocol.AgentName(ag
 // The multiplexer ends the sfy session with a hangup, which the sfy process handles by removing its socket and lock file.
 // A running lead keeps its session and chat, and gets a note. Workers and reviewers keep their sessions, and their tasks stay on disk.
 // Before it stops anything, it prints what changed in the definition since the last start, and the note repeats those lines.
+// With o.headless set, the new process runs detached and restart starts no lead.
 func restart(o options) error {
 	// The report only informs, so a broken state file must not keep the factory from a restart.
 	changes, err := definitionReport(o.home, o.config, o.layers)
@@ -62,6 +63,9 @@ func restart(o options) error {
 	if err := o.moveToLead(); err != nil {
 		return err
 	}
+	if o.headless {
+		return o.restartHeadless(stopped, changes)
+	}
 	leadAlive, err := o.launcher.Alive(leadSession)
 	if err != nil {
 		return err
@@ -78,6 +82,18 @@ func restart(o options) error {
 	}
 	if !leadAlive {
 		return nil
+	}
+	return o.noteLead(changes)
+}
+
+// restartHeadless starts the new sfy process detached and starts no lead, as sfy up --headless does.
+// It never asks whether the lead runs, because the new process skips the note for a lead that does not run.
+func (o options) restartHeadless(stopped, changes []string) error {
+	if err := reportList(o.out, "Stopped", stopped); err != nil {
+		return err
+	}
+	if err := runHeadless(o); err != nil {
+		return err
 	}
 	return o.noteLead(changes)
 }
