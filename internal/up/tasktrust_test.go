@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,17 +22,13 @@ type fixedClock struct{}
 func (fixedClock) Now() time.Time { return time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC) }
 
 // taskNewReply creates a task for repo through an engine with the real Claude adapter and workspaces.
-// The fake Claude config trusts the given folders.
-func taskNewReply(t *testing.T, repo string, trusted ...string) string {
+// The fake Claude config trusts no folder.
+func taskNewReply(t *testing.T, repo string) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
-	var entries []string
-	for _, dir := range trusted {
-		entries = append(entries, `"`+dir+`":{"hasTrustDialogAccepted":true}`)
-	}
-	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{`+strings.Join(entries, ",")+`}}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	sfyHome := t.TempDir()
@@ -49,29 +44,18 @@ func taskNewReply(t *testing.T, repo string, trusted ...string) string {
 	return ans.Text
 }
 
-func TestTaskNewWarnsForARepoInsideATrustedParent(t *testing.T) {
-	parent, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo := filepath.Join(parent, "repo")
+// The worker start marks the repo as trusted, so task new no longer warns about an untrusted repo.
+func TestTaskNewGivesOnlyTheIdForAnUntrustedRepo(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
 	if err := os.Mkdir(repo, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if out, err := exec.CommandContext(context.Background(), "git", "-C", repo, "init", "-q").CombinedOutput(); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	if reply := taskNewReply(t, repo, parent); !strings.Contains(reply, repo) {
-		t.Errorf("a nested repo needs its own trust: %q", reply)
-	}
-	if reply := taskNewReply(t, repo, repo); strings.ContainsAny(reply, " \n") {
-		t.Errorf("a trusted repo gets only the task id: %q", reply)
-	}
-}
-
-func TestTaskNewWarnsForAUrlRepoWhoseCloneDoesNotExist(t *testing.T) {
-	reply := taskNewReply(t, "https://example.com/org/thing.git")
-	if !strings.Contains(reply, filepath.Join("repos", "thing-")) {
-		t.Errorf("reply %q", reply)
+	for _, r := range []string{repo, "https://example.com/org/thing.git"} {
+		if reply := taskNewReply(t, r); reply != "t1" {
+			t.Errorf("%s: reply %q", r, reply)
+		}
 	}
 }

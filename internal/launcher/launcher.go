@@ -24,6 +24,8 @@ type Launcher interface {
 	// LeadCommand prepares the lead's session and returns the argv that runs it, without starting a session.
 	// The caller runs the argv in its own terminal. resumed reports whether the argv resumes the last conversation.
 	LeadCommand(spec engine.SessionSpec) (argv []string, resumed bool, err error)
+	// TrustWarning returns a warning when the provider would stop the lead at a trust prompt for dir.
+	TrustWarning(dir string) string
 }
 
 type launcher struct {

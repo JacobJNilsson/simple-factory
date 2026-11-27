@@ -344,14 +344,6 @@ func sendTo(home string, req protocol.Request, env func(string) string, stdout, 
 	if reply != nil {
 		text = reply(text)
 	}
-	if req.Command == "task new" {
-		// The reply holds the id, then any warning. The warning goes to stderr so $(sfy task new f) yields the id.
-		var warning string
-		text, warning, _ = strings.Cut(text, "\n")
-		if warning != "" {
-			_, _ = fmt.Fprintln(stderr, "sfy: "+strings.ToLower(warning[:1])+warning[1:])
-		}
-	}
 	// The operator may run several factories, so these two commands say which one answered.
 	if req.Command == "status" || req.Command == "task list" {
 		_, _ = fmt.Fprintf(stdout, "%s\n\n", config.Header(home, env))
