@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -300,6 +301,19 @@ func send(req protocol.Request, env func(string) string, stdout, stderr io.Write
 	return sendTo(config.Home(env), req, env, stdout, stderr, reply)
 }
 
+// sandboxHint tells an agent how to run an sfy command outside the sandbox, which blocks the socket.
+const sandboxHint = "Run the sfy command alone, with no pipe, redirection, cd, && or $( ), so it runs outside the sandbox."
+
+// dialFailed reports whether the call failed before it reached the socket. A failure to read or decode the answer is not one.
+func dialFailed(err error) bool {
+	var nr *server.NotRunningError
+	if errors.As(err, &nr) {
+		return true
+	}
+	var op *net.OpError
+	return errors.As(err, &op) && op.Op == "dial"
+}
+
 // sendTo is send for the sfy process of the factory folder home.
 func sendTo(home string, req protocol.Request, env func(string) string, stdout, stderr io.Writer, reply func(string) string) int {
 	ans, err := server.Call(filepath.Join(home, "sfy.sock"), req)
@@ -308,12 +322,15 @@ func sendTo(home string, req protocol.Request, env func(string) string, stdout, 
 		_, _ = fmt.Fprintln(stdout, "sfy is not running.")
 		return exitOK
 	}
-	if errors.As(err, &nr) {
-		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
-		return exitNotRunning
-	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sfy: %v\n", err)
+		// A hook does not run in the sandbox, so only an agent's own command gets the hint.
+		if env("SFY_AGENT") != "" && dialFailed(err) && !strings.HasPrefix(req.Command, "hook ") {
+			_, _ = fmt.Fprintln(stderr, sandboxHint)
+		}
+		if errors.As(err, &nr) {
+			return exitNotRunning
+		}
 		return exitFailed
 	}
 	if ans.Warning != "" {
