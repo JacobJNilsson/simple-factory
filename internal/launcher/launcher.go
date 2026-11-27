@@ -81,12 +81,47 @@ func (l launcher) Preflight(harness, kind string) error {
 // Start asks the provider for the session's command, runs it in a new session, and shows the session.
 // The lead runs the show_lead template and every other agent runs the show template.
 // A failed show leaves the start successful, because the agent runs either way.
+// A worker or a reviewer spec with Resume goes to resume, which never starts a new conversation.
 func (l launcher) Start(spec engine.SessionSpec) error {
 	if spec.Kind == "lead" {
 		_, err := l.StartLead(spec)
 		return err
 	}
+	if spec.Resume {
+		return l.resume(spec)
+	}
 	return l.begin(spec)
+}
+
+// ResumeError reports a resume of a worker or a reviewer that did not work. Why says what went wrong.
+type ResumeError struct{ Name, Why string }
+
+func (e *ResumeError) Error() string {
+	return fmt.Sprintf("cannot resume the conversation of %s: %s", e.Name, e.Why)
+}
+
+// resume continues the recorded conversation of a worker or a reviewer.
+// It fails when the provider has no recorded conversation, or when the resumed session ends within the grace time.
+func (l launcher) resume(spec engine.SessionSpec) error {
+	p, err := l.adapter(spec.Harness)
+	if err != nil {
+		return err
+	}
+	if !p.Resumes(spec) {
+		return &ResumeError{Name: spec.Name, Why: "it has no recorded conversation"}
+	}
+	if err := l.begin(spec); err != nil {
+		return err
+	}
+	time.Sleep(resumeGrace)
+	alive, err := l.Alive(spec.Name)
+	if err != nil {
+		return err
+	}
+	if !alive {
+		return &ResumeError{Name: spec.Name, Why: fmt.Sprintf("the session ended within %s", resumeGrace)}
+	}
+	return nil
 }
 
 // StartLead starts the lead and resumes its last conversation when the provider can.
