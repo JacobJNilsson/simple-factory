@@ -11,16 +11,16 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 )
 
-// conversationIDPath is the file that records the id of the lead's conversation.
-func (a adapter) conversationIDPath() string {
-	return filepath.Join(a.home, "sessions", "lead", "conversation-id")
+// conversationIDPath is the file that records the id of the named session's conversation.
+func (a adapter) conversationIDPath(name string) string {
+	return filepath.Join(a.home, "sessions", name, "conversation-id")
 }
 
 var conversationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// recordedConversation returns the recorded id of the lead's conversation, or false when the file is missing or holds no id.
-func (a adapter) recordedConversation() (string, bool) {
-	b, err := os.ReadFile(a.conversationIDPath())
+// recordedConversation returns the recorded id of the named session's conversation, or false when the file is missing or holds no id.
+func (a adapter) recordedConversation(name string) (string, bool) {
+	b, err := os.ReadFile(a.conversationIDPath(name))
 	if err != nil {
 		return "", false
 	}
@@ -33,25 +33,26 @@ func (a adapter) Resumes(spec engine.SessionSpec) bool {
 	if spec.Kind != "lead" || spec.Fresh {
 		return false
 	}
-	_, ok := a.recordedConversation()
+	_, ok := a.recordedConversation(spec.Name)
 	return ok
 }
 
-// leadConversation returns the flags that continue the recorded conversation, or start and record a new one.
-// A resumed conversation must run in the same folder, and the lead always starts in its working folder.
-func (a adapter) leadConversation(spec engine.SessionSpec) (flags []string, resumed bool, err error) {
+// conversation returns the flags that continue the recorded conversation, or start and record a new one.
+// A resumed conversation must run in the same folder as its first start.
+func (a adapter) conversation(spec engine.SessionSpec) (flags []string, resumed bool, err error) {
 	if a.Resumes(spec) {
-		id, _ := a.recordedConversation()
+		id, _ := a.recordedConversation(spec.Name)
 		return []string{"--resume", id}, true, nil
 	}
 	id, err := newUUID()
 	if err != nil {
 		return nil, false, fmt.Errorf("claude: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(a.conversationIDPath()), 0o700); err != nil {
+	path := a.conversationIDPath(spec.Name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, false, fmt.Errorf("claude: %w", err)
 	}
-	if err := os.WriteFile(a.conversationIDPath(), []byte(id+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(id+"\n"), 0o600); err != nil {
 		return nil, false, fmt.Errorf("claude: %w", err)
 	}
 	return []string{"--session-id", id}, false, nil
