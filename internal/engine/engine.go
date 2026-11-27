@@ -147,6 +147,12 @@ type Engine struct {
 	drops *drop.Folder
 	// proc is the task process, which decides the agent that comes after each one.
 	proc process.Process
+	// wakeDue holds the sessions that got a message since the last tick, so the tick may wake them.
+	wakeDue map[string]bool
+	// wakeTimes holds when sfy woke each session, in memory only, for the cap of wake.max_per_hour.
+	wakeTimes map[string][]time.Time
+	// wakeCapTold holds the sessions for which sfy told the lead that the cap stops their wakes.
+	wakeCapTold map[string]bool
 }
 
 // SetLog makes the engine write one line to w for each note it types, for each unread agent it skips as not alive,
@@ -219,7 +225,8 @@ func (e *Engine) logf(format string, args ...any) {
 // New returns an Engine that works through the given store and interfaces.
 // ch gives notes to sessions without typing. A nil ch means that every note is typed.
 func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg config.Config, c Clock) *Engine {
-	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupRetries: map[string]*cleanupRetry{}, depNoted: map[string]bool{}, slotWait: map[string]time.Time{}, slotNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default()}
+	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupRetries: map[string]*cleanupRetry{}, depNoted: map[string]bool{}, slotWait: map[string]time.Time{}, slotNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default(),
+		wakeDue: map[string]bool{}, wakeTimes: map[string][]time.Time{}, wakeCapTold: map[string]bool{}}
 	e.sess = &sessions{
 		l: l, cfg: cfg, proc: e.proc, logf: e.logf,
 		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },

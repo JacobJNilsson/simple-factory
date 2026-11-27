@@ -25,12 +25,17 @@ func (e *Engine) refreshStatus() error {
 }
 
 // storeMessage stores a message without a note. Its id sorts in send order and never repeats, because the counter breaks ties within one clock tick.
+// It marks the receiver, so the next tick wakes it when its session is closed.
 func (e *Engine) storeMessage(to, from, body string) error {
 	e.counter++
 	now := e.c.Now()
-	return e.st.Send(store.Message{
+	if err := e.st.Send(store.Message{
 		ID: fmt.Sprintf("%019d-%06d", now.UnixNano(), e.counter), From: from, To: to, Body: body, Created: now,
-	})
+	}); err != nil {
+		return err
+	}
+	e.markWake(to)
+	return nil
 }
 
 // message stores a message and tells the receiver.
