@@ -321,7 +321,7 @@ func TestTaskNewFromTheOperatorStartsNewAndMessagesLead(t *testing.T) {
 		t.Fatalf("got %+v", tk)
 	}
 	msgs := v.inbox(t, "lead")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, a.Text) {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, a.Text) || strings.Contains(msgs[0].Body, taskFileIsData) {
 		t.Fatalf("lead inbox: %+v", msgs)
 	}
 	v.statusShows(t, a.Text, "new")
