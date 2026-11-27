@@ -89,7 +89,7 @@ func newParts(env func(string) string) (parts, error) {
 	prefix := config.Prefix(home, env)
 	// The move asks the plain set, because the old terminal name has the prefix and no recorded address.
 	move := func() error { return moveToLead(home, prefix, m.Alive) }
-	m = mux.Prefixed(mux.Registered(m, prefix+leadSession, leadAddressPath(home), registration.Path(home)), prefix)
+	m = mux.Prefixed(mux.Registered(m, prefix+leadSession, leadAddressPath(home), leadGone(home), registration.Path(home), registration.PidPath(home)), prefix)
 	who, _ := m.(mux.Whoamier)
 	layers, err := config.Layers(home, env("HOME"))
 	if err != nil {

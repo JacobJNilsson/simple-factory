@@ -1,13 +1,16 @@
 package up
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
 // execRecorder replaces the real exec. It records each folder and argv and returns err.
@@ -251,7 +254,7 @@ func TestSendToLeadUsesTheRecordedAddress(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	m := mux.Registered(r.m, "lead", leadAddressPath(r.o.home))
+	m := mux.Registered(r.m, "lead", leadAddressPath(r.o.home), nil)
 	if err := m.Send("lead", "hi"); err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +269,7 @@ func TestAGoneAddressIsClearedAndTheNextUpRunsInPlaceAgain(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", leadAddressPath(r.o.home))}
+	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", leadAddressPath(r.o.home), nil)}
 
 	r.m.alive["dev"] = false
 	if err := run(r.o); err != nil {
@@ -280,6 +283,68 @@ func TestAGoneAddressIsClearedAndTheNextUpRunsInPlaceAgain(t *testing.T) {
 	}
 }
 
+func TestUpStartsTheLeadAgainWhenItsTerminalOutlivesIt(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	r.m.alive["dev"] = true
+	// The recorded process ended: the pid now belongs to a process with another start time.
+	if err := agentproc.Write(registration.PidPath(r.o.home), agentproc.Record{Pid: os.Getpid(), Start: "not this process"}); err != nil {
+		t.Fatal(err)
+	}
+	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", leadAddressPath(r.o.home), leadGone(r.o.home), registration.PidPath(r.o.home))}
+	r.out.Reset()
+
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.argvs) != 2 {
+		t.Fatalf("execs %d, want 2: a terminal without its lead must not count as a running lead", len(rec.argvs))
+	}
+	if got, ok := readAddress(t, r.o); !ok || got != "dev" {
+		t.Errorf("the second run records the address again, got %q, %v", got, ok)
+	}
+	if strings.Contains(r.out.String(), "The lead already runs") {
+		t.Errorf("output %q says the lead runs", r.out.String())
+	}
+}
+
+func TestUpRecordsTheLeadProcessBeforeItReplacesItself(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	want, err := agentproc.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got agentproc.Record
+	r.o.exec = func(dir string, argv []string) error {
+		b, err := os.ReadFile(registration.PidPath(r.o.home))
+		if err != nil {
+			t.Errorf("no process record at the exec: %v", err)
+		} else if err := json.Unmarshal(b, &got); err != nil {
+			t.Errorf("process record %q: %v", b, err)
+		}
+		return rec.exec(dir, argv)
+	}
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("process record %+v, want %+v", got, want)
+	}
+}
+
+func TestUpRemovesTheProcessRecordWhenTheExecFails(t *testing.T) {
+	r, rec := inPlaceRig(t, "dev", nil)
+	rec.err = errors.New("exec failed")
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(registration.PidPath(r.o.home)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the process record stayed after the failed exec: %v", err)
+	}
+}
+
 func TestUpShowsTheRecordedLeadAndStartsNothing(t *testing.T) {
 	r, rec := inPlaceRig(t, "dev", nil)
 	if err := run(r.o); err != nil {
@@ -287,7 +352,8 @@ func TestUpShowsTheRecordedLeadAndStartsNothing(t *testing.T) {
 	}
 	r.m.alive["dev"] = true
 	r.m.shownLead = nil
-	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", leadAddressPath(r.o.home))}
+	// The process record names the live test process, so the lead counts as running.
+	r.o.launcher = registeredLauncher{r.l, mux.Registered(r.m, "lead", leadAddressPath(r.o.home), leadGone(r.o.home), registration.PidPath(r.o.home))}
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +370,7 @@ func TestStopOfLeadUsesTheRecordedAddress(t *testing.T) {
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	m := mux.Registered(r.m, "lead", leadAddressPath(r.o.home))
+	m := mux.Registered(r.m, "lead", leadAddressPath(r.o.home), nil)
 	if err := m.Stop("lead"); err != nil {
 		t.Fatal(err)
 	}

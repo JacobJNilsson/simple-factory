@@ -258,14 +258,17 @@ type Whoamier interface {
 // A successful Stop removes the file too. Put Registered inside Prefixed and give it the prefixed name,
 // because a recorded address is not a name that sfy chose.
 // Whenever Registered removes the address file, it removes the files in also too.
+// gone reports whether the agent behind a running recorded address ended. Then Alive answers false and removes the files as above.
+// A nil gone leaves the answer to the terminal alone.
 // CONTRACT: callers hold a Mux, as for Prefixed, so Registered returns the interface.
-func Registered(m Mux, name, path string, also ...string) Mux {
-	return registered{m: m, name: name, path: path, also: also}
+func Registered(m Mux, name, path string, gone func() (bool, error), also ...string) Mux {
+	return registered{m: m, name: name, path: path, gone: gone, also: also}
 }
 
 type registered struct {
 	m          Mux
 	name, path string
+	gone       func() (bool, error)
 	also       []string
 }
 
@@ -314,10 +317,21 @@ func (r registered) ShowLead(name string) error {
 func (r registered) Alive(name string) (bool, error) {
 	target, recorded := r.target(name)
 	alive, err := r.m.Alive(target)
-	if recorded && err == nil && !alive {
-		err = r.forget()
+	if !recorded || err != nil {
+		return alive, err
 	}
-	return alive, err
+	// A terminal can outlive its agent, so a running terminal leads to the question about the agent.
+	if alive && r.gone != nil {
+		gone, err := r.gone()
+		if err != nil {
+			return false, err
+		}
+		alive = !gone
+	}
+	if !alive {
+		return false, r.forget()
+	}
+	return true, nil
 }
 func (r registered) Stop(name string) error {
 	target, recorded := r.target(name)
