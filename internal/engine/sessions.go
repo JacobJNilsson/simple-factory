@@ -76,6 +76,8 @@ type sessions struct {
 	agents      map[string]*agentState
 	// ended holds the tasks whose sessions all ended while the task is approved. It lives in memory only.
 	ended map[string]bool
+	// gone holds the sessions that a stop or an alive check found gone since they last ran. It lives in memory only.
+	gone map[string]bool
 }
 
 func (s *sessions) agent(name string) *agentState {
@@ -91,15 +93,17 @@ func (s *sessions) forget(name string) {
 	s.forgetNotes(name)
 }
 
-// alive runs one alive check. The error is set only for sessionUnknown.
+// alive runs one alive check and records whether the session is gone. The error is set only for sessionUnknown.
 func (s *sessions) alive(name string) (liveness, error) {
 	alive, err := s.l.Alive(name)
 	switch {
 	case err != nil:
 		return sessionUnknown, err
 	case alive:
+		delete(s.gone, name)
 		return sessionRuns, nil
 	}
+	s.gone[name] = true
 	return sessionGone, nil
 }
 
@@ -238,7 +242,7 @@ func (s *sessions) specFor(t task.Task, agent, prompt string) SessionSpec {
 }
 
 // start starts the session of a claude agent for a task and resets what sfy knows of the session.
-// It changes no state when it fails, except that it forgets that the task's sessions ended.
+// It changes no state when it fails, except that it forgets that the task's sessions ended and that the session was gone.
 func (s *sessions) start(t task.Task, agent, prompt string) error {
 	if a := s.proc.Agents[agent]; a.Harness != process.Claude {
 		return fmt.Errorf("cannot start a session for the %s agent %s", a.Harness, agent)
@@ -251,6 +255,7 @@ func (s *sessions) start(t task.Task, agent, prompt string) error {
 	spec.TaskFile = file
 	// A start that fails may still leave a session, so the clear comes first.
 	delete(s.ended, t.ID)
+	delete(s.gone, spec.Name)
 	if err := s.l.Start(spec); err != nil {
 		return err
 	}
@@ -274,8 +279,12 @@ func (s *sessions) stop(name string) error {
 	return err
 }
 
-// end stops a session and forgets its state when the stop worked. It is the one place that forgets after a stop.
+// end stops a session and forgets its state when the stop worked. A session that sfy found gone needs no stop.
 func (s *sessions) end(name string) error {
+	if s.gone[name] {
+		s.forget(name)
+		return nil
+	}
 	if err := s.stop(name); err != nil {
 		return err
 	}

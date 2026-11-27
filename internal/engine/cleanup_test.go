@@ -120,6 +120,67 @@ func TestTheStopsOfAnApprovedTaskBackOffAndTellTheLead(t *testing.T) {
 	}
 }
 
+func TestCleanupDoesNotStopASessionThatAFailedStopFoundGone(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Done, 1)
+	v.l.stopErr = errors.New("no such window")
+	v.l.dead = map[string]bool{"worker-t1": true, "review-t1-1": true}
+	v.ws.removeErr = errors.New("permission denied")
+
+	for range 12 {
+		_ = v.e.Tick()
+	}
+
+	if v.l.stopCalls != 2 {
+		t.Fatalf("stop calls %d", v.l.stopCalls)
+	}
+}
+
+func TestCleanupDoesNotStopAWorkerThatTheTickFoundGone(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.dead = map[string]bool{"worker-t1": true}
+	v.tick(t)
+
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
+
+	if v.l.stopCalls != 0 || !slices.Equal(v.ws.removed, []string{"t1"}) {
+		t.Fatalf("stop calls %d, removed %v", v.l.stopCalls, v.ws.removed)
+	}
+}
+
+func TestCleanupStopsAWorkerThatAnAliveCheckFoundRunningAgain(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Working, 0)
+	v.l.dead = map[string]bool{"worker-t1": true}
+	v.tick(t)
+	v.l.dead = nil
+	v.tick(t)
+
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
+
+	if !slices.Equal(v.l.stopped, []string{"worker-t1"}) {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+func TestASessionThatStartsAgainIsStoppedAgain(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+	v.l.stopErr = errors.New("no such window")
+	v.l.dead = map[string]bool{"worker-t1": true, "review-t1-1": true}
+	v.tick(t)
+	v.l.stopErr, v.l.dead = nil, nil
+	v.feedback(t, "Fix it.")
+	v.tick(t)
+
+	mustOK(t, v.run("lead", "", "task cancel", "", "t1"))
+
+	if !slices.Contains(v.l.stopped, "worker-t1") {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
 // slowStop makes each Stop take a while, as a multiplexer command does.
 type slowStop struct {
 	*fakeLauncher
