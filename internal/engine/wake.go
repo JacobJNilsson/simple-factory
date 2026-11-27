@@ -6,10 +6,15 @@ import (
 	"maps"
 	"slices"
 	"time"
+
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 )
 
 // wakeNote is the first message of a woken worker or reviewer.
 const wakeNote = "sfy woke this session, because a message arrived for it. Run: sfy inbox"
+
+// leadWokeNote is the notify text after a lead wake that worked, so the operator looks at the lead's dialogs.
+const leadWokeNote = "sfy woke the lead, because a message arrived for it."
 
 // wakeWindow is the span in which wake.max_per_hour counts the wakes of one session.
 const wakeWindow = time.Hour
@@ -25,6 +30,9 @@ func (e *Engine) wakes(name string) bool {
 		return e.cfg.Wake.Worker
 	case reviewer:
 		return e.cfg.Wake.Reviewer
+	case lead:
+		// sfy did not start a registered lead, so it has no settings or conversation to resume.
+		return name == protocol.Lead && e.cfg.Wake.Lead && e.leadSpec != nil && !e.registeredLead()
 	}
 	return false
 }
@@ -95,16 +103,24 @@ func (e *Engine) underCap(name string) (bool, error) {
 		return false, nil
 	}
 	e.wakeCapTold[name] = true
-	e.logf("woke %s %d times in the last hour, so it wakes it no more for now", name, len(times))
 	until := times[0].Add(wakeWindow).Format("15:04")
+	e.logf("woke %s %d times in the last hour, so it wakes it no more before %s", name, len(times), until)
+	// The lead cannot hear of its own cap, so only the log names it.
+	if name == protocol.Lead {
+		return false, nil
+	}
 	return false, e.message("lead", "sfy", fmt.Sprintf(
 		"sfy woke %s %d times in the last hour, so it wakes it no more before %s. Its messages wait in its inbox.", name, len(times), until))
 }
 
-// wakeOne resumes the recorded conversation of a worker or a reviewer, and counts the wake toward the cap.
-// A failed wake leaves the message unread and the task as it is, and tells the lead.
+// wakeOne resumes the recorded conversation of a session, and counts the wake toward the cap.
+// A failed wake of a worker or a reviewer leaves the message unread and the task as it is, and tells the lead.
 func (e *Engine) wakeOne(name string) error {
 	e.wakeTimes[name] = append(e.wakeTimes[name], e.c.Now())
+	if name == protocol.Lead {
+		e.wakeLead()
+		return nil
+	}
 	id, _ := e.sess.parse(name)
 	t, err := e.st.Task(id.task)
 	if err == nil {
@@ -118,4 +134,23 @@ func (e *Engine) wakeOne(name string) error {
 	}
 	e.logf("woke %s: a message waits", name)
 	return nil
+}
+
+// wakeLead resumes the lead's conversation and tells the operator through the notify template.
+// A failure stores no message, because no session can hear it. A failed notify goes to the log only.
+func (e *Engine) wakeLead() {
+	text := leadWokeNote
+	spec, err := e.leadSpec()
+	if err == nil {
+		err = e.sess.resumeLead(spec)
+	}
+	if err != nil {
+		e.logf("could not wake lead: %v", err)
+		text = "sfy could not wake the lead: " + err.Error()
+	} else {
+		e.logf("woke lead: a message waits")
+	}
+	if err := e.l.Notify(protocol.Lead, text); err != nil {
+		e.logf("notify of lead failed: %v", err)
+	}
 }

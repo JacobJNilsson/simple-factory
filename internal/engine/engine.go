@@ -153,6 +153,15 @@ type Engine struct {
 	wakeTimes map[string][]time.Time
 	// wakeCapTold holds the sessions for which sfy told the lead that the cap stops their wakes.
 	wakeCapTold map[string]bool
+	// leadSpec returns the spec of a lead wake. Without it, the lead never wakes.
+	leadSpec func() (SessionSpec, error)
+}
+
+// SetLeadSpec sets how the engine builds the spec of a lead wake. Without it, the lead never wakes.
+func (e *Engine) SetLeadSpec(f func() (SessionSpec, error)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.leadSpec = f
 }
 
 // SetLog makes the engine write one line to w for each note it types, for each unread agent it skips as not alive,

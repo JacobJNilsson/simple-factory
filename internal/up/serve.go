@@ -253,6 +253,7 @@ func serve(ctx context.Context, env func(string) string, log io.Writer) error {
 	eng.SetChecker(checker(ctx, p, env("HOME")))
 	eng.SetProcess(p.proc)
 	eng.SetRegistration(registration.Folder{Home: p.home})
+	eng.SetLeadSpec(options{home: p.home, layers: p.layers, dir: config.WorkFolder(p.home), config: p.cfg}.wakeSpec())
 	eng.SetAuth(identity.Folder{Home: p.home})
 	eng.SetFactories(machine{home: p.home, env: env})
 	if err := startDrops(eng, drop.Folder{Home: p.home}, log); err != nil {
