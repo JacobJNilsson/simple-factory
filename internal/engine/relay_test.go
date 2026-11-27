@@ -106,7 +106,7 @@ func TestTheLeadOfOneFactoryCreatesANewTaskInAnother(t *testing.T) {
 		t.Fatalf("b's task %s: state %s, source %q", got.ID, got.State, got.Source)
 	}
 	msgs := b.inbox(t, "lead")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "New task "+got.ID) || !strings.Contains(msgs[0].Body, "a/lead, the lead of factory a") {
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "New task "+got.ID) || !strings.Contains(msgs[0].Body, "a/lead, the lead of factory a") || !strings.Contains(msgs[0].Body, taskFileIsData) {
 		t.Fatalf("b's lead inbox: %+v", msgs)
 	}
 	noTasks(t, a)
