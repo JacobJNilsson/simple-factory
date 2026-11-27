@@ -10,10 +10,16 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 )
 
+// recordFlag asks sfy run to record the session process before the exec.
+const recordFlag = "--record"
+
 // Wrap puts env in a 0600 file, because argv is visible to every user in ps. NUL separates the entries, because values may hold newlines.
-func Wrap(dir string, env []string, clean bool, bin string, cmd []string) ([]string, error) {
+// With record set, sfy run records the session process, so the CLI can later tell that it runs inside the session.
+func Wrap(dir string, env []string, clean, record bool, bin string, cmd []string) ([]string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("envrun: %w", err)
 	}
@@ -39,6 +45,9 @@ func Wrap(dir string, env []string, clean bool, bin string, cmd []string) ([]str
 	if clean {
 		argv = append(argv, "-i")
 	}
+	if record {
+		argv = append(argv, recordFlag)
+	}
 	argv = append(argv, f.Name(), "--")
 	return append(argv, cmd...), nil
 }
@@ -59,12 +68,14 @@ func Clean(dir string) error {
 
 // Run unlinks the env file before it reads it, so no secret stays on disk. Run returns only on an error.
 func Run(args []string) error {
-	clean := len(args) > 0 && args[0] == "-i"
-	if clean {
+	clean, record := false, false
+	for len(args) > 0 && (args[0] == "-i" || args[0] == recordFlag) {
+		clean = clean || args[0] == "-i"
+		record = record || args[0] == recordFlag
 		args = args[1:]
 	}
 	if len(args) < 3 || args[1] != "--" {
-		return errors.New("usage: sfy run [-i] <envfile> -- <command> [args...]")
+		return errors.New("usage: sfy run [-i] [--record] <envfile> -- <command> [args...]")
 	}
 	file, cmd := args[0], args[2:]
 	f, err := os.Open(file)
@@ -87,13 +98,39 @@ func Run(args []string) error {
 	}
 	env := listed
 	if !clean {
-		env = overlay(os.Environ(), listed)
+		env = overlay(withoutToken(os.Environ()), listed)
 	}
 	path, err := lookPath(cmd[0], env)
 	if err != nil {
 		return fmt.Errorf("run: %w", err)
 	}
+	// A failed record fails the run, because a session without a record cannot authenticate.
+	if record {
+		if err := writeRecord(filepath.Join(filepath.Dir(file), agentproc.ProcessFile)); err != nil {
+			return fmt.Errorf("run: %w", err)
+		}
+	}
 	return fmt.Errorf("run: %w", syscall.Exec(path, cmd, env))
+}
+
+// writeRecord saves the record of this process at path. The exec that follows keeps the pid and the start time.
+func writeRecord(path string) error {
+	self, err := agentproc.Self()
+	if err != nil {
+		return err
+	}
+	return agentproc.Write(path, self)
+}
+
+// withoutToken drops SFY_TOKEN from an inherited environment, so no session gets a token that it did not get from sfy.
+func withoutToken(environ []string) []string {
+	var out []string
+	for _, e := range environ {
+		if !strings.HasPrefix(e, "SFY_TOKEN=") {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // lookPath finds name on the PATH of env, the way the shell would after env -i.

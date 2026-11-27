@@ -341,7 +341,8 @@ func (o options) startServe() error {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return err
 		}
-		command, err := envrun.Wrap(dir, serveEnv(o.environ, o.home), true, o.bin, []string{o.bin, "serve"})
+		// The sfy process is no session, so it gets no process record.
+		command, err := envrun.Wrap(dir, serveEnv(o.environ, o.home), true, false, o.bin, []string{o.bin, "serve"})
 		if err != nil {
 			return err
 		}
