@@ -86,7 +86,10 @@ func (p *fakeProvider) Deliver(name, text, _ string) (bool, error) {
 }
 
 func (p *fakeProvider) Resumes(spec engine.SessionSpec) bool {
-	return p.resumable && spec.Kind == "lead" && !spec.Fresh
+	if spec.Kind == "lead" {
+		return p.resumable && !spec.Fresh
+	}
+	return p.resumable && spec.Resume
 }
 
 func (p *fakeProvider) Command(spec engine.SessionSpec) ([]string, error) {
@@ -153,6 +156,51 @@ func TestStartNeverResumesAWorker(t *testing.T) {
 	}
 	if len(m.starts) != 1 {
 		t.Errorf("starts %v", m.starts)
+	}
+}
+
+func resumeSpec() engine.SessionSpec {
+	return engine.SessionSpec{Name: "worker-t1", Kind: "worker", Resume: true}
+}
+
+func TestResumeThatEndsWithinTheGraceFails(t *testing.T) {
+	resumeGrace = 0
+	m, p := &fakeMux{endAfterStart: map[string]bool{"worker-t1": true}}, &fakeProvider{resumable: true}
+
+	err := New(m, p, nil).Start(resumeSpec())
+
+	var re *ResumeError
+	if !errors.As(err, &re) || re.Name != "worker-t1" {
+		t.Fatalf("err %v, want a ResumeError", err)
+	}
+	if len(m.starts) != 1 {
+		t.Errorf("starts %v, want only the resume", m.starts)
+	}
+}
+
+func TestResumeWithoutARecordedConversationRunsNoTemplate(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{}
+
+	err := New(m, p, nil).Start(resumeSpec())
+
+	var re *ResumeError
+	if !errors.As(err, &re) {
+		t.Fatalf("err %v, want a ResumeError", err)
+	}
+	if len(m.starts) != 0 || len(m.shown) != 0 || len(p.specs) != 0 {
+		t.Errorf("starts %v, shown %v, commands %d", m.starts, m.shown, len(p.specs))
+	}
+}
+
+func TestResumeThatKeepsRunningShowsTheSessionOnce(t *testing.T) {
+	resumeGrace = 0
+	m, p := &fakeMux{endAfterStart: map[string]bool{}}, &fakeProvider{resumable: true}
+
+	if err := New(m, p, nil).Start(resumeSpec()); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.starts, []string{"worker-t1"}) || !reflect.DeepEqual(m.shown, []string{"worker-t1"}) {
+		t.Errorf("starts %v, shown %v", m.starts, m.shown)
 	}
 }
 
