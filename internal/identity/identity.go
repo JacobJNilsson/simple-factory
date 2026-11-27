@@ -95,6 +95,35 @@ func (f Folder) IssueLegacy() error {
 	return nil
 }
 
+// EnvTokenSessions lists the sessions with a token file and no process record, in name order.
+// An older sfy started such a session with its token in SFY_TOKEN. The registered lead never had SFY_TOKEN, so the list leaves it out.
+func (f Folder) EnvTokenSessions() ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(f.Home, "sessions"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("identity: %w", err)
+	}
+	_, registered := registration.Read(f.Home)
+	var names []string
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || f.Token(name) == "" || (registered && name == protocol.Lead) {
+			continue
+		}
+		_, err := os.Stat(f.processPath(name))
+		if errors.Is(err, os.ErrNotExist) {
+			names = append(names, name)
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("identity: %w", err)
+		}
+	}
+	return names, nil
+}
+
 // Token returns the token of a session, or an empty string when the session has none.
 func (f Folder) Token(name string) string {
 	if !sessionName.MatchString(name) {
