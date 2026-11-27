@@ -28,7 +28,9 @@ type fakeLauncher struct {
 	// aliveErrOf fails the alive check of one session, before aliveErr applies.
 	aliveErrOf map[string]error
 	startErr   error
-	stopErr    error
+	// onStart runs after each start that worked.
+	onStart func(engine.SessionSpec)
+	stopErr error
 	// stopCalls counts the calls to Stop.
 	stopCalls int
 	started   []engine.SessionSpec
@@ -80,6 +82,9 @@ func (f *fakeLauncher) Start(s engine.SessionSpec) error {
 		return f.startErr
 	}
 	f.started = append(f.started, s)
+	if f.onStart != nil {
+		f.onStart(s)
+	}
 	return nil
 }
 func (f *fakeLauncher) Send(name, text string) error {

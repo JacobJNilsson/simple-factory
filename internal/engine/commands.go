@@ -498,7 +498,8 @@ func (e *Engine) resume(req protocol.Request) (string, error) {
 	if t.Before == "" {
 		return "", fmt.Errorf("task %s has no recorded state to return to", t.ID)
 	}
-	if t.Before.Active() {
+	// A worker that wakes gets the resume note when its session is gone.
+	if t.Before.Active() && !e.wakes(e.workerOf(t)) {
 		if err := e.refuseGone(e.workerOf(t)); err != nil {
 			return "", err
 		}
@@ -556,7 +557,8 @@ func (e *Engine) send(req protocol.Request) (string, error) {
 	if err := e.live(req.Args[0]); err != nil {
 		return "", err
 	}
-	if req.Args[0] != "lead" {
+	// A session whose kind wakes gets the message, and the next tick wakes it.
+	if req.Args[0] != "lead" && !e.wakes(req.Args[0]) {
 		if err := e.refuseGone(req.Args[0]); err != nil {
 			return "", err
 		}

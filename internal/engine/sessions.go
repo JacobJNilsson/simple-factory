@@ -247,7 +247,25 @@ func (s *sessions) start(t task.Task, agent, prompt string) error {
 	if a := s.proc.Agents[agent]; a.Harness != process.Claude {
 		return fmt.Errorf("cannot start a session for the %s agent %s", a.Harness, agent)
 	}
-	spec := s.specFor(t, agent, prompt)
+	return s.launch(t, s.specFor(t, agent, prompt))
+}
+
+// resume continues the recorded conversation of the session of a claude agent for a task, with note as its first message.
+// It stops what remains of the session first, because the start template fails on a name that a terminal session still holds.
+func (s *sessions) resume(t task.Task, agent, note string) error {
+	if a := s.proc.Agents[agent]; a.Harness != process.Claude {
+		return fmt.Errorf("cannot resume a session for the %s agent %s", a.Harness, agent)
+	}
+	spec := s.specFor(t, agent, note)
+	spec.Resume, spec.ResumePrompt = true, note
+	if err := s.stop(spec.Name); err != nil {
+		return err
+	}
+	return s.launch(t, spec)
+}
+
+// launch starts a session from its spec and the task's task file, and resets what sfy knows of the session.
+func (s *sessions) launch(t task.Task, spec SessionSpec) error {
 	file, err := s.taskFile(t.ID)
 	if err != nil {
 		return err
@@ -293,7 +311,7 @@ func (s *sessions) end(name string) error {
 }
 
 // checkWorkers tells the lead once when a worker or a reviewer session is gone, and again only after it runs again.
-// sfy does not restart a session that died. The lead decides what to do.
+// sfy does not start a new session for one that died. The lead decides what to do, and a message may wake the session.
 func (e *Engine) checkWorkers() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {
@@ -332,7 +350,11 @@ func (e *Engine) watchSession(t task.Task, name, role string) error {
 	case cannotTell:
 		return e.message("lead", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, err))
 	case becameGone:
-		return e.message("lead", "sfy", fmt.Sprintf("The %s of task %s is gone. Its session no longer runs.", role, t.ID))
+		note := fmt.Sprintf("The %s of task %s is gone. Its session no longer runs.", role, t.ID)
+		if e.wakes(name) {
+			note += " sfy wakes it when a message arrives for it."
+		}
+		return e.message("lead", "sfy", note)
 	}
 	return nil
 }
