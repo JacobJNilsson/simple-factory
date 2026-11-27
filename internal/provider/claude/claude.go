@@ -122,11 +122,11 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if err := removeStaleNote(a.home, spec.Name); err != nil {
 		return nil, err
 	}
-	token, err := identity.Folder{Home: a.home}.Issue(spec.Name)
-	if err != nil {
+	// The token stays in its file, because every child of the session sees the environment and may print it.
+	if _, err := (identity.Folder{Home: a.home}).Issue(spec.Name); err != nil {
 		return nil, err
 	}
-	env := []string{"SFY_AGENT=" + spec.Name, "SFY_TOKEN=" + token}
+	env := []string{"SFY_AGENT=" + spec.Name}
 	if spec.Task != "" {
 		env = append(env, "SFY_TASK="+spec.Task)
 	}
@@ -161,7 +161,8 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	}
 	argv = append(argv, prompt)
 	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.
-	return envrun.Wrap(filepath.Dir(path), env, clean, false, a.sfyBin, argv)
+	// Its record of that process lets the CLI read the token file from inside the session.
+	return envrun.Wrap(filepath.Dir(path), env, clean, true, a.sfyBin, argv)
 }
 
 // role returns the prompt of a session. A spec with a Role takes that prompt, and its RepoRole part for a task with a repo.

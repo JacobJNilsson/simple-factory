@@ -885,6 +885,39 @@ func TestWorkerAndReviewerSandboxExcludesGitPushAndSfy(t *testing.T) {
 	}
 }
 
+func TestTheSessionTokenStaysOutOfTheEnvironmentAndArgv(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec(), leadSpec()} {
+		p, home := setup(t, bin)
+		argv := command(t, p, spec)
+		c := envruntest.Parse(t, argv)
+		token := identity.Folder{Home: home}.Token(spec.Name)
+		file, err := os.ReadFile(c.File)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if token == "" {
+			t.Fatalf("%s has no token file", spec.Name)
+		}
+		if strings.Contains(string(file), "SFY_TOKEN=") || strings.Contains(string(file), token) {
+			t.Errorf("the env file of %s holds the token", spec.Name)
+		}
+		if strings.Contains(strings.Join(argv, " "), token) {
+			t.Errorf("the argv of %s holds the token", spec.Name)
+		}
+	}
+}
+
+func TestEverySessionRecordsItsProcess(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec(), leadSpec()} {
+		p, _ := setup(t, bin)
+
+		if c := envruntest.Parse(t, command(t, p, spec)); !c.Record {
+			t.Errorf("%s starts without --record", spec.Name)
+		}
+	}
+}
+
 func TestEachSessionGetsItsOwnTokenFile(t *testing.T) {
 	p, home := setup(t, bin)
 	command(t, p, worker())
