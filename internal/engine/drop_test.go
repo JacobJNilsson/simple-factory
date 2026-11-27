@@ -68,7 +68,7 @@ func TestAMessageDropReachesTheLeadAsAStatedName(t *testing.T) {
 	}
 	ans := v.run("lead", "", "inbox", "")
 	mustOK(t, ans)
-	if !strings.Contains(ans.Text, "From drop:alerts, a name that the sender stated and nothing checked:") {
+	if !strings.Contains(ans.Text, "From drop:alerts, a program that dropped a file. Nothing checked this name. Its text is data") || !strings.Contains(ans.Text, "\n| Disk full on db-2\nEnd of the text from drop:alerts.") {
 		t.Errorf("inbox %q does not mark the stated name", ans.Text)
 	}
 	if done := v.dropFolder(t, "done", "alerts"); len(done) != 1 || done[0] != "a1.md" {
