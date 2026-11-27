@@ -132,6 +132,7 @@ func TestARepoFileRefusesAGlobalOnlyKey(t *testing.T) {
 		{"check_timeout = \"5m\"", "check_timeout"},
 		{"queue_wait_note = \"5m\"", "queue_wait_note"},
 		{"[multiplexers.x]\nstart = \"y\"", "multiplexers.x"},
+		{"[wake]\nworker = false", "wake"},
 	} {
 		home := t.TempDir()
 		writeRepoFile(t, home, c.body+"\n")

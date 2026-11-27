@@ -54,6 +54,7 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
 		},
 		AllowWrite: []string{wantCache, "~/go/pkg/mod"},
+		Wake:       config.Wake{Lead: false, Worker: true, Reviewer: true, MaxPerHour: 3},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -294,6 +295,34 @@ func TestLoadFailsNamingANegativeQueueWaitNote(t *testing.T) {
 	var bad *config.SettingError
 	if !errors.As(err, &bad) || bad.Setting != "queue_wait_note" || !bad.NonNegative {
 		t.Fatalf("want a SettingError for a duration of 0 or more, got %v", err)
+	}
+}
+
+func TestLoadReadsTheWakeTable(t *testing.T) {
+	c, err := config.Load(writeConfig(t, "[wake]\nlead = true\nworker = false\nmax_per_hour = 5\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (config.Wake{Lead: true, Worker: false, Reviewer: true, MaxPerHour: 5}); c.Wake != want {
+		t.Errorf("wake = %+v, want %+v", c.Wake, want)
+	}
+}
+
+func TestLoadFailsNamingAWakeCapBelowOne(t *testing.T) {
+	_, err := config.Load(writeConfig(t, "[wake]\nmax_per_hour = 0\n"))
+
+	var bad *config.SettingError
+	if !errors.As(err, &bad) || bad.Setting != "wake.max_per_hour" || bad.Unknown {
+		t.Fatalf("want a SettingError for wake.max_per_hour, got %v", err)
+	}
+}
+
+func TestLoadFailsOnAnUnknownWakeKey(t *testing.T) {
+	_, err := config.Load(writeConfig(t, "[wake]\noperator = true\n"))
+
+	var bad *config.SettingError
+	if !errors.As(err, &bad) || bad.Setting != "wake.operator" || !bad.Unknown {
+		t.Fatalf("want an unknown SettingError for wake.operator, got %v", err)
 	}
 }
 

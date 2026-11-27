@@ -395,6 +395,10 @@ sfy builds a factory's settings from the layers of its definition, lowest first:
 | `resend_minutes` | 5 | Minutes between notes for an unread message. |
 | `note_fallback_after` | `5m` | A Go duration. How long queued text may stay unread by the note hook before sfy types the note into an idle pane. |
 | `queue_wait_note` | `10m` | A Go duration. How long a queued task may wait for a slot before sfy tells the lead. `0` turns the note off. |
+| `wake.lead` | `false` | When true, sfy resumes the lead's conversation when a message arrives and the lead no longer runs. |
+| `wake.worker` | `true` | When true, sfy resumes a worker session of an active task when a message arrives for it. |
+| `wake.reviewer` | `true` | When true, sfy resumes the reviewer of the current round when a message arrives for it. |
+| `wake.max_per_hour` | `3` | Wakes of one session in the last hour, failed ones included, before sfy stops waking it. It must be 1 or more. |
 | `check_timeout` | `20m` | A Go duration. How long a task's check may run before sfy stops it and counts it as failed. |
 | `provider` | `claude` | The agent provider adapter. |
 | `multiplexer` | `tmux` | The name of the template set to use. |
