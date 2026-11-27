@@ -806,9 +806,9 @@ func pushNow(t task.Task) string {
 	return fmt.Sprintf("Push the existing branch now with exactly `git push --force-with-lease=%s:%s origin HEAD:%s`, then run sfy report pushed <summary>. The lease makes git refuse the push when the remote branch moved since checkout. In that case run sfy report blocked.", t.Existing, t.Lease, t.Existing)
 }
 
-// approve moves a task to the lead agent at at and tells the lead to integrate it. pushed is true when the worker pushed the branch.
+// approve moves a task to the lead agent at at and tells the lead, as sfy, to integrate it. pushed is true when the worker pushed the branch.
 // A lead agent with a prompt key gives that text as the note instead, and its message key follows the note.
-func (e *Engine) approve(t task.Task, at process.Position, from string, pushed bool) error {
+func (e *Engine) approve(t task.Task, at process.Position, pushed bool) error {
 	t.Approve()
 	t.MoveTo(at)
 	if err := e.save(t); err != nil {
@@ -821,7 +821,7 @@ func (e *Engine) approve(t task.Task, at process.Position, from string, pushed b
 	if a := e.proc.Agents[at.Agent]; a.Message != "" {
 		note += "\n\n" + a.Message
 	}
-	if err := e.message("lead", from, note); err != nil {
+	if err := e.message("lead", "sfy", note); err != nil {
 		return err
 	}
 	// The work is finished, so both sessions end. The workspace stays until the lead completes the task.
@@ -853,10 +853,10 @@ func (e *Engine) approveNote(t task.Task, pushed bool) string {
 	return note
 }
 
-// hold moves a task to the operator agent at at and tells the lead that the task waits for the operator.
+// hold moves a task to the operator agent at at and tells the lead, as sfy, that the task waits for the operator.
 // No agent runs while the task waits, so every session ends and the workspace stays.
 // A held push gets today's note. Any other wait names the position and sfy task release.
-func (e *Engine) hold(t task.Task, at process.Position, from string) error {
+func (e *Engine) hold(t task.Task, at process.Position) error {
 	t.PlaceOnHold()
 	t.MoveTo(at)
 	if err := e.save(t); err != nil {
@@ -869,7 +869,7 @@ func (e *Engine) hold(t task.Task, at process.Position, from string) error {
 	if a := e.proc.Agents[at.Agent]; a.Message != "" {
 		note += "\n\n" + a.Message
 	}
-	if err := e.message("lead", from, note); err != nil {
+	if err := e.message("lead", "sfy", note); err != nil {
 		return err
 	}
 	return e.endSessions(t)

@@ -108,9 +108,9 @@ func (e *Engine) enter(t task.Task, at process.Position, h handoff) (string, err
 	case a.Harness == process.Claude:
 		return "", e.workOn(t, at, h)
 	case a.Harness == process.Operator:
-		return "", e.hold(t, at, h.from)
+		return "", e.hold(t, at)
 	case a.Harness == process.Lead:
-		return "", e.approve(t, at, h.from, h.pushed)
+		return "", e.approve(t, at, h.pushed)
 	}
 	return "", fmt.Errorf("task %s cannot enter %s: sfy has no %s harness", t.ID, at, a.Harness)
 }

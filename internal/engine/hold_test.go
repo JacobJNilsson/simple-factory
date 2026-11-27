@@ -31,7 +31,7 @@ func TestAPassedReviewOfAHeldTaskAsksForNoPushAndTellsLead(t *testing.T) {
 		t.Fatalf("got %+v", tk)
 	}
 	got := v.inbox(t, "lead")
-	if len(got) != 1 || !strings.Contains(got[0].Body, "waits for the operator") || !strings.Contains(got[0].Body, "sfy task push t1") {
+	if len(got) != 1 || got[0].From != "sfy" || !strings.Contains(got[0].Body, "waits for the operator") || !strings.Contains(got[0].Body, "sfy task push t1") {
 		t.Fatalf("the lead got %v", got)
 	}
 }
