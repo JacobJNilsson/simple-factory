@@ -44,9 +44,10 @@ type settings struct {
 		} `json:"filesystem"`
 	} `json:"sandbox"`
 	Permissions struct {
-		DefaultMode string   `json:"defaultMode"`
-		Allow       []string `json:"allow"`
-		Deny        []string `json:"deny"`
+		DefaultMode            string   `json:"defaultMode"`
+		DenyInsteadOfPrompting *bool    `json:"denyInsteadOfPrompting"`
+		Allow                  []string `json:"allow"`
+		Deny                   []string `json:"deny"`
 	} `json:"permissions"`
 	Hooks map[string][]struct {
 		Matcher string      `json:"matcher"`
@@ -1074,6 +1075,38 @@ func TestSessionSettingsKeepSfysValueOnAConflict(t *testing.T) {
 
 	if s.Permissions.DefaultMode != "acceptEdits" {
 		t.Errorf("defaultMode %q, want sfy's acceptEdits", s.Permissions.DefaultMode)
+	}
+}
+
+func TestSessionSettingsCannotTurnOffDenyInsteadOfPrompting(t *testing.T) {
+	s, _ := settingsWith(t, config.SessionValues{
+		"permissions": map[string]any{"denyInsteadOfPrompting": false},
+	})
+
+	if d := s.Permissions.DenyInsteadOfPrompting; d == nil || !*d {
+		t.Errorf("denyInsteadOfPrompting %v, want sfy's true", d)
+	}
+}
+
+func TestWorkerAndReviewerDenyInsteadOfPrompting(t *testing.T) {
+	unsandboxed := worker()
+	unsandboxed.Unsandboxed = true
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec(), unsandboxed} {
+		p, home := setupSandbox(t)
+		command(t, p, spec)
+
+		if d := readSettings(t, home, spec.Name).Permissions.DenyInsteadOfPrompting; d == nil || !*d {
+			t.Errorf("%s (unsandboxed %v) denyInsteadOfPrompting = %v, want true", spec.Name, spec.Unsandboxed, d)
+		}
+	}
+}
+
+func TestLeadSettingsHaveNoDenyInsteadOfPrompting(t *testing.T) {
+	p, home := setup(t, bin)
+	command(t, p, leadSpec())
+
+	if d := readSettings(t, home, "lead").Permissions.DenyInsteadOfPrompting; d != nil {
+		t.Errorf("lead denyInsteadOfPrompting = %v, want no key", *d)
 	}
 }
 
