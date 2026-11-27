@@ -29,7 +29,7 @@ Run `sfy down` from a terminal outside the agent sessions. It stops the lead, th
 
 Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process and the lead. It tells the lead about each task whose worker or reviewer is gone.
 
-If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Workers and reviewers always start new conversations.
+If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Every worker and reviewer start records a new conversation. sfy resumes it only to wake a closed session, as the section Wake a closed session describes.
 
 ## Old names of the lead
 
@@ -294,6 +294,24 @@ sfy delivers notes to a Claude Code session through a hook on the session's note
 ```toml
 note_fallback_after = "10m"
 ```
+
+## Wake a closed session
+
+A worker or a reviewer session can end before its task does, for example after `sfy down` or a crash. When a message arrives for such a session, sfy resumes its Claude conversation in a new terminal session. The woken session gets the same settings as at its first start and a new token. Its first message tells it to run `sfy inbox`.
+
+sfy wakes a worker only while its task is in `working`, `review` or `feedback` at that worker. It wakes a reviewer only while the task waits for that reviewer's verdict. A session of a finished, cancelled or escalated task never wakes. A wake that fails, or one that the cap stops, sends a message to the lead. The message stays unread in the session's inbox.
+
+The `[wake]` table in `~/.sfy/config.toml` holds the settings. These are the defaults:
+
+```toml
+[wake]
+lead = false
+worker = true
+reviewer = true
+max_per_hour = 3
+```
+
+Set `worker` or `reviewer` to `false` to turn waking off for that kind. Then a `sfy send` to a gone session fails, as before. Set `lead` to `true` to wake the lead too. A woken lead keeps its permission dialogs, so sfy runs the `notify` template to make you look at it. A registered lead never wakes. `max_per_hour` caps the wakes of one session in the last hour, failed ones included. It must be 1 or more. A per-repo `.sfy.toml` file refuses the table.
 
 ## Notes about queued tasks
 
