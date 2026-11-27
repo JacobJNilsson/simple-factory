@@ -108,6 +108,7 @@ sfy keeps its state in `~/.sfy`:
 | `sfy task list` | Lists the tasks. |
 | `sfy config` | Prints the factory's merged settings and prompt files, with the file behind each. |
 | `sfy send lead <text>` | Sends a message to the lead. The operator may send only to `lead`. The lead may send to any agent, and to `<factory>/lead`, the lead of another factory on the machine. That message names its sender as `<factory>/lead`. |
+| `sfy task new --factory <factory> <file>` | Lets the lead create a task in another factory on the machine. The task starts in `new` there with the source `<factory>/lead`, and the command prints that factory's task id. |
 | `sfy help` | Lists every command. |
 
 ## Send from a program
