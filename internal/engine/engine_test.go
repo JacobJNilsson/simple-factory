@@ -727,7 +727,7 @@ func TestVerdictPassMovesToApprovedAndTellsLead(t *testing.T) {
 
 	v.statusShows(t, "t1", "approved")
 	msgs := v.inbox(t, "lead")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no repo") {
+	if len(msgs) != 1 || msgs[0].From != "sfy" || !strings.Contains(msgs[0].Body, "task complete t1") || !strings.Contains(msgs[0].Body, "no repo") {
 		t.Fatalf("the lead got %+v", msgs)
 	}
 	if !slices.Equal(v.l.stopped, []string{"worker-t1", "review-t1-1"}) || len(v.ws.removed) != 0 {
