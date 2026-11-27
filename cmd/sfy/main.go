@@ -37,6 +37,20 @@ type app struct {
 	start func(headless bool) error
 }
 
+// handFlag is a flag that run parses by hand, outside the forms of package cli.
+type handFlag struct {
+	command, flag string
+	// unlisted marks a command that the usage leaves out on purpose.
+	unlisted bool
+}
+
+// handFlags lists every flag that run parses by hand, so a test checks that the usage names each one.
+var handFlags = []handFlag{
+	{command: "up", flag: "--headless"},
+	{command: "restart", flag: "--update"},
+	{command: "factory-folder", flag: "--create", unlisted: true},
+}
+
 // noFactory lists the commands that need no factory folder, so a failed factory lookup does not stop them.
 var noFactory = []string{"--version", "help", "--help", "run", "hooks"}
 
