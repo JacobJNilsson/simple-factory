@@ -222,7 +222,7 @@ func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg conf
 		l: l, cfg: cfg, proc: e.proc, logf: e.logf,
 		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },
 		branchOf:    func(t task.Task) string { return e.w.BranchOf(t) },
-		forgetNotes: func(name string) { e.notes.Forget(name) }, agents: map[string]*agentState{}, ended: map[string]bool{},
+		forgetNotes: func(name string) { e.notes.Forget(name) }, agents: map[string]*agentState{}, ended: map[string]bool{}, gone: map[string]bool{},
 	}
 	grace := cfg.NoteFallbackAfter
 	// A config without the setting, as tests build it, gets the default.
