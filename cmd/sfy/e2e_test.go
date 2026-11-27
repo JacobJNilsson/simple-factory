@@ -21,6 +21,8 @@ while [ $# -gt 0 ]; do
 	if [ "$1" = "--settings" ]; then settings=$2; fi
 	shift
 done
+# The test reads this copy of the environment to check that no session token is in it.
+env > "$(dirname "$settings")/seen-env"
 stop_hook() {
 	cmd=$(grep 'hook turn-ended' "$settings" | sed 's/.*"command": "\(.*\)",*$/\1/')
 	# Exit code 2 keeps the turn going, as in Claude Code, so the next turn end runs the hook again.
@@ -132,6 +134,7 @@ stop = "` + tm + ` kill-session -t ={name}"
 	return home, func(agent, stdin string, args ...string) (string, error) {
 		cmd := exec.CommandContext(context.Background(), bin, args...)
 		cmd.Env = append(append([]string{}, env...), "SFY_AGENT="+agent)
+		// The test process is no child of a session, so it sends SFY_TOKEN, as a session that an older sfy started does.
 		if agent != "" {
 			cmd.Env = append(cmd.Env, "SFY_TOKEN="+identity.Folder{Home: home}.Token(agent))
 		}
@@ -174,6 +177,7 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(home, "sfy.log")); err != nil {
 				t.Errorf("sfy.log: %v", err)
 			}
+			checkNoTokenInSessions(t, home, "lead", "worker-t1", "review-t1-1")
 			return
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -181,6 +185,25 @@ func TestOneTaskReachesDoneThroughTheLoop(t *testing.T) {
 	status, _ := sfy("", "", "status")
 	log, _ := os.ReadFile(filepath.Join(home, "sfy.log"))
 	t.Fatalf("task t1 did not finish in 30 seconds.\ntask show:\n%s\nstatus:\n%s\nsfy.log:\n%s", shown, status, log)
+}
+
+// checkNoTokenInSessions fails the test when the environment that a fake agent saw holds SFY_TOKEN or its session's token.
+func checkNoTokenInSessions(t *testing.T, home string, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		seen, err := os.ReadFile(filepath.Join(home, "sessions", name, "seen-env"))
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		token := identity.Folder{Home: home}.Token(name)
+		if token == "" {
+			t.Errorf("%s has no token file", name)
+		}
+		if strings.Contains(string(seen), "SFY_TOKEN=") || (token != "" && strings.Contains(string(seen), token)) {
+			t.Errorf("the environment of %s holds a session token", name)
+		}
+	}
 }
 
 // skipIfTmuxCannotStartPane starts a throwaway tmux session and skips the test when tmux cannot fork a pane.
