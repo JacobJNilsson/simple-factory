@@ -22,7 +22,7 @@ func TestRegisteredAgentCannotRunOperatorCommands(t *testing.T) {
 			},
 			stdout: &out,
 			stderr: &errb,
-			start:  func() error { started = true; return nil },
+			start:  func(bool) error { started = true; return nil },
 		}
 
 		code := a.run(args)

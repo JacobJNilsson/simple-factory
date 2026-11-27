@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
 )
 
@@ -22,6 +23,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// fakeServeLine is what fakeServe prints on stdout, so a test finds it in sfy.log.
+const fakeServeLine = "fake sfy serve ready"
 
 // fakeServe stands in for sfy serve. It takes the lock and writes the pid file as the server does,
 // marks itself ready instead of listening, and exits on SIGTERM or SIGHUP after it releases both.
@@ -41,6 +45,9 @@ func fakeServe(home string) int {
 		return 1
 	}
 	defer func() { _ = os.Remove(pidPath) }()
+	if _, err := os.Stdout.WriteString(fakeServeLine + "\n"); err != nil {
+		return 1
+	}
 	if err := os.WriteFile(ready, nil, 0o600); err != nil {
 		return 1
 	}
@@ -283,5 +290,125 @@ func TestStopHeadlessIgnoresAStalePidFile(t *testing.T) {
 	}
 	if _, ok := server.HolderPid(r.o.home); ok {
 		t.Error("a stale pid file counts as a running process")
+	}
+}
+
+// fakeSpawn returns a spawn that records its arguments in got and makes the socket answer.
+func fakeSpawn(r *rig, got *[]string) func(string, []string, []string, string) (detached, error) {
+	return func(dir string, _, argv []string, logPath string) (detached, error) {
+		*got = append([]string{dir, logPath}, argv...)
+		r.m.answering = true
+		return detached{exited: make(chan struct{})}, nil
+	}
+}
+
+func TestUpHeadlessStartsNoLead(t *testing.T) {
+	r := newRig(t)
+	r.o.headless = true
+	var got []string
+	r.o.spawn = fakeSpawn(r, &got)
+
+	if err := runHeadless(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(r.l.specs) != 0 || len(r.l.commands) != 0 || len(r.l.trustAsked) != 0 || len(r.m.starts) != 0 {
+		t.Errorf("specs %v, commands %v, trust %v, windows %v", r.l.specs, r.l.commands, r.l.trustAsked, r.m.starts)
+	}
+	want := "Started the sfy process (headless, log in " + filepath.Join(r.o.home, "sfy.log") + ").\n"
+	if r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
+	}
+	if _, err := os.Stat(filepath.Join(r.o.home, "notes.md")); err != nil {
+		t.Errorf("notes.md: %v", err)
+	}
+}
+
+func TestUpHeadlessIgnoresAConfigWithoutHeadless(t *testing.T) {
+	r := newRig(t)
+	r.o.config.Headless = false
+	r.o.headless = true
+	var got []string
+	r.o.spawn = fakeSpawn(r, &got)
+
+	if err := runHeadless(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{r.o.home, filepath.Join(r.o.home, "sfy.log"), "/bin/sfy", "serve"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("spawn %q, want %q", got, want)
+	}
+	if len(r.m.starts) != 0 {
+		t.Errorf("a window started: %v", r.m.starts)
+	}
+}
+
+func TestUpHeadlessRunsADetachedProcessThatWritesTheLog(t *testing.T) {
+	r := headlessRig(t)
+	r.o.config.Headless = false
+	r.o.headless = true
+
+	if err := runHeadless(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	pid := holder(t, r.o.home)
+	if pid == os.Getpid() {
+		t.Fatal("the lock holder is the test process")
+	}
+	if pgid, err := syscall.Getpgid(pid); err != nil || pgid != pid {
+		t.Errorf("process group of %d = %d, %v, want its own group", pid, pgid, err)
+	}
+	log, err := os.ReadFile(filepath.Join(r.o.home, "sfy.log"))
+	if err != nil || !strings.Contains(string(log), fakeServeLine) {
+		t.Errorf("sfy.log %q, %v", log, err)
+	}
+	if len(r.l.specs) != 0 || len(r.m.starts) != 0 {
+		t.Errorf("specs %v, windows %v", r.l.specs, r.m.starts)
+	}
+}
+
+func TestUpHeadlessWithAProcessRunningStartsNothing(t *testing.T) {
+	r := newRig(t)
+	r.o.headless = true
+	r.m.answering = true
+	r.o.spawn = func(string, []string, []string, string) (detached, error) {
+		t.Error("spawned a second process")
+		return detached{}, errors.New("spawned")
+	}
+
+	if err := runHeadless(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if want := "The sfy process already runs.\n"; r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
+	}
+}
+
+func TestUpHeadlessLeavesARegisteredLeadAlone(t *testing.T) {
+	r := newRig(t)
+	r.o.headless = true
+	var got []string
+	r.o.spawn = fakeSpawn(r, &got)
+	if err := registration.Write(r.o.home, registration.Record{ID: "s-main"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(registration.AddressPath(r.o.home), []byte("gone\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runHeadless(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{registration.Path(r.o.home), registration.AddressPath(r.o.home)} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s: %v", path, err)
+		}
+	}
+	if len(r.m.shownLead) != 0 || len(r.l.specs) != 0 {
+		t.Errorf("shown %v, specs %v", r.m.shownLead, r.l.specs)
 	}
 }

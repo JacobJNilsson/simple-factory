@@ -325,7 +325,8 @@ func checkSocketPath(path string) error {
 }
 
 // Command runs a plain sfy for the factory folder that env names.
-func Command(environ []string, env func(string) string, stdout, stderr io.Writer) error {
+// With headless set, it starts only the sfy process, detached, as sfy up --headless does.
+func Command(environ []string, env func(string) string, stdout, stderr io.Writer, headless bool) error {
 	env, err := factoryEnv(env, os.Getwd, stderr)
 	if err != nil {
 		return err
@@ -336,6 +337,10 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 	}
 	warnOldNames(o.warn, o.home, env("HOME"))
 	warnSkipped(o.warn, o.home, env("HOME"))
+	if headless {
+		o.headless = true
+		return runHeadless(o)
+	}
 	return run(o)
 }
 
