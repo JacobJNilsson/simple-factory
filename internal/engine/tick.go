@@ -300,29 +300,80 @@ func (e *Engine) retryCleanup() error {
 		return err
 	}
 	var errs []error
+	retried := map[string]bool{}
 	for _, t := range tasks {
 		if t.State == task.Approved {
 			errs = append(errs, e.endSessions(t))
 		}
 		if (t.State == task.Done || t.State == task.Cancelled) && t.Dir != "" {
-			errs = append(errs, e.retryOne(t))
+			retried[t.ID] = true
+			errs = append(errs, e.retryOne(t, e.cleanup))
+		}
+	}
+	for id := range e.cleanupRetries {
+		if !retried[id] {
+			delete(e.cleanupRetries, id)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-// cleanupBackoff is how many retries a cleanup skips after a liveness check that errored.
+// cleanupRetry is what the tick knows of the failed cleanups of one task.
+type cleanupRetry struct {
+	// updated is the Updated stamp of the task at the last failure.
+	updated time.Time
+	// fails counts the failed cleanups in a row.
+	fails int
+	// skip is the number of ticks left to skip before the next try.
+	skip int
+	// told is true after sfy told the lead that the cleanup of this task fails.
+	told bool
+}
+
+// cleanupBackoff is how many ticks a cleanup retry skips after its first failure.
 const cleanupBackoff = 10
 
-// retryOne runs the cleanup of one task. A check that cannot tell whether a session runs makes the next retries wait.
-func (e *Engine) retryOne(t task.Task) error {
-	if e.cleanupWait[t.ID] > 0 {
-		e.cleanupWait[t.ID]--
+// cleanupBackoffMax is the longest wait between cleanup retries, about 5 minutes at the 2-second tick.
+const cleanupBackoffMax = 150
+
+// cleanupTellAfter is how many cleanup retries in a row fail before sfy tells the lead.
+const cleanupTellAfter = 3
+
+// cleanupWaitAfter returns the number of ticks to skip after the given number of failures in a row.
+func cleanupWaitAfter(fails int) int {
+	wait := cleanupBackoff
+	for i := 1; i < fails && wait < cleanupBackoffMax; i++ {
+		wait *= 2
+	}
+	return min(wait, cleanupBackoffMax)
+}
+
+// retryOne runs the cleanup step run for one task. After a failure it skips a growing number of ticks, and a change to the task resets the wait.
+func (e *Engine) retryOne(t task.Task, run func(task.Task) error) error {
+	r := e.cleanupRetries[t.ID]
+	if r != nil && !r.updated.Equal(t.Updated) {
+		r.fails, r.skip = 0, 0
+	}
+	if r != nil && r.skip > 0 {
+		r.skip--
 		return nil
 	}
-	err := e.cleanup(t)
-	if errors.Is(err, errAliveUnknown) {
-		e.cleanupWait[t.ID] = cleanupBackoff
+	err := run(t)
+	if err == nil {
+		delete(e.cleanupRetries, t.ID)
+		return nil
+	}
+	if r == nil {
+		r = &cleanupRetry{}
+		e.cleanupRetries[t.ID] = r
+	}
+	r.updated = t.Updated
+	r.fails++
+	r.skip = cleanupWaitAfter(r.fails)
+	if r.fails >= cleanupTellAfter && !r.told {
+		merr := e.message("lead", "sfy", fmt.Sprintf("sfy cannot clean up task %s: %v", t.ID, err))
+		r.told = merr == nil
+		err = errors.Join(err, merr)
 	}
 	return err
 }
