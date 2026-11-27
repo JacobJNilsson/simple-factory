@@ -117,7 +117,9 @@ Each command picks its factory folder in this order:
 
 So `sfy status` in `~/Developer/acme/web/src` shows `acme`, and `sfy up` in `~/Developer/acme/web` joins `acme` without a new factory. In the home folder or in an unrelated folder, a command with an empty name prefix uses `~/.sfy`. `sfy status` and `sfy task list` print `Factory: <name> (<folder>)` first, so you see which factory answered.
 
-When a folder has a factory of another name prefix only, `sfy up` makes its own factory and prints one line on stderr that names the other factory folder. A wrapper command can ask for the factory folder with `sfy factory-folder`, or with `sfy factory-folder --create` to make it as `sfy up` would. That command prints the folder and nothing else.
+When a folder has factories of other name prefixes only, `sfy up` and `sfy restart` refuse and create nothing. The error names each other factory folder and its name prefix. It tells you to run the wrapper that sets `SFY_NAME_PREFIX=<prefix>`, or to set `SFY_HOME`. This catches a plain `sfy` that you meant to run as a wrapper command. To make the factory on purpose, run `sfy up --new-factory`, or set `SFY_HOME`.
+
+A wrapper command can ask for the factory folder with `sfy factory-folder`, or with `sfy factory-folder --create` to make it. The second form makes the factory also when the folder has factories of other name prefixes only, so a wrapper's first start works. It then prints one line on stderr that names the other factory folder. On stdout the command prints the folder and nothing else.
 
 ## Override a factory from a folder
 

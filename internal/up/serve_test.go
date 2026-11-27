@@ -47,7 +47,7 @@ func TestUpRefusesALongSocketPathBeforeItStartsAnything(t *testing.T) {
 		return ""
 	}
 
-	err := Command(nil, env, &bytes.Buffer{}, io.Discard, false)
+	err := Command(nil, env, &bytes.Buffer{}, io.Discard, Mode{})
 
 	var perr *socketPathError
 	if !errors.As(err, &perr) || perr.max != socketPathLimit()-1 {

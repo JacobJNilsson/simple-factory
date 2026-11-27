@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
+	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
 
 func TestRegisteredAgentCannotRunOperatorCommands(t *testing.T) {
@@ -22,7 +23,7 @@ func TestRegisteredAgentCannotRunOperatorCommands(t *testing.T) {
 			},
 			stdout: &out,
 			stderr: &errb,
-			start:  func(bool) error { started = true; return nil },
+			start:  func(up.Mode) error { started = true; return nil },
 		}
 
 		code := a.run(args)

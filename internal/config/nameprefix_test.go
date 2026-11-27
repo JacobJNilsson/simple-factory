@@ -59,6 +59,9 @@ func TestCreateFactoryPutsTheNamePrefixInFrontAndRecordsIt(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(plain, "name-prefix")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("an empty name prefix wrote a name-prefix file: %v", err)
 	}
+	if got, want := config.NamePrefixOf(state)+","+config.NamePrefixOf(plain), "ex-,"; got != want {
+		t.Errorf("NamePrefixOf gives %q, want %q", got, want)
+	}
 }
 
 func TestCreateFactoryCutsTheWholeNameToTheLimit(t *testing.T) {

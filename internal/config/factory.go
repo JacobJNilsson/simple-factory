@@ -204,8 +204,8 @@ func FactoriesAt(userHome, dir string) []string {
 	}
 }
 
-// namePrefixOf returns the name prefix that the factory folder home records, or an empty string when it records none.
-func namePrefixOf(home string) string {
+// NamePrefixOf returns the name prefix that the factory folder home records, or an empty string when it records none.
+func NamePrefixOf(home string) string {
 	b, err := os.ReadFile(filepath.Join(home, namePrefixFile))
 	if err != nil {
 		return ""
@@ -221,7 +221,7 @@ func FindFactory(userHome, dir, prefix string) (string, bool) {
 	for d := CanonicalPath(dir); ; d = filepath.Dir(d) {
 		if d != userHome {
 			for _, state := range known[d] {
-				if namePrefixOf(state) == prefix {
+				if NamePrefixOf(state) == prefix {
 					return state, true
 				}
 			}

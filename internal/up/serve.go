@@ -324,10 +324,17 @@ func checkSocketPath(path string) error {
 	return nil
 }
 
+// Mode holds the flags of sfy up.
+type Mode struct {
+	// Headless starts only the sfy process, detached, as sfy up --headless does.
+	Headless bool
+	// NewFactory makes a factory in a folder whose factories all have other name prefixes, as sfy up --new-factory does.
+	NewFactory bool
+}
+
 // Command runs a plain sfy for the factory folder that env names.
-// With headless set, it starts only the sfy process, detached, as sfy up --headless does.
-func Command(environ []string, env func(string) string, stdout, stderr io.Writer, headless bool) error {
-	env, err := factoryEnv(env, os.Getwd, stderr)
+func Command(environ []string, env func(string) string, stdout, stderr io.Writer, mode Mode) error {
+	env, err := factoryEnv(env, os.Getwd, stderr, !mode.NewFactory)
 	if err != nil {
 		return err
 	}
@@ -337,7 +344,7 @@ func Command(environ []string, env func(string) string, stdout, stderr io.Writer
 	}
 	warnOldNames(o.warn, o.home, env("HOME"))
 	warnSkipped(o.warn, o.home, env("HOME"))
-	if headless {
+	if mode.Headless {
 		o.headless = true
 		return runHeadless(o)
 	}
@@ -359,8 +366,9 @@ func warnOldNames(warn io.Writer, home, userHome string) {
 // SFY_HOME wins. The user's home folder and a folder with no factory above it work as the rules say:
 // the first gets the default factory, and the second gets a new factory in the factories folder.
 // The factory has the name prefix of SFY_NAME_PREFIX, and the user's home folder has no factory with a name prefix.
-// A new factory in a folder that has a factory of another name prefix prints one line to note that names the other factory folder.
-func factoryEnv(env func(string) string, getwd func() (string, error), note io.Writer) (func(string) string, error) {
+// In a folder whose factories all have other name prefixes, refuse makes it fail with an otherPrefixError and create nothing.
+// Without refuse, it creates the factory and prints one line to note that names the other factory folder.
+func factoryEnv(env func(string) string, getwd func() (string, error), note io.Writer, refuse bool) (func(string) string, error) {
 	if env("SFY_HOME") != "" {
 		return env, nil
 	}
@@ -379,6 +387,9 @@ func factoryEnv(env func(string) string, getwd func() (string, error), note io.W
 		found, ok := config.FindFactory(userHome, cwd, prefix)
 		if !ok {
 			others := config.FactoriesAt(userHome, cwd)
+			if refuse && len(others) > 0 {
+				return nil, &otherPrefixError{prefix: prefix, others: others}
+			}
 			if found, err = config.CreateFactory(userHome, cwd, prefix); err != nil {
 				return nil, err
 			}
@@ -410,6 +421,9 @@ func Restart(environ []string, env func(string) string, stdout, stderr io.Writer
 func restartWith(u updater, environ []string, env func(string) string, stdout, stderr io.Writer, update, headless bool) error {
 	if !mayRestart(env("SFY_AGENT")) {
 		return ErrNotAllowed
+	}
+	if err := checkRestartFactory(env, os.Getwd); err != nil {
+		return err
 	}
 	if update {
 		return u.updateAndRestart(environ, stdout, stderr, headless)

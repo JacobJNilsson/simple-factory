@@ -15,7 +15,8 @@ import (
 func FactoryFolder(env func(string) string, stdout, stderr io.Writer, create bool) error {
 	var home string
 	if create {
-		made, err := factoryEnv(env, os.Getwd, stderr)
+		// A wrapper's first start runs this in a folder that may have a plain factory, so it never refuses.
+		made, err := factoryEnv(env, os.Getwd, stderr, false)
 		if err != nil {
 			return err
 		}

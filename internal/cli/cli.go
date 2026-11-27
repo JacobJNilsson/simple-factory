@@ -29,7 +29,9 @@ const (
 
 const usage = `usage:
   sfy                  start sfy (operator only)
-  sfy up [--headless]  same as sfy, and --headless starts only the sfy process, detached (operator only)
+  sfy up [--headless] [--new-factory]
+                       same as sfy (operator only). --headless starts only the sfy process, detached.
+                       --new-factory makes a factory where the folder has factories of other name prefixes only.
   sfy register         make the running agent session the lead (not for started agents)
   sfy hooks install    add sfy's hooks to the user's Claude Code settings (operator only)
   sfy config           print the factory's merged settings and prompt files, with the file behind each
