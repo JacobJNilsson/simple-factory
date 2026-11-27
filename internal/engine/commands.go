@@ -1107,4 +1107,5 @@ const unstickNote = "The lead pressed Escape at your permission prompt, so sfy d
 
 // permissionDenial is the reason that a denied tool call gives the agent.
 const permissionDenial = "sfy denied this tool call. Change files with the Edit and Write tools inside your folder. " +
-	"Read files only in your folder and in your own task file. Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."
+	"Read files only in your folder and in your own task file. Run only commands that work in the sandbox. " +
+	"For a shell command, put each variable in double quotes or write the literal path, run cd and rm in separate calls, and use no loop. If you need anything else, run sfy report blocked <what and why>."

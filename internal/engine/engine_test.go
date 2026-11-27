@@ -1120,6 +1120,9 @@ func TestPermissionHookDeniesAWorkerAndAReviewerWithAReason(t *testing.T) {
 		if strings.HasPrefix(a.Text, "{") || !strings.Contains(a.Text, "sfy report blocked") {
 			t.Errorf("%s reply %q", c.agent, a.Text)
 		}
+		if !strings.Contains(a.Text, "put each variable in double quotes or write the literal path, run cd and rm in separate calls, and use no loop.") {
+			t.Errorf("%s reply %q does not name the shell forms", c.agent, a.Text)
+		}
 	}
 }
 
