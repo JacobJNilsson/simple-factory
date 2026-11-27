@@ -1961,7 +1961,7 @@ func TestTickSendsNoNoticeAndNoResendForAnApprovedTask(t *testing.T) {
 	}
 }
 
-func TestTickEndsTheSessionsOfAnApprovedTaskAgain(t *testing.T) {
+func TestTickEndsTheSessionsOfAnApprovedTaskOnTheFirstTick(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Approved, 1)
 

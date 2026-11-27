@@ -293,19 +293,23 @@ func (e *Engine) resendNotes() error {
 }
 
 // retryCleanup repeats the cleanup of done and cancelled tasks that still have a workspace.
-// It also ends the sessions of an approved task again, in case the stop after the pass failed.
+// It also ends the sessions of an approved task until they all ended once, in case the stop after the pass failed.
 func (e *Engine) retryCleanup() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {
 		return err
 	}
 	var errs []error
-	retried := map[string]bool{}
+	retried, approved := map[string]bool{}, map[string]bool{}
 	for _, t := range tasks {
-		if t.State == task.Approved {
-			errs = append(errs, e.endSessions(t))
-		}
-		if (t.State == task.Done || t.State == task.Cancelled) && t.Dir != "" {
+		switch {
+		case t.State == task.Approved:
+			approved[t.ID] = true
+			if !e.sess.ended[t.ID] {
+				retried[t.ID] = true
+				errs = append(errs, e.retryOne(t, e.endApproved))
+			}
+		case (t.State == task.Done || t.State == task.Cancelled) && t.Dir != "":
 			retried[t.ID] = true
 			errs = append(errs, e.retryOne(t, e.cleanup))
 		}
@@ -313,6 +317,11 @@ func (e *Engine) retryCleanup() error {
 	for id := range e.cleanupRetries {
 		if !retried[id] {
 			delete(e.cleanupRetries, id)
+		}
+	}
+	for id := range e.sess.ended {
+		if !approved[id] {
+			delete(e.sess.ended, id)
 		}
 	}
 	return errors.Join(errs...)

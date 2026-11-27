@@ -74,6 +74,8 @@ type sessions struct {
 	// forgetNotes drops the delivery state of a session.
 	forgetNotes func(name string)
 	agents      map[string]*agentState
+	// ended holds the tasks whose sessions all ended while the task is approved. It lives in memory only.
+	ended map[string]bool
 }
 
 func (s *sessions) agent(name string) *agentState {
@@ -236,7 +238,7 @@ func (s *sessions) specFor(t task.Task, agent, prompt string) SessionSpec {
 }
 
 // start starts the session of a claude agent for a task and resets what sfy knows of the session.
-// It changes no state when it fails, so the caller keeps its own rollback.
+// It changes no state when it fails, except that it forgets that the task's sessions ended.
 func (s *sessions) start(t task.Task, agent, prompt string) error {
 	if a := s.proc.Agents[agent]; a.Harness != process.Claude {
 		return fmt.Errorf("cannot start a session for the %s agent %s", a.Harness, agent)
@@ -247,6 +249,8 @@ func (s *sessions) start(t task.Task, agent, prompt string) error {
 		return err
 	}
 	spec.TaskFile = file
+	// A start that fails may still leave a session, so the clear comes first.
+	delete(s.ended, t.ID)
 	if err := s.l.Start(spec); err != nil {
 		return err
 	}
