@@ -77,11 +77,11 @@ func runs(t *testing.T, r Record) bool {
 
 func record(t *testing.T, pid int) Record {
 	t.Helper()
-	s, ok, err := start(pid)
-	if err != nil || !ok {
-		t.Fatalf("start of %d: %v, found %v", pid, err, ok)
+	r, err := Of(pid)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return Record{Pid: pid, Start: s}
+	return r
 }
 
 func TestRunsIsTrueForTheCallingProcess(t *testing.T) {

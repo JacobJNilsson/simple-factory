@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
@@ -46,11 +47,18 @@ func (f Folder) Issue(name string) (string, error) {
 	if err := os.WriteFile(path, []byte(token+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("identity: %w", err)
 	}
-	// A session that starts now has the token in its environment and needs no legacy token.
-	if err := os.Remove(f.legacyPath(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("identity: %w", err)
+	// A session that starts now gets its token from the token file and needs no legacy token.
+	// The old process record goes too, so it never names a process of an earlier start.
+	for _, old := range []string{f.legacyPath(name), f.processPath(name)} {
+		if err := os.Remove(old); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("identity: %w", err)
+		}
 	}
 	return token, nil
+}
+
+func (f Folder) processPath(name string) string {
+	return filepath.Join(f.Home, "sessions", name, agentproc.ProcessFile)
 }
 
 func randomToken() (string, error) {
@@ -96,7 +104,8 @@ func (f Folder) Token(name string) string {
 }
 
 // Claim is what the CLI side knows about the caller.
-// Agent is SFY_AGENT and Token is SFY_TOKEN. Session is the provider's id of the conversation that runs the command, or empty outside one.
+// Agent is SFY_AGENT. Token is SFY_TOKEN, which only a session that an older sfy started has.
+// Session is the provider's id of the conversation that runs the command, or empty outside one.
 type Claim struct{ Agent, Token, Session string }
 
 // Resolve returns the caller that a claim stands for, with its name and token set.
@@ -105,6 +114,9 @@ func (f Folder) Resolve(c Claim) protocol.Caller {
 	if c.Agent != "" {
 		if c.Token != "" {
 			return protocol.Caller{Agent: c.Agent, Token: c.Token}
+		}
+		if token := f.ownToken(c.Agent); token != "" {
+			return protocol.Caller{Agent: c.Agent, Token: token}
 		}
 		// A session that started before sessions had tokens has no SFY_TOKEN, and sfy serve left it a legacy token.
 		return protocol.Caller{Agent: c.Agent, Token: f.legacyToken(c.Agent, c.Session)}
@@ -117,6 +129,23 @@ func (f Folder) Resolve(c Claim) protocol.Caller {
 		return protocol.Caller{Agent: protocol.Lead, Token: token}
 	}
 	return protocol.Caller{Token: c.Token}
+}
+
+// ownToken returns the token of the named session when its process record names the caller or one of its ancestors.
+// It never reads a token by the name alone, so a worker that names another session gets an empty string.
+func (f Folder) ownToken(name string) string {
+	name = protocol.AgentName(name)
+	if !sessionName.MatchString(name) {
+		return ""
+	}
+	r, ok, err := agentproc.Read(f.processPath(name))
+	if err != nil || !ok {
+		return ""
+	}
+	if runs, err := agentproc.Runs(r); err != nil || !runs {
+		return ""
+	}
+	return f.Token(name)
 }
 
 // legacyToken returns the legacy token of a session that started before sessions had tokens, or an empty string.
@@ -136,7 +165,7 @@ func (f Folder) legacyToken(name, sessionID string) string {
 }
 
 var (
-	errMissingToken = errors.New("missing session token. This session started before sessions had tokens. Restart the session, or run sfy restart, or run sfy from the session that sfy started")
+	errMissingToken = errors.New("missing session token. Run sfy from the session that sfy started for this name. A session that started before sessions had tokens needs a restart, or run sfy restart")
 	errBadToken     = errors.New("bad session token")
 )
 

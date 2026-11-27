@@ -25,7 +25,11 @@ type Record struct {
 
 // Self returns the record of the calling process. An exec keeps both fields, so the record names the replacement too.
 func Self() (Record, error) {
-	pid := os.Getpid()
+	return Of(os.Getpid())
+}
+
+// Of returns the record of the running process pid. It fails when no such process runs.
+func Of(pid int) (Record, error) {
 	s, ok, err := start(pid)
 	if err != nil {
 		return Record{}, err
