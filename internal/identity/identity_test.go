@@ -1,11 +1,14 @@
 package identity
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
@@ -67,6 +70,22 @@ func TestIssueRemovesTheLegacyTokenOfTheSession(t *testing.T) {
 
 	if got := f.legacyToken("worker-t1", ""); got != "" {
 		t.Errorf("a session with a token kept the legacy token %q", got)
+	}
+}
+
+func TestIssueRemovesTheProcessRecordOfAnEarlierStart(t *testing.T) {
+	f := Folder{Home: t.TempDir()}
+	if _, err := f.Issue("worker-t1"); err != nil {
+		t.Fatal(err)
+	}
+	writeProcess(t, f, "worker-t1", self(t))
+
+	if _, err := f.Issue("worker-t1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(f.processPath("worker-t1")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the old record stays: %v", err)
 	}
 }
 
@@ -295,6 +314,86 @@ func TestResolveLeavesOtherSessionsAsTheOperator(t *testing.T) {
 		if got.Agent != "" || got.Token != "" {
 			t.Errorf("%s got %+v", name, got)
 		}
+	}
+}
+
+func self(t *testing.T) agentproc.Record {
+	t.Helper()
+	r, err := agentproc.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// sibling returns the record of a process that runs beside the test process and is no ancestor of it.
+func sibling(t *testing.T) agentproc.Record {
+	t.Helper()
+	cmd := exec.CommandContext(context.Background(), "sleep", "30")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	r, err := agentproc.Of(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func writeProcess(t *testing.T, f Folder, name string, r agentproc.Record) {
+	t.Helper()
+	if err := agentproc.Write(f.processPath(name), r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestResolveReadsTheTokenFileOfASessionThatRunsTheCaller(t *testing.T) {
+	f := authFolder(t)
+	writeProcess(t, f, "worker-t1", self(t))
+
+	got := f.Resolve(Claim{Agent: "worker-t1"})
+
+	if got.Token == "" || got.Token != f.Token("worker-t1") {
+		t.Errorf("got %+v, want the token of worker-t1", got)
+	}
+}
+
+func TestResolveGivesNoTokenForTheNameOfAnotherSession(t *testing.T) {
+	f := authFolder(t)
+	if _, err := f.Issue("worker-t9"); err != nil {
+		t.Fatal(err)
+	}
+	writeProcess(t, f, "worker-t9", sibling(t))
+
+	got := f.Resolve(Claim{Agent: "worker-t9"})
+
+	if got.Token != "" {
+		t.Errorf("a caller outside worker-t9 got the token %q", got.Token)
+	}
+}
+
+func TestResolveNeverReadsATokenByTheNameAlone(t *testing.T) {
+	f := authFolder(t)
+
+	got := f.Resolve(Claim{Agent: "worker-t1"})
+
+	if got.Token != "" {
+		t.Errorf("a session without a record gave the token %q", got.Token)
+	}
+}
+
+func TestResolveSendsTheEnvironmentTokenOfASessionThatAnOlderSfyStarted(t *testing.T) {
+	f := authFolder(t)
+	writeProcess(t, f, "worker-t1", sibling(t))
+
+	got := f.Resolve(Claim{Agent: "worker-t1", Token: "from-the-environment"})
+
+	if got.Token != "from-the-environment" {
+		t.Errorf("got %+v", got)
 	}
 }
 

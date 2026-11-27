@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
@@ -44,6 +45,31 @@ func answer(t *testing.T, home string, env map[string]string, args ...string) (o
 	return ans.OK, ans.Text + ans.Error
 }
 
+func TestASessionReadsItsTokenOnlyFromInsideItsProcess(t *testing.T) {
+	home := t.TempDir()
+	folder := identity.Folder{Home: home}
+	for _, name := range []string{"worker-t1", "worker-t2"} {
+		if _, err := folder.Issue(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The test process stands in for the agent process that sfy run recorded for worker-t1.
+	self, err := agentproc.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agentproc.Write(filepath.Join(home, "sessions", "worker-t1", agentproc.ProcessFile), self); err != nil {
+		t.Fatal(err)
+	}
+
+	if ok, text := answer(t, home, map[string]string{"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"}, "status"); !ok {
+		t.Errorf("worker-t1 in its own process: %q", text)
+	}
+	if ok, text := answer(t, home, map[string]string{"SFY_AGENT": "worker-t2", "SFY_TASK": "t1"}, "status"); ok || !strings.Contains(text, "Run sfy from the session that sfy started for this name") {
+		t.Errorf("worker-t1 that claims worker-t2: ok %v, %q", ok, text)
+	}
+}
+
 func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 	home := preTokenHome(t)
 	sessions := map[string]map[string]string{
@@ -53,7 +79,7 @@ func TestSessionsThatStartedBeforeTokensWorkAfterARestart(t *testing.T) {
 
 	// Before the restart, the session has no token.
 	for name, env := range sessions {
-		if ok, text := answer(t, home, env, "status"); ok || !strings.Contains(text, "Restart the session, or run sfy restart") {
+		if ok, text := answer(t, home, env, "status"); ok || !strings.Contains(text, "needs a restart, or run sfy restart") {
 			t.Fatalf("%s before the restart: ok %v, %q", name, ok, text)
 		}
 	}
