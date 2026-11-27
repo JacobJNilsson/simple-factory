@@ -27,7 +27,7 @@ The new sfy process gets the environment of the shell that ran `sfy restart`, in
 
 Run `sfy down` from a terminal outside the agent sessions. It stops the lead, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it. It does not stop a registered lead, because sfy did not start it. It clears the registration and says so.
 
-Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process and the lead. It tells the lead about each task whose worker is gone.
+Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process and the lead. It tells the lead about each task whose worker or reviewer is gone.
 
 If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Workers and reviewers always start new conversations.
 

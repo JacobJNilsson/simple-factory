@@ -276,8 +276,8 @@ func (s *sessions) end(name string) error {
 	return nil
 }
 
-// checkWorkers tells the lead once when a worker session is gone, and again only after the worker runs again.
-// sfy does not restart a worker that died. The lead decides what to do.
+// checkWorkers tells the lead once when a worker or a reviewer session is gone, and again only after it runs again.
+// sfy does not restart a session that died. The lead decides what to do.
 func (e *Engine) checkWorkers() error {
 	tasks, err := e.st.Tasks()
 	if err != nil {
@@ -288,14 +288,35 @@ func (e *Engine) checkWorkers() error {
 		if !t.State.Active() {
 			continue
 		}
-		name := e.workerOf(t)
-		ev, werr := e.sess.watch(name)
-		switch ev {
-		case cannotTell:
-			errs = append(errs, e.message("lead", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, werr)))
-		case becameGone:
-			errs = append(errs, e.message("lead", "sfy", fmt.Sprintf("The worker of task %s is gone. Its session no longer runs.", t.ID)))
+		errs = append(errs, e.watchSession(t, e.workerOf(t), "worker"))
+		if e.waitsForVerdict(t) {
+			errs = append(errs, e.watchSession(t, e.reviewerOf(t), "reviewer"))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// waitsForVerdict reports whether a task in review waits for the verdict of a running reviewer session.
+// A task that waits for a push, runs a check, or sits at a shell agent has no such session.
+func (e *Engine) waitsForVerdict(t task.Task) bool {
+	if t.State != task.Review || t.Pushing {
+		return false
+	}
+	if _, running := e.checking[t.ID]; running {
+		return false
+	}
+	a := e.proc.Agents[t.Position().Agent]
+	return a.Harness == process.Claude && a.Ends == process.EndsVerdict
+}
+
+// watchSession runs the alive check of a session and tells the lead what is new. The role is "worker" or "reviewer".
+func (e *Engine) watchSession(t task.Task, name, role string) error {
+	ev, err := e.sess.watch(name)
+	switch ev {
+	case cannotTell:
+		return e.message("lead", "sfy", fmt.Sprintf("sfy cannot tell whether %s runs: %v", name, err))
+	case becameGone:
+		return e.message("lead", "sfy", fmt.Sprintf("The %s of task %s is gone. Its session no longer runs.", role, t.ID))
+	}
+	return nil
 }
