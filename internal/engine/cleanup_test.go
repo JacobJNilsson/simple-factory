@@ -6,8 +6,159 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
+
+// An approved task gets one stop for each of its sessions, however many ticks run.
+func TestTickStopsTheSessionsOfAnApprovedTaskOnce(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 2)
+
+	for range 3 {
+		v.tick(t)
+	}
+
+	want := []string{"worker-t1", "review-t1-1", "review-t1-2"}
+	if !slices.Equal(v.l.stopped, want) {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+func TestTickStopsNothingAfterAPassWhoseStopsWorked(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Review, 1)
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Good."))
+
+	v.tick(t)
+	v.tick(t)
+
+	if want := []string{"worker-t1", "review-t1-1"}; !slices.Equal(v.l.stopped, want) {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+func TestTickEndsTheSessionsOnceMoreWhenTheStopAfterThePassFailed(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Review, 1)
+	v.l.stopErr = errors.New("stop failed")
+	mustFail(t, v.run("review-t1-1", "t1", "verdict pass", "Good."), "stop failed")
+	if s := v.state(t, "t1").State; s != task.Approved {
+		t.Fatalf("state %s", s)
+	}
+	v.l.stopErr = nil
+
+	v.tick(t)
+	v.tick(t)
+
+	if want := []string{"worker-t1", "review-t1-1"}; !slices.Equal(v.l.stopped, want) {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+func TestARestartStopsTheSessionsOfAnApprovedTaskOnceMore(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+	v.tick(t)
+
+	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, NoteFallbackAfter: 4 * time.Second}
+	e := engine.New(v.st, v.l, v.ch, v.ws, cfg, v.clock)
+	for range 2 {
+		if err := e.Tick(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	want := []string{"worker-t1", "review-t1-1", "worker-t1", "review-t1-1"}
+	if !slices.Equal(v.l.stopped, want) {
+		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+func TestAnApprovedTaskThatIsReopenedAndApprovedAgainIsStoppedAgainAfterAFailedStop(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+	v.tick(t)
+	v.feedback(t, "Fix it.")
+	v.tick(t)
+	mustOK(t, v.run("worker-t1", "t1", "report done", "Fixed."))
+	reviewer := v.l.started[len(v.l.started)-1].Name
+	v.l.stopErr = errors.New("stop failed")
+	mustFail(t, v.run(reviewer, "t1", "verdict pass", "Good."), "stop failed")
+	v.l.stopErr = nil
+	v.l.stopped = nil
+
+	v.tick(t)
+	if len(v.l.stopped) == 0 {
+		t.Fatal("the tick stopped nothing")
+	}
+	v.l.stopped = nil
+	v.tick(t)
+	if len(v.l.stopped) != 0 {
+		t.Fatalf("the second tick stopped %v", v.l.stopped)
+	}
+}
+
+// A stop of an approved task that keeps failing waits as a cleanup retry does, and the lead hears of it once.
+func TestTheStopsOfAnApprovedTaskBackOffAndTellTheLead(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 1)
+	v.l.stopErr = errors.New("stop failed")
+
+	for range 33 {
+		_ = v.e.Tick()
+	}
+
+	if v.l.stopCalls != 3 {
+		t.Fatalf("stop calls %d", v.l.stopCalls)
+	}
+	want := []string{"sfy cannot clean up task t1: stop failed"}
+	if n := leadNotes(t, v); !slices.Equal(n, want) {
+		t.Fatalf("the lead got %q", n)
+	}
+}
+
+// slowStop makes each Stop take a while, as a multiplexer command does.
+type slowStop struct {
+	*fakeLauncher
+	delay time.Duration
+}
+
+func (s slowStop) Stop(name string) error {
+	time.Sleep(s.delay)
+	return s.fakeLauncher.Stop(name)
+}
+
+// After the first tick ended the sessions of an approved task, a hook no longer waits for stops during a tick.
+func TestHookBusyDoesNotWaitForTheSessionsOfAnApprovedTaskAfterTheFirstTick(t *testing.T) {
+	v := newEnv(t)
+	v.seed(t, task.Approved, 4)
+	const delay = 100 * time.Millisecond
+	cfg := config.Config{ReviewRounds: 3, MaxWorkers: 2, ResendMinutes: 5, NoteFallbackAfter: 4 * time.Second}
+	e := engine.New(v.st, slowStop{v.l, delay}, v.ch, v.ws, cfg, v.clock)
+	if err := e.Tick(); err != nil {
+		t.Fatal(err)
+	}
+
+	tickDone := make(chan struct{})
+	go func() { _ = e.Tick(); close(tickDone) }()
+	time.Sleep(delay / 2)
+	began := time.Now()
+	a := e.Handle(protocol.Request{Caller: protocol.Caller{Agent: "lead"}, Command: "hook busy"})
+	waited := time.Since(began)
+	<-tickDone
+
+	mustOK(t, a)
+	// The first tick stopped the five sessions, and the second tick stops none.
+	if v.l.stopCalls != 5 {
+		t.Fatalf("stop calls %d", v.l.stopCalls)
+	}
+	if waited >= delay {
+		t.Fatalf("hook busy answered after %v", waited)
+	}
+}
 
 // cleanupRun counts the ticks of an engine and records the ticks at which a cleanup try ran.
 type cleanupRun struct {

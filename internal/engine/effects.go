@@ -58,6 +58,15 @@ func (e *Engine) endSessions(t task.Task) error {
 	return nil
 }
 
+// endApproved ends the sessions of an approved task and records that they ended, so the tick stops them no more.
+func (e *Engine) endApproved(t task.Task) error {
+	if err := e.endSessions(t); err != nil {
+		return err
+	}
+	e.sess.ended[t.ID] = true
+	return nil
+}
+
 // cleanup ends the sessions of a task that ran, then removes its workspace unless the workspace holds work, and clears Dir.
 // Tick retries it for done and cancelled tasks that still have a Dir.
 func (e *Engine) cleanup(t task.Task) error {

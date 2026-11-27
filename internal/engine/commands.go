@@ -825,7 +825,7 @@ func (e *Engine) approve(t task.Task, at process.Position, from string, pushed b
 		return err
 	}
 	// The work is finished, so both sessions end. The workspace stays until the lead completes the task.
-	return e.endSessions(t)
+	return e.endApproved(t)
 }
 
 // approveNote returns the note that tells the lead how to integrate an approved task.
