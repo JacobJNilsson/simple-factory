@@ -329,9 +329,19 @@ func (t Task) StatedSource() string {
 	return ""
 }
 
-// ShownTitle returns the title for a list or a table. A task that a drop created names its source, as in "Disk full (from drop:alerts)".
+// FactorySource returns the source of a task that the lead of another factory relayed, such as a/lead, and an empty string for any other task.
+// A factory name holds no slash and no colon, so a drop source or a session name never matches.
+func (t Task) FactorySource() string {
+	factory, agent, ok := strings.Cut(t.Source, "/")
+	if !ok || factory == "" || agent != "lead" || strings.Contains(factory, ":") {
+		return ""
+	}
+	return t.Source
+}
+
+// ShownTitle returns the title for a list or a table. A task from a drop or another factory names its source, as in "Disk full (from drop:alerts)".
 func (t Task) ShownTitle() string {
-	if s := t.StatedSource(); s != "" {
+	if s := cmp.Or(t.StatedSource(), t.FactorySource()); s != "" {
 		return t.Title + " (from " + s + ")"
 	}
 	return t.Title
