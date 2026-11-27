@@ -96,7 +96,7 @@ func (f Folder) IssueLegacy() error {
 }
 
 // EnvTokenSessions lists the sessions with a token file and no process record, in name order.
-// An older sfy started such a session with its token in SFY_TOKEN. The registered lead never had SFY_TOKEN, so the list leaves it out.
+// An older sfy started such a session with its token in SFY_TOKEN. The list also holds such sessions that ended.
 func (f Folder) EnvTokenSessions() ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(f.Home, "sessions"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -105,23 +105,52 @@ func (f Folder) EnvTokenSessions() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("identity: %w", err)
 	}
-	_, registered := registration.Read(f.Home)
 	var names []string
 	for _, e := range entries {
-		name := e.Name()
-		if !e.IsDir() || f.Token(name) == "" || (registered && name == protocol.Lead) {
+		if !e.IsDir() {
 			continue
 		}
-		_, err := os.Stat(f.processPath(name))
-		if errors.Is(err, os.ErrNotExist) {
-			names = append(names, name)
-			continue
-		}
+		has, err := f.hasEnvToken(e.Name())
 		if err != nil {
-			return nil, fmt.Errorf("identity: %w", err)
+			return nil, err
+		}
+		if has {
+			names = append(names, e.Name())
 		}
 	}
 	return names, nil
+}
+
+// DropEnvToken removes the token file of a session with a token file and no process record.
+// Call it only for a session that does not run. It leaves every other session alone.
+func (f Folder) DropEnvToken(name string) error {
+	has, err := f.hasEnvToken(name)
+	if err != nil || !has {
+		return err
+	}
+	if err := os.Remove(f.tokenPath(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("identity: %w", err)
+	}
+	return nil
+}
+
+// hasEnvToken reports whether a session has a token file and no process record.
+// The registered lead never had SFY_TOKEN, so it never counts.
+func (f Folder) hasEnvToken(name string) (bool, error) {
+	if f.Token(name) == "" {
+		return false, nil
+	}
+	if _, registered := registration.Read(f.Home); registered && name == protocol.Lead {
+		return false, nil
+	}
+	_, err := os.Stat(f.processPath(name))
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("identity: %w", err)
+	}
+	return false, nil
 }
 
 // Token returns the token of a session, or an empty string when the session has none.

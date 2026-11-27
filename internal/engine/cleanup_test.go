@@ -2,12 +2,16 @@ package engine_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
@@ -24,6 +28,45 @@ func TestTickStopsTheSessionsOfAnApprovedTaskOnce(t *testing.T) {
 	want := []string{"worker-t1", "review-t1-1", "review-t1-2"}
 	if !slices.Equal(v.l.stopped, want) {
 		t.Fatalf("stopped %v", v.l.stopped)
+	}
+}
+
+// An ended session that an older sfy started with its token in SFY_TOKEN loses its token file. A session with a process record keeps it.
+func TestEndingASessionRemovesItsEnvToken(t *testing.T) {
+	v := newEnv(t)
+	folder := identity.Folder{Home: v.home}
+	v.e.SetAuth(folder)
+	v.seed(t, task.Approved, 1)
+	issue(t, v, "worker-t1")
+	issue(t, v, "review-t1-1")
+	record := filepath.Join(v.home, "sessions", "review-t1-1", agentproc.ProcessFile)
+	if err := os.WriteFile(record, []byte(`{"pid":1,"start":"any"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	v.tick(t)
+
+	if folder.Token("worker-t1") != "" {
+		t.Error("the env token of the ended worker stays")
+	}
+	if folder.Token("review-t1-1") == "" {
+		t.Error("the token of a session with a process record is gone")
+	}
+}
+
+// A session whose stop fails may still run, so it keeps its env token.
+func TestAFailedStopKeepsTheEnvToken(t *testing.T) {
+	v := newEnv(t)
+	folder := identity.Folder{Home: v.home}
+	v.e.SetAuth(folder)
+	v.seed(t, task.Approved, 1)
+	issue(t, v, "worker-t1")
+	v.l.stopErr = errors.New("stop failed")
+
+	_ = v.e.Tick()
+
+	if folder.Token("worker-t1") == "" {
+		t.Error("the env token of a session that may still run is gone")
 	}
 }
 

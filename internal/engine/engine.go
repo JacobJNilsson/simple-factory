@@ -196,6 +196,18 @@ func (e *Engine) SetRegistration(r Registration) {
 // It returns the session name that the request's caller proves, or an error that refuses the request.
 type Authenticator interface {
 	Authenticate(protocol.Caller) (agent string, err error)
+	// DropEnvToken removes the token file of an ended session that an older sfy started with its token in SFY_TOKEN.
+	DropEnvToken(name string) error
+}
+
+// dropEnvToken removes the env token of a session that ended, when an authenticator is set. A failure goes to the log only.
+func (e *Engine) dropEnvToken(name string) {
+	if e.auth == nil {
+		return
+	}
+	if err := e.auth.DropEnvToken(name); err != nil {
+		e.logf("removing the env token of %s failed: %v", name, err)
+	}
 }
 
 // SetAuth makes the engine take the caller's identity from the session token in each request.
@@ -238,7 +250,7 @@ func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg conf
 		l: l, cfg: cfg, proc: e.proc, logf: e.logf,
 		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },
 		branchOf:    func(t task.Task) string { return e.w.BranchOf(t) },
-		forgetNotes: func(name string) { e.notes.Forget(name) }, agents: map[string]*agentState{}, ended: map[string]bool{}, gone: map[string]bool{},
+		forgetNotes: func(name string) { e.notes.Forget(name) }, dropEnvToken: e.dropEnvToken, agents: map[string]*agentState{}, ended: map[string]bool{}, gone: map[string]bool{},
 	}
 	grace := cfg.NoteFallbackAfter
 	// A config without the setting, as tests build it, gets the default.

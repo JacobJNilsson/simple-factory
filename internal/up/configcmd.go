@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -81,7 +82,7 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	tokens, err := envTokenLines(home)
+	tokens, err := envTokenLines(home, sessionAlive(env))
 	if err != nil {
 		return err
 	}
@@ -106,15 +107,35 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-// envTokenLines returns one line for each session that an older sfy started with its token in SFY_TOKEN.
-func envTokenLines(home string) ([]string, error) {
+// sessionAlive returns the alive check of the launcher that the engine uses. It builds the launcher at the first check.
+// When sfy cannot build the launcher, every check fails with that error.
+func sessionAlive(env func(string) string) func(name string) (bool, error) {
+	build := sync.OnceValues(func() (parts, error) { return newParts(env) })
+	return func(name string) (bool, error) {
+		p, err := build()
+		if err != nil {
+			return false, err
+		}
+		return p.launcher.Alive(name)
+	}
+}
+
+// envTokenLines returns one line for each running session that an older sfy started with its token in SFY_TOKEN.
+// A session whose alive check fails gets a line too, because it may still run.
+func envTokenLines(home string, alive func(name string) (bool, error)) ([]string, error) {
 	names, err := identity.Folder{Home: home}.EnvTokenSessions()
 	if err != nil {
 		return nil, err
 	}
-	lines := make([]string, 0, len(names))
+	var lines []string
 	for _, name := range names {
-		lines = append(lines, fmt.Sprintf("Session %s has a token file and no process record. An older sfy started it with its token in SFY_TOKEN. Restart it if it still runs.", name))
+		runs, err := alive(name)
+		switch {
+		case err != nil:
+			lines = append(lines, fmt.Sprintf("Session %s has a token file and no process record (sfy cannot tell whether it runs). An older sfy started it with its token in SFY_TOKEN. Restart it if it still runs.", name))
+		case runs:
+			lines = append(lines, fmt.Sprintf("Session %s runs with a token file and no process record. An older sfy started it with its token in SFY_TOKEN. Restart it.", name))
+		}
 	}
 	return lines, nil
 }

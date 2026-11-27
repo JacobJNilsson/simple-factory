@@ -119,10 +119,20 @@ func TestShowConfigPrintsValidTOML(t *testing.T) {
 	}
 }
 
-func TestShowConfigListsAndWarnsOfEachSessionWithATokenInTheEnvironment(t *testing.T) {
+// The alive template answers that worker-t1 and worker-t2 run, that worker-t3 is gone, and fails for worker-t4.
+const envTokenMux = `multiplexer = "probe"
+[multiplexers.probe]
+start = "true"
+send = "true"
+stop = "true"
+alive = "case {name} in *worker-t1|*worker-t2) exit 0 ;; *worker-t3) exit 1 ;; *) exit 3 ;; esac"
+`
+
+func TestShowConfigListsAndWarnsOfEachRunningSessionWithATokenInTheEnvironment(t *testing.T) {
 	env, _, home := configFactory(t)
+	writeTestFile(t, filepath.Join(home, "config.toml"), envTokenMux)
 	folder := identity.Folder{Home: home}
-	for _, name := range []string{"worker-t1", "worker-t2"} {
+	for _, name := range []string{"worker-t1", "worker-t2", "worker-t3", "worker-t4"} {
 		if _, err := folder.Issue(name); err != nil {
 			t.Fatal(err)
 		}
@@ -134,11 +144,12 @@ func TestShowConfigListsAndWarnsOfEachSessionWithATokenInTheEnvironment(t *testi
 		t.Fatal(err)
 	}
 
-	line := "Session worker-t1 has a token file and no process record. An older sfy started it with its token in SFY_TOKEN. Restart it if it still runs."
-	if want := "\n# Sessions with a token in the environment\n# " + line + "\n\n# Old names\n"; !strings.Contains(out.String(), want) {
+	runs := "Session worker-t1 runs with a token file and no process record. An older sfy started it with its token in SFY_TOKEN. Restart it."
+	unknown := "Session worker-t4 has a token file and no process record (sfy cannot tell whether it runs). An older sfy started it with its token in SFY_TOKEN. Restart it if it still runs."
+	if want := "\n# Sessions with a token in the environment\n# " + runs + "\n# " + unknown + "\n\n# Old names\n"; !strings.Contains(out.String(), want) {
 		t.Errorf("output lacks %q:\n%s", want, out.String())
 	}
-	if want := "sfy: warning: " + line + "\n"; warn.String() != want {
+	if want := "sfy: warning: " + runs + "\nsfy: warning: " + unknown + "\n"; warn.String() != want {
 		t.Errorf("warnings %q, want %q", warn.String(), want)
 	}
 }

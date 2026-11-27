@@ -120,6 +120,32 @@ func TestEnvTokenSessionsLeavesOutTheRegisteredLead(t *testing.T) {
 	}
 }
 
+func TestDropEnvTokenRemovesOnlyATokenWithoutARecord(t *testing.T) {
+	f := authFolder(t)
+	registered(t, f)
+	for _, name := range []string{"worker-t2", "worker-t3"} {
+		if _, err := f.Issue(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeProcess(t, f, "worker-t2", self(t))
+
+	for _, name := range []string{"lead", "worker-t2", "worker-t3", "worker-t9"} {
+		if err := f.DropEnvToken(name); err != nil {
+			t.Fatalf("DropEnvToken(%s): %v", name, err)
+		}
+	}
+
+	if f.Token("worker-t3") != "" {
+		t.Error("the token of worker-t3, which has no process record, stays")
+	}
+	for _, name := range []string{"lead", "worker-t2"} {
+		if f.Token(name) == "" {
+			t.Errorf("DropEnvToken removed the token of %s", name)
+		}
+	}
+}
+
 func TestIssueRefusesABadSessionName(t *testing.T) {
 	f := Folder{Home: t.TempDir()}
 
