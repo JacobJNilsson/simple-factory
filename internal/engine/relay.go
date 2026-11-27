@@ -25,13 +25,17 @@ func (e *Engine) SetFactories(f Factories) {
 	e.factories = f
 }
 
-// outgoing is a message of the lead to an agent of another factory, which Handle sends after it lets go of the lock.
+// outgoing is a request of the lead to another factory, which Handle sends after it lets go of the lock.
 type outgoing struct {
 	factories Factories
 	factory   string
-	agent     string
-	token     string
-	body      string
+	// command is the relay request, and args are its arguments.
+	command string
+	args    []string
+	token   string
+	body    string
+	// selfHint is the command that the error names when the target is this factory.
+	selfHint string
 }
 
 // relayTarget splits a send target of the form factory/agent.
@@ -57,10 +61,13 @@ func (e *Engine) prepareRelay(req protocol.Request, factory, agent string) (*out
 	if e.factories == nil {
 		return nil, errors.New("this sfy process cannot reach other factories")
 	}
-	return &outgoing{factories: e.factories, factory: factory, agent: agent, token: req.Caller.Token, body: body}, nil
+	return &outgoing{
+		factories: e.factories, factory: factory, command: protocol.RelayCommand, args: []string{agent},
+		token: req.Caller.Token, body: body, selfHint: "sfy send " + agent + " <text>",
+	}, nil
 }
 
-// relayOut sends the message to the other factory's sfy process with the caller's token. That process checks the token.
+// relayOut sends the request to the other factory's sfy process with the caller's token. That process checks the token.
 // It runs without the engine's lock, so two factories that relay to each other at once do not wait on each other.
 func relayOut(o outgoing) protocol.Answer {
 	self, err := o.factories.Self()
@@ -68,12 +75,12 @@ func relayOut(o outgoing) protocol.Answer {
 		return protocol.Answer{Error: err.Error()}
 	}
 	if o.factory == self {
-		return protocol.Answer{Error: fmt.Sprintf("%s is this factory. Run: sfy send %s <text>", self, o.agent)}
+		return protocol.Answer{Error: fmt.Sprintf("%s is this factory. Run: %s", self, o.selfHint)}
 	}
 	req := protocol.Request{
-		Command: protocol.RelayCommand,
+		Command: o.command,
 		Caller:  protocol.Caller{Factory: self, Agent: protocol.Lead, Token: o.token},
-		Args:    []string{o.agent},
+		Args:    o.args,
 		Body:    o.body,
 	}
 	ans, err := o.factories.Call(o.factory, req)
@@ -86,10 +93,26 @@ func relayOut(o outgoing) protocol.Answer {
 // relay takes a message that another factory's sfy process passes on. The token must belong to that factory's lead.
 // The message names the sender as <factory>/lead, so it never shows as the operator's.
 func (e *Engine) relay(req protocol.Request) (string, error) {
-	from := req.Caller.Factory
 	if e.factories == nil {
 		return "", errors.New("this sfy process takes no messages from other factories")
 	}
+	from, err := e.relaySender(req)
+	if err != nil {
+		return "", err
+	}
+	if len(req.Args) == 0 || protocol.AgentName(req.Args[0]) != protocol.Lead {
+		return "", errors.New("a message from another factory may reach only lead")
+	}
+	if req.Body == "" {
+		return "", errors.New("send needs a text")
+	}
+	return "", e.message(protocol.Lead, from+"/"+protocol.Lead, req.Body)
+}
+
+// relaySender checks that a relay comes from the lead of another factory and returns that factory's name.
+// The caller checks first that this process has Factories, because its error names what the relay brings.
+func (e *Engine) relaySender(req protocol.Request) (string, error) {
+	from := req.Caller.Factory
 	if from == "" {
 		return "", errors.New("a relay needs the factory of its sender")
 	}
@@ -106,11 +129,5 @@ func (e *Engine) relay(req protocol.Request) (string, error) {
 	if protocol.AgentName(name) != protocol.Lead {
 		return "", fmt.Errorf("only the lead of factory %s may send to another factory", from)
 	}
-	if len(req.Args) == 0 || protocol.AgentName(req.Args[0]) != protocol.Lead {
-		return "", errors.New("a message from another factory may reach only lead")
-	}
-	if req.Body == "" {
-		return "", errors.New("send needs a text")
-	}
-	return "", e.message(protocol.Lead, from+"/"+protocol.Lead, req.Body)
+	return from, nil
 }
