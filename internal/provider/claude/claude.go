@@ -75,9 +75,11 @@ type network struct {
 }
 
 type permissions struct {
-	DefaultMode string   `json:"defaultMode,omitempty"`
-	Allow       []string `json:"allow"`
-	Deny        []string `json:"deny"`
+	DefaultMode string `json:"defaultMode,omitempty"`
+	// A worker or a reviewer has nobody to answer a dialog. Claude Code then denies the call when the sfy hook gives no decision.
+	DenyInsteadOfPrompting bool     `json:"denyInsteadOfPrompting,omitempty"`
+	Allow                  []string `json:"allow"`
+	Deny                   []string `json:"deny"`
 }
 
 type settings struct {
@@ -229,6 +231,7 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 			"FileChanged": {{Hooks: []hook{a.rewakeHook("note")}}},
 		},
 	}
+	s.Permissions.DenyInsteadOfPrompting = spec.Kind != "lead"
 	switch {
 	case spec.Kind == "lead":
 		// The hook blocks a hand push, merge or rebase in a no-merge repo. sfy task integrate refuses there too.
