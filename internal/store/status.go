@@ -72,11 +72,15 @@ func models(t task.Task) string {
 }
 
 // agents names the sessions that the spec's session names give a task in its state.
+// A task that waits for a push lists only its worker, because its reviewer session has ended.
 func agents(t task.Task) string {
 	switch t.State {
 	case task.Working, task.Feedback:
 		return "worker-" + t.ID
 	case task.Review:
+		if t.Pushing {
+			return "worker-" + t.ID
+		}
 		return fmt.Sprintf("worker-%s, review-%s-%d", t.ID, t.ID, t.Round)
 	}
 	return "-"
