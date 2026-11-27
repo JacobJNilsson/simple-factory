@@ -45,22 +45,87 @@ func Write(path string, r Record) error {
 // Gone reports true only when path holds a record whose process no longer runs, or runs with another start time.
 // A missing or malformed file gives false and no error, because then nothing names a process.
 func Gone(path string) (bool, error) {
-	b, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	if err != nil {
+	r, found, err := Read(path)
+	if err != nil || !found {
 		return false, err
-	}
-	var r Record
-	if json.Unmarshal(b, &r) != nil || r.Pid <= 0 {
-		return false, nil
 	}
 	s, ok, err := start(r.Pid)
 	if err != nil {
 		return false, err
 	}
 	return !ok || s != r.Start, nil
+}
+
+// Read returns the record at path. A missing or malformed file gives false and no error.
+func Read(path string) (Record, bool, error) {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return Record{}, false, nil
+	}
+	if err != nil {
+		return Record{}, false, err
+	}
+	var r Record
+	if json.Unmarshal(b, &r) != nil || r.Pid <= 0 {
+		return Record{}, false, nil
+	}
+	return r, true, nil
+}
+
+// maxDepth limits the walk up the parent chain, so a loop in the process table cannot stall Runs.
+const maxDepth = 64
+
+// Runs reports whether r names the calling process or one of its ancestors, with the same start time.
+// A failed ps is an error and never a yes.
+func Runs(r Record) (bool, error) {
+	if r.Pid <= 0 {
+		return false, nil
+	}
+	parents, err := parentTable()
+	if err != nil {
+		return false, err
+	}
+	pid := os.Getpid()
+	for range maxDepth {
+		if pid == r.Pid {
+			s, ok, err := start(pid)
+			if err != nil {
+				return false, err
+			}
+			return ok && s == r.Start, nil
+		}
+		next, ok := parents[pid]
+		if !ok || pid <= 1 || next == pid {
+			return false, nil
+		}
+		pid = next
+	}
+	return false, nil
+}
+
+// parentTable maps the pid of each running process to the pid of its parent.
+func parentTable() (map[int]int, error) {
+	cmd := exec.CommandContext(context.Background(), "ps", "-A", "-o", "pid=", "-o", "ppid=")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ps -A -o pid= -o ppid=: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	parents := map[int]int{}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		pid, perr := strconv.Atoi(fields[0])
+		ppid, qerr := strconv.Atoi(fields[1])
+		if perr == nil && qerr == nil {
+			parents[pid] = ppid
+		}
+	}
+	return parents, nil
 }
 
 // start returns the start time of process pid. It reports false when no such process runs.
