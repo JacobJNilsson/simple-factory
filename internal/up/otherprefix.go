@@ -40,27 +40,60 @@ func describePrefix(prefix string) string {
 	return "with the name prefix " + prefix
 }
 
+// place is what the current folder holds for the name prefix of a command.
+type place struct {
+	prefix, cwd string
+	// inHome is true in the user's home folder, which is never a working folder.
+	inHome bool
+	// found is the factory folder of the name prefix, or empty.
+	// others are the factory folders of other name prefixes, and lookPlace fills them only when found is empty.
+	found  string
+	others []string
+}
+
+// refusal returns the otherPrefixError for a folder whose factories all have other name prefixes, or nil.
+func (p place) refusal() error {
+	if p.found != "" || len(p.others) == 0 {
+		return nil
+	}
+	return &otherPrefixError{prefix: p.prefix, others: p.others}
+}
+
+// lookPlace finds the factory of the name prefix of env for the folder that getwd returns, and the factories of other name prefixes there.
+func lookPlace(env func(string) string, getwd func() (string, error)) (place, error) {
+	prefix, err := config.NamePrefix(env)
+	if err != nil {
+		return place{}, err
+	}
+	cwd, err := getwd()
+	if err != nil {
+		return place{}, err
+	}
+	userHome := env("HOME")
+	p := place{prefix: prefix, cwd: cwd, inHome: config.CanonicalPath(cwd) == config.CanonicalPath(userHome)}
+	if p.inHome {
+		return p, nil
+	}
+	if found, ok := config.FindFactory(userHome, cwd, prefix); ok {
+		p.found = found
+		return p, nil
+	}
+	p.others = config.FactoriesAt(userHome, cwd)
+	return p, nil
+}
+
 // checkRestartFactory fails when sfy restart has no factory to restart.
 // In a folder whose factories all have other name prefixes, it fails with an otherPrefixError. SFY_HOME skips that check.
 func checkRestartFactory(env func(string) string, getwd func() (string, error)) error {
 	if env("SFY_HOME") != "" {
 		return nil
 	}
-	prefix, err := config.NamePrefix(env)
+	p, err := lookPlace(env, getwd)
 	if err != nil {
 		return err
 	}
-	userHome := env("HOME")
-	cwd, err := getwd()
-	if err != nil {
+	if err := p.refusal(); err != nil {
 		return err
-	}
-	if config.CanonicalPath(cwd) != config.CanonicalPath(userHome) {
-		if _, ok := config.FindFactory(userHome, cwd, prefix); !ok {
-			if others := config.FactoriesAt(userHome, cwd); len(others) > 0 {
-				return &otherPrefixError{prefix: prefix, others: others}
-			}
-		}
 	}
 	_, err = config.Lookup(env)
 	return err

@@ -144,11 +144,11 @@ func TestFactoryEnvRefusesAFolderWithFactoriesOfOtherNamePrefixesOnly(t *testing
 }
 
 func TestOtherPrefixTextNamesEachFactoryAndHowToReachIt(t *testing.T) {
-	text := otherPrefixText("", []string{"/f/ex-web", "/f/web"})
+	text := otherPrefixText("", []string{"/f/web-plain", "/f/web"})
 
 	for _, want := range []string{
 		"no factory without a name prefix",
-		"/f/ex-web has no name prefix. Run sfy with SFY_NAME_PREFIX unset, or set SFY_HOME=/f/ex-web.",
+		"/f/web-plain has no name prefix. Run sfy with SFY_NAME_PREFIX unset, or set SFY_HOME=/f/web-plain.",
 		"Run sfy up --new-factory to make a factory without a name prefix here.",
 	} {
 		if !strings.Contains(text, want) {
