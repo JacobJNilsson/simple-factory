@@ -2,14 +2,17 @@ package envrun_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
 )
@@ -29,7 +32,12 @@ func TestMain(m *testing.M) {
 
 func wrap(t *testing.T, dir string, env []string, clean bool, cmd ...string) []string {
 	t.Helper()
-	argv, err := envrun.Wrap(dir, env, clean, "/opt/sfy", cmd)
+	return wrapRecorded(t, dir, env, clean, false, cmd...)
+}
+
+func wrapRecorded(t *testing.T, dir string, env []string, clean, record bool, cmd ...string) []string {
+	t.Helper()
+	argv, err := envrun.Wrap(dir, env, clean, record, "/opt/sfy", cmd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,13 +100,71 @@ func TestWrapWritesTheEnvFileInsideDir(t *testing.T) {
 	}
 }
 
+func TestWrapAddsTheRecordFlagWhenAsked(t *testing.T) {
+	recorded := envruntest.Parse(t, wrapRecorded(t, t.TempDir(), []string{"A=1"}, true, true, "x"))
+	plain := envruntest.Parse(t, wrapRecorded(t, t.TempDir(), []string{"A=1"}, true, false, "x"))
+
+	if !recorded.Record || !recorded.Clean || plain.Record {
+		t.Errorf("record %+v, plain %+v", recorded, plain)
+	}
+}
+
 // runAsSfy runs `sfy run` through the test binary and returns the environment the command printed.
 func runAsSfy(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+	return runAsSfyWith(t, nil, args...)
+}
+
+// runAsSfyWith runs as runAsSfy, with the extra entries in the environment of sfy run.
+func runAsSfyWith(t *testing.T, extra []string, args ...string) (string, error) {
+	t.Helper()
 	cmd := exec.CommandContext(context.Background(), os.Args[0], append([]string{"x"}, args...)...)
-	cmd.Env = []string{"ENVRUN_AS_SFY=1", "OUTER=kept"}
+	cmd.Env = append([]string{"ENVRUN_AS_SFY=1", "OUTER=kept"}, extra...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+func TestRunWithRecordWritesTheProcessThatTheCommandRunsIn(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(t.TempDir(), "out")
+	argv := wrapRecorded(t, dir, []string{"PATH=/usr/bin:/bin"}, true, true, "sh", "-c", "echo $$ > "+out)
+
+	if text, err := runAsSfy(t, argv[1:]...); err != nil {
+		t.Fatalf("%v\n%s", err, text)
+	}
+
+	r, ok, err := agentproc.Read(filepath.Join(dir, agentproc.ProcessFile))
+	if err != nil || !ok || r.Start == "" {
+		t.Fatalf("record %+v, %v, %v", r, ok, err)
+	}
+	pid, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := strconv.Itoa(r.Pid); strings.TrimSpace(string(pid)) != want {
+		t.Errorf("the command ran as %s, the record names %s", strings.TrimSpace(string(pid)), want)
+	}
+}
+
+func TestRunWithoutRecordWritesNoRecord(t *testing.T) {
+	dir := t.TempDir()
+	argv := wrap(t, dir, []string{"PATH=/usr/bin:/bin"}, true, "true")
+
+	if out, err := runAsSfy(t, argv[1:]...); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, agentproc.ProcessFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("record exists: %v", err)
+	}
+}
+
+func TestRunOverlayDropsAnInheritedToken(t *testing.T) {
+	argv := wrap(t, t.TempDir(), []string{"PATH=/usr/bin:/bin"}, false, "sh", "-c", `test -z "$SFY_TOKEN"`)
+
+	if out, err := runAsSfyWith(t, []string{"SFY_TOKEN=s3cret"}, argv[1:]...); err != nil {
+		t.Errorf("the command sees SFY_TOKEN: %v\n%s", err, out)
+	}
 }
 
 func TestRunCleanExecsWithExactlyTheListedEnvironment(t *testing.T) {

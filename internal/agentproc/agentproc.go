@@ -13,6 +13,9 @@ import (
 	"strings"
 )
 
+// ProcessFile is the name of the record that sfy run writes in a session folder before it replaces itself with the agent.
+const ProcessFile = "process"
+
 // Record names one process. The pair of pid and start time stays unique when the system reuses a pid.
 type Record struct {
 	Pid int `json:"pid"`

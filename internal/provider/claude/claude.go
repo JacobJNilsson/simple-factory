@@ -161,7 +161,7 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	}
 	argv = append(argv, prompt)
 	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.
-	return envrun.Wrap(filepath.Dir(path), env, clean, a.sfyBin, argv)
+	return envrun.Wrap(filepath.Dir(path), env, clean, false, a.sfyBin, argv)
 }
 
 // role returns the prompt of a session. A spec with a Role takes that prompt, and its RepoRole part for a task with a repo.
