@@ -20,6 +20,7 @@ type fakeMux struct {
 	sent          string
 	stopped       string
 	notified      string
+	notes         []string
 	shown         []string
 	shownLead     []string
 	showErr       error
@@ -44,8 +45,12 @@ func (f *fakeMux) Alive(name string) (bool, error) {
 	}
 	return name == "up", nil
 }
-func (f *fakeMux) Stop(name string) error         { f.stopped = name; return nil }
-func (f *fakeMux) Notify(name, text string) error { f.notified = name + ":" + text; return nil }
+func (f *fakeMux) Stop(name string) error { f.stopped = name; return nil }
+func (f *fakeMux) Notify(name, text string) error {
+	f.notified = name + ":" + text
+	f.notes = append(f.notes, f.notified)
+	return nil
+}
 func (f *fakeMux) Show(name string) error {
 	f.shown = append(f.shown, name)
 	return f.showErr
@@ -66,11 +71,22 @@ type fakeProvider struct {
 	deliverErr  error
 	delivered   []string
 	preflight   error
+	// trusted lists the folders that Trust got, and trustErr makes Trust fail. onTrust runs at each Trust call.
+	trusted  []string
+	trustErr error
+	onTrust  func()
 }
 
 func (p *fakeProvider) Preflight(string) error     { return p.preflight }
 func (p *fakeProvider) TrustWarning(string) string { return "" }
-func (p *fakeProvider) Trust(string) error         { return nil }
+
+func (p *fakeProvider) Trust(dir string) error {
+	p.trusted = append(p.trusted, dir)
+	if p.onTrust != nil {
+		p.onTrust()
+	}
+	return p.trustErr
+}
 
 // Deliver takes the text when deliverable is set, and fails with deliverErr when that is set.
 func (p *fakeProvider) Stuck(string) bool            { return false }
@@ -254,6 +270,57 @@ func TestMuxBuiltinAndUnknown(t *testing.T) {
 	var ue *unknownError
 	if !errors.As(err, &ue) || ue.Name != "screenx" {
 		t.Fatalf("error %v does not name the set", err)
+	}
+}
+
+func TestWorkerAndReviewerFoldersAreTrustedBeforeTheSessionStarts(t *testing.T) {
+	for _, kind := range []string{"worker", "reviewer"} {
+		m, p := &fakeMux{}, &fakeProvider{}
+		startsAtTrust := -1
+		p.onTrust = func() { startsAtTrust = len(m.starts) }
+
+		if err := New(m, p, nil).Start(engine.SessionSpec{Name: "a", Kind: kind, Dir: "/w/t1"}); err != nil {
+			t.Fatal(err)
+		}
+
+		if !reflect.DeepEqual(p.trusted, []string{"/w/t1"}) || startsAtTrust != 0 {
+			t.Errorf("%s: trusted %v with %d sessions started", kind, p.trusted, startsAtTrust)
+		}
+	}
+}
+
+func TestTheLeadFolderIsNotTrusted(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{}
+	if err := New(m, p, nil).Start(engine.SessionSpec{Name: "lead", Kind: "lead", Dir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.trusted) != 0 {
+		t.Fatalf("trusted %v", p.trusted)
+	}
+}
+
+func TestFailedTrustIsLoggedAndTheLeadHearsOnce(t *testing.T) {
+	m, p := &fakeMux{}, &fakeProvider{trustErr: errors.New("locked")}
+	var log bytes.Buffer
+	l := New(m, p, &log)
+
+	for _, name := range []string{"worker-t1", "worker-t2"} {
+		if err := l.Start(engine.SessionSpec{Name: name, Kind: "worker", Dir: "/w/" + name}); err != nil {
+			t.Fatalf("start failed: %v", err)
+		}
+	}
+
+	if !reflect.DeepEqual(m.starts, []string{"worker-t1", "worker-t2"}) {
+		t.Errorf("starts %v", m.starts)
+	}
+	for _, name := range []string{"worker-t1", "worker-t2"} {
+		if want := "trust of /w/" + name + " for " + name + " failed: locked"; strings.Count(log.String(), want) != 1 {
+			t.Errorf("log %q lacks %q once", log.String(), want)
+		}
+	}
+	want := []string{"lead:sfy could not mark /w/worker-t1 trusted: locked. The agent may show the trust dialog."}
+	if !reflect.DeepEqual(m.notes, want) {
+		t.Errorf("notes %q, want %q", m.notes, want)
 	}
 }
 

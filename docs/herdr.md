@@ -65,4 +65,4 @@ exit 1
 - To show every agent, put the `show_lead` script in `show` and remove `show_lead`.
 - `escape` uses `hc keys`, whose help names `esc` as a key. Its behavior at a permission prompt is untested.
 - A test loads this example and runs its templates against stub commands, so the file stays valid. See `herdrSet` in `internal/mux/mux_test.go`.
-- A worker that stops at the provider's trust dialog needs the operator. Open that agent's terminal in Herdr and accept the dialog.
+- sfy marks each worker's and reviewer's folder as trusted, so no trust dialog shows.

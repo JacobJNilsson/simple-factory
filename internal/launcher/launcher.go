@@ -4,11 +4,13 @@ package launcher
 import (
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/mux"
+	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/provider"
 )
 
@@ -30,6 +32,8 @@ type launcher struct {
 	adapters map[string]provider.Provider
 	fallback string
 	log      io.Writer
+	// trustTold records that the lead heard about a failed trust mark, so it hears only once in each sfy process.
+	trustTold *atomic.Bool
 }
 
 // resumeGrace is how long a resumed lead must run before sfy counts the resume as working.
@@ -47,7 +51,7 @@ func New(m mux.Mux, p provider.Provider, log io.Writer) Launcher {
 // fallback names the adapter of a spec with no harness, such as the lead. A harness with no adapter fails to start.
 // CONTRACT: callers take an interface, so WithAdapters returns it.
 func WithAdapters(m mux.Mux, adapters map[string]provider.Provider, fallback string, log io.Writer) Launcher {
-	return launcher{Mux: m, adapters: adapters, fallback: fallback, log: log}
+	return launcher{Mux: m, adapters: adapters, fallback: fallback, log: log, trustTold: new(atomic.Bool)}
 }
 
 // UnknownHarnessError reports a session harness that the launcher has no adapter for.
@@ -174,6 +178,9 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 	if err := p.Preflight(spec.Kind); err != nil {
 		return err
 	}
+	if spec.Kind == "worker" || spec.Kind == "reviewer" {
+		l.trust(p, spec)
+	}
 	argv, err := p.Command(spec)
 	if err != nil {
 		return err
@@ -189,6 +196,29 @@ func (l launcher) begin(spec engine.SessionSpec) error {
 		_, _ = fmt.Fprintf(l.log, "%s show of %s failed: %v\n", time.Now().Format(time.RFC3339), spec.Name, err)
 	}
 	return nil
+}
+
+// trust asks the provider to trust the session's folder, so the agent shows no trust dialog.
+// A failure never stops the start. sfy logs each failure and tells the lead about the first one of this process.
+func (l launcher) trust(p provider.Provider, spec engine.SessionSpec) {
+	err := p.Trust(spec.Dir)
+	if err == nil {
+		return
+	}
+	l.logf("trust of %s for %s failed: %v", spec.Dir, spec.Name, err)
+	if l.trustTold.Swap(true) {
+		return
+	}
+	text := fmt.Sprintf("sfy could not mark %s trusted: %v. The agent may show the trust dialog.", spec.Dir, err)
+	if err := l.Notify(protocol.Lead, text); err != nil {
+		l.logf("note to the lead about the trust of %s failed: %v", spec.Dir, err)
+	}
+}
+
+func (l launcher) logf(format string, args ...any) {
+	if l.log != nil {
+		_, _ = fmt.Fprintf(l.log, "%s %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, args...))
+	}
 }
 
 // TrustWarning asks the provider whether it would stop at a trust prompt for dir.
