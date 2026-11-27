@@ -37,6 +37,7 @@ All commands below are marked "read in help" for their syntax. Their exact behav
 | Alive | `rex block call -s {name} process` | syntax read in help, output untested |
 | Stop | `rex kill {name}` | read in help |
 | Show | `rex do session.select session_id={name}` | syntax read in help, needs Remote Control |
+| Escape | `rex send-key -s {name} escape` | syntax read in help, behavior untested. The help names no Escape key, so the key name `escape` is untested too |
 
 ### Start
 
@@ -188,6 +189,9 @@ stop = '''
 '''
 whoami = '''
 printf '%s' "$REX_SESSION"
+'''
+escape = '''
+"/Users/<you>/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS/rex" send-key -s {name} escape
 '''
 ```
 

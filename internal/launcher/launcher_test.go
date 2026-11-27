@@ -54,6 +54,7 @@ func (f *fakeMux) ShowLead(name string) error {
 	f.shownLead = append(f.shownLead, name)
 	return f.showErr
 }
+func (f *fakeMux) Escape(string) error { return nil }
 
 type fakeProvider struct {
 	spec  engine.SessionSpec
