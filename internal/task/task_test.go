@@ -235,3 +235,22 @@ func TestParseGivesANilSliceForAnEmptyProtectedSection(t *testing.T) {
 		t.Fatalf("got %#v, %v", got.Protected, err)
 	}
 }
+
+func TestFactorySourceNamesOnlyTheLeadOfAnotherFactory(t *testing.T) {
+	if got := (task.Task{Source: "a/lead"}).FactorySource(); got != "a/lead" {
+		t.Fatalf("a/lead gives %q", got)
+	}
+	for _, source := range []string{"lead", "operator", "drop:alerts", "a/worker-t1", "a/b/lead", "/lead"} {
+		if got := (task.Task{Source: source}).FactorySource(); got != "" {
+			t.Fatalf("%s gives %q", source, got)
+		}
+	}
+}
+
+func TestShownTitleNamesTheLeadOfAnotherFactory(t *testing.T) {
+	got := task.Task{Title: "Fix it", Source: "a/lead"}.ShownTitle()
+
+	if got != "Fix it (from a/lead)" {
+		t.Fatalf("got %q", got)
+	}
+}
