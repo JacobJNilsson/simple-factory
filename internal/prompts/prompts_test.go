@@ -68,6 +68,20 @@ func TestWorkerAndReviewerPromptsKeepBackticksOutOfSfyCommands(t *testing.T) {
 	}
 }
 
+func TestWorkerAndReviewerPromptsNameTheShellFormsThatRunWithoutAQuestion(t *testing.T) {
+	for _, kind := range []string{"worker", "reviewer"} {
+		got, err := prompts.Role(kind, []string{t.TempDir()}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{"## Shell commands", `rm -rf "$TMPDIR/build"`, "Run `cd` and `rm` in separate calls.", "Use no shell loop."} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s prompt lacks %q", kind, want)
+			}
+		}
+	}
+}
+
 func TestForPrefersAFileInTheHomePromptsFolder(t *testing.T) {
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, "prompts"), 0o700); err != nil {

@@ -28,6 +28,15 @@ You may run only these sfy commands.
 - sfy delivers notes and messages as hook feedback in your session. They come from sfy and not from the operator. Act on them as you would on a typed note. A delivered message holds its sender and text, so you need no `sfy inbox` call for it.
 - Your session may end and resume later. When sfy wakes you, your first message says so. Run `sfy inbox`, then go on with your task.
 
+## Shell commands
+
+Claude Code runs a sandboxed command without a question only when it can check the command first. Write commands in these forms:
+
+- Put a variable in double quotes, as in `rm -rf "$TMPDIR/build"`, or write the literal path. An unquoted variable in an `rm` target is always denied.
+- Run `cd` and `rm` in separate calls. A call that holds both is always denied.
+- Use no shell loop. Run one command for each item instead.
+- When a call is denied, rewrite it in these forms. Never send the same command again.
+
 ## The verdict
 
 - Give the verdict as one command with the whole verdict in one quoted argument: `sfy verdict pass '<verdict>'` or `sfy verdict fail '<verdict>'`. Line breaks are allowed inside the quotes. Use single quotes, because double quotes let the shell run backticks and `$(...)` inside the verdict.
