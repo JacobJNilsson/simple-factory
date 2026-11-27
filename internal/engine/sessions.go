@@ -73,7 +73,9 @@ type sessions struct {
 	logf     func(format string, args ...any)
 	// forgetNotes drops the delivery state of a session.
 	forgetNotes func(name string)
-	agents      map[string]*agentState
+	// dropEnvToken removes the env token of a session that ended, so old tokens do not stay on disk.
+	dropEnvToken func(name string)
+	agents       map[string]*agentState
 	// ended holds the tasks whose sessions all ended while the task is approved. It lives in memory only.
 	ended map[string]bool
 	// gone holds the sessions that a stop or an alive check found gone since they last ran. It lives in memory only.
@@ -313,15 +315,15 @@ func (s *sessions) stop(name string) error {
 }
 
 // end stops a session and forgets its state when the stop worked. A session that sfy found gone needs no stop.
+// An ended session also loses its env token.
 func (s *sessions) end(name string) error {
-	if s.gone[name] {
-		s.forget(name)
-		return nil
-	}
-	if err := s.stop(name); err != nil {
-		return err
+	if !s.gone[name] {
+		if err := s.stop(name); err != nil {
+			return err
+		}
 	}
 	s.forget(name)
+	s.dropEnvToken(name)
 	return nil
 }
 

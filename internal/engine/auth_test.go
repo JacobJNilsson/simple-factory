@@ -20,6 +20,8 @@ func (fakeAuth) Authenticate(c protocol.Caller) (string, error) {
 	return "", errors.New("refused by the authenticator")
 }
 
+func (fakeAuth) DropEnvToken(string) error { return nil }
+
 func authEnv(t *testing.T) env {
 	t.Helper()
 	v := newEnv(t)
