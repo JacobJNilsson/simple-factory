@@ -29,13 +29,12 @@ const (
 
 const usage = `usage:
   sfy                  start sfy (operator only)
-  sfy up               same as sfy (operator only)
+  sfy up [--headless]  same as sfy, and --headless starts only the sfy process, detached (operator only)
   sfy register         make the running agent session the lead (not for started agents)
   sfy hooks install    add sfy's hooks to the user's Claude Code settings (operator only)
   sfy config           print the factory's merged settings and prompt files, with the file behind each
   sfy help
-  sfy task new <file|->
-  sfy task new --factory <factory> <file|->
+  sfy task new [--factory <factory>] <file|->
   sfy task list [--archived]
   sfy task show <id>
   sfy task edit <id> <file>
@@ -56,12 +55,24 @@ const usage = `usage:
   sfy unstick <agent>  press Escape at a worker's or reviewer's permission prompt (lead only)
   sfy status
   sfy down             stop all agents and the sfy process (operator only)
-  sfy restart          restart the sfy process and keep the agents running (--update runs brew upgrade first)
+  sfy restart [--update]
+                       restart the sfy process and keep the agents running (--update upgrades sfy first)
   sfy hook <event>
   sfy hook note        print the delivered notes to stderr and exit 2 (a hook of the session's settings)
   sfy hook note-watch  print the SessionStart output that names the note file (a hook of the session's settings)
   sfy hook merge-guard block a hand push, merge or rebase in a no-merge repo (a hook of the lead's settings)
   sfy hook --user <event>
+
+settings:
+  ~/.sfy/config.toml holds global keys, such as headless = true, max_workers and check_timeout.
+  sfy config prints the merged settings and the file behind each key.
+  README.md and docs/configuration.md describe every key:
+  https://github.com/JacobJNilsson/simple-factory/blob/main/docs/configuration.md
+
+factories:
+  sfy runs the factory of the current folder. SFY_HOME=<folder> picks a factory folder by hand.
+  A wrapper command sets SFY_NAME_PREFIX, such as ex-. It reaches its own factory, not the one of plain sfy.
+  Run the wrapper's command to reach its factory. The first line of sfy config names the factory.
 `
 
 // PrintUsage writes the usage text to w.

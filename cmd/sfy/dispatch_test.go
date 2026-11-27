@@ -27,7 +27,7 @@ func TestDispatch(t *testing.T) {
 	}{
 		{"operator bare sfy starts", nil, "", 0, leadStart, "", ""},
 		{"agent bare sfy prints usage", nil, "lead", 1, noStart, "", "usage:"},
-		{"help prints usage", []string{"help"}, "", 0, noStart, "usage:", ""},
+		{"help prints usage", []string{"help"}, "", 0, noStart, "--headless", ""},
 		{"help for an agent prints usage", []string{"help"}, "worker", 0, noStart, "usage:", ""},
 		{"--help prints usage", []string{"--help"}, "", 0, noStart, "usage:", ""},
 		{"operator sfy up starts with a lead", []string{"up"}, "", 0, leadStart, "", ""},
