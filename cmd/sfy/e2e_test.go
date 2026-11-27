@@ -123,12 +123,13 @@ stop = "` + tm + ` kill-session -t ={name}"
 	})
 
 	// A private HOME keeps the sfy processes from reading the config.d overrides of the user's own ~/.sfy.
+	// An empty CLAUDE_CONFIG_DIR keeps a worker start from marking trust in the user's own Claude Code config.
 	userHome := filepath.Join(tmp, "u")
 	if err := os.MkdirAll(userHome, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	env := append(withoutSfyVars(os.Environ()),
-		"HOME="+userHome, "SFY_HOME="+home, "TMUX=",
+		"HOME="+userHome, "SFY_HOME="+home, "TMUX=", "CLAUDE_CONFIG_DIR=",
 		"PATH="+fakeDir+string(os.PathListSeparator)+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
 	return home, func(agent, stdin string, args ...string) (string, error) {
