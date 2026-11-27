@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // Factories reaches the other factories on this machine.
@@ -67,6 +68,37 @@ func (e *Engine) prepareRelay(req protocol.Request, factory, agent string) (*out
 	}, nil
 }
 
+// taskRelayTarget returns the factory of a "task new --factory <factory>" request.
+func taskRelayTarget(req protocol.Request) (factory string, ok bool) {
+	if req.Command != "task new" || len(req.Args) == 0 || req.Args[0] != "--factory" {
+		return "", false
+	}
+	if len(req.Args) < 2 {
+		return "", true
+	}
+	return req.Args[1], true
+}
+
+// prepareTaskRelay checks a task for another factory and returns what relayOut sends. Only the lead may create one there.
+func (e *Engine) prepareTaskRelay(req protocol.Request, factory string) (*outgoing, error) {
+	if req.Caller.Agent == "" {
+		return nil, fmt.Errorf("the operator has no session token to relay with. Run: SFY_HOME=<factory folder of %s> sfy task new <file>", factory)
+	}
+	if factory == "" {
+		return nil, errors.New("task new --factory needs the name of a factory")
+	}
+	if req.Body == "" {
+		return nil, errors.New("task new needs a task file")
+	}
+	if e.factories == nil {
+		return nil, errors.New("this sfy process cannot reach other factories")
+	}
+	return &outgoing{
+		factories: e.factories, factory: factory, command: protocol.RelayTaskCommand,
+		token: req.Caller.Token, body: req.Body, selfHint: "sfy task new <file>",
+	}, nil
+}
+
 // relayOut sends the request to the other factory's sfy process with the caller's token. That process checks the token.
 // It runs without the engine's lock, so two factories that relay to each other at once do not wait on each other.
 func relayOut(o outgoing) protocol.Answer {
@@ -107,6 +139,36 @@ func (e *Engine) relay(req protocol.Request) (string, error) {
 		return "", errors.New("send needs a text")
 	}
 	return "", e.message(protocol.Lead, from+"/"+protocol.Lead, req.Body)
+}
+
+// relayTask takes a task that another factory's sfy process passes on. The token must belong to that factory's lead.
+// The task starts in new with the source <factory>/lead, so this factory's lead prepares it. The answer is the id, then any warning.
+func (e *Engine) relayTask(req protocol.Request) (string, error) {
+	if e.factories == nil {
+		return "", errors.New("this sfy process takes no tasks from other factories")
+	}
+	from, err := e.relaySender(req)
+	if err != nil {
+		return "", err
+	}
+	t, err := task.Parse(req.Body)
+	if err != nil {
+		return "", err
+	}
+	t, warning, err := e.createTask(t, from+"/"+protocol.Lead)
+	if err != nil {
+		return "", err
+	}
+	if warning != "" {
+		return t.ID + "\n" + warning, nil
+	}
+	return t.ID, nil
+}
+
+// leadOf describes a factory source such as a/lead as "the lead of factory a".
+func leadOf(source string) string {
+	factory, _, _ := strings.Cut(source, "/")
+	return "the lead of factory " + factory
 }
 
 // relaySender checks that a relay comes from the lead of another factory and returns that factory's name.

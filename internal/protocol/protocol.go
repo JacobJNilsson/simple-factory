@@ -16,6 +16,9 @@ type Caller struct {
 // RelayCommand is the request that one factory's sfy process sends to another, to pass on a message of its lead.
 const RelayCommand = "relay"
 
+// RelayTaskCommand is the request that one factory's sfy process sends to another, to pass on a task of its lead.
+const RelayTaskCommand = "relay task"
+
 // Request is one command from the CLI.
 type Request struct {
 	Caller Caller
