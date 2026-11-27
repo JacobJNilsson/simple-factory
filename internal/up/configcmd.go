@@ -15,6 +15,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 )
@@ -26,8 +27,8 @@ var promptKinds = []string{"lead", "worker", prompts.WorkerRepoPart, "reviewer"}
 const hiddenValue = "<set>"
 
 // ShowConfig prints the flat result of the factory that config.Home finds: the settings with the file behind each key,
-// the prompt files of each kind in append order, the skills, the factory files, and the old names. It reads files only and creates no factory.
-// Each old name also gets a warning line on stderr.
+// the prompt files of each kind in append order, the skills, the factory files, the sessions with a token in the environment, and the old names.
+// It reads files only and creates no factory. Each listed session and each old name also gets a warning line on stderr.
 func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	home, userHome := config.Home(env), env("HOME")
 	cfg, proc, err := loadDefinition(home, userHome)
@@ -80,6 +81,15 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	tokens, err := envTokenLines(home)
+	if err != nil {
+		return err
+	}
+	// A later release stops reading SFY_TOKEN, and it waits until no factory lists a session here.
+	out.WriteString("\n# Sessions with a token in the environment\n")
+	for _, line := range tokens {
+		fmt.Fprintf(&out, "# %s\n", line)
+	}
 	// A later release removes the old names, and it waits until no factory lists one here.
 	out.WriteString("\n# Old names\n")
 	for _, line := range old {
@@ -88,12 +98,25 @@ func ShowConfig(env func(string) string, stdout, stderr io.Writer) error {
 	if _, err = io.WriteString(stdout, out.String()); err != nil {
 		return err
 	}
-	for _, line := range old {
+	for _, line := range append(tokens, old...) {
 		if _, err := fmt.Fprintln(stderr, "sfy: warning: "+line); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// envTokenLines returns one line for each session that an older sfy started with its token in SFY_TOKEN.
+func envTokenLines(home string) ([]string, error) {
+	names, err := identity.Folder{Home: home}.EnvTokenSessions()
+	if err != nil {
+		return nil, err
+	}
+	lines := make([]string, 0, len(names))
+	for _, name := range names {
+		lines = append(lines, fmt.Sprintf("Session %s has a token file and no process record. An older sfy started it with its token in SFY_TOKEN. Restart it if it still runs.", name))
+	}
+	return lines, nil
 }
 
 // writeLayers writes the layers, lowest first, each with its role, and then each skipped override with its reason.

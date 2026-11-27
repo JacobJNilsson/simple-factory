@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
@@ -86,6 +87,36 @@ func TestIssueRemovesTheProcessRecordOfAnEarlierStart(t *testing.T) {
 
 	if _, err := os.Stat(f.processPath("worker-t1")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the old record stays: %v", err)
+	}
+}
+
+func TestEnvTokenSessionsListsEachSessionWithATokenAndNoRecord(t *testing.T) {
+	f := authFolder(t)
+	for _, name := range []string{"worker-t2", "worker-t3"} {
+		if _, err := f.Issue(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeProcess(t, f, "worker-t2", self(t))
+	if err := os.MkdirAll(filepath.Join(f.Home, "sessions", "serve"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := f.EnvTokenSessions()
+
+	if want := []string{"lead", "worker-t1", "worker-t3"}; err != nil || !slices.Equal(got, want) {
+		t.Errorf("got %v, %v, want %v", got, err, want)
+	}
+}
+
+func TestEnvTokenSessionsLeavesOutTheRegisteredLead(t *testing.T) {
+	f := authFolder(t)
+	registered(t, f)
+
+	got, err := f.EnvTokenSessions()
+
+	if want := []string{"worker-t1"}; err != nil || !slices.Equal(got, want) {
+		t.Errorf("got %v, %v, want %v", got, err, want)
 	}
 }
 

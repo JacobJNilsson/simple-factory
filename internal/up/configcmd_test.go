@@ -10,7 +10,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/identity"
 )
 
 // configFactory returns the env of a factory acme below a fresh user home, and the factory folder.
@@ -114,6 +116,30 @@ func TestShowConfigPrintsValidTOML(t *testing.T) {
 	var decoded map[string]any
 	if _, err := toml.Decode(showConfig(t, env), &decoded); err != nil {
 		t.Fatalf("the output is not TOML: %v", err)
+	}
+}
+
+func TestShowConfigListsAndWarnsOfEachSessionWithATokenInTheEnvironment(t *testing.T) {
+	env, _, home := configFactory(t)
+	folder := identity.Folder{Home: home}
+	for _, name := range []string{"worker-t1", "worker-t2"} {
+		if _, err := folder.Issue(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTestFile(t, filepath.Join(home, "sessions", "worker-t2", agentproc.ProcessFile), `{"pid":1,"start":"any"}`)
+	var out, warn strings.Builder
+
+	if err := ShowConfig(env, &out, &warn); err != nil {
+		t.Fatal(err)
+	}
+
+	line := "Session worker-t1 has a token file and no process record. An older sfy started it with its token in SFY_TOKEN. Restart it if it still runs."
+	if want := "\n# Sessions with a token in the environment\n# " + line + "\n\n# Old names\n"; !strings.Contains(out.String(), want) {
+		t.Errorf("output lacks %q:\n%s", want, out.String())
+	}
+	if want := "sfy: warning: " + line + "\n"; warn.String() != want {
+		t.Errorf("warnings %q, want %q", warn.String(), want)
 	}
 }
 
