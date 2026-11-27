@@ -48,6 +48,7 @@ type handFlag struct {
 var handFlags = []handFlag{
 	{command: "up", flag: "--headless"},
 	{command: "restart", flag: "--update"},
+	{command: "restart", flag: "--headless"},
 	{command: "factory-folder", flag: "--create", unlisted: true},
 }
 
@@ -135,13 +136,28 @@ func (a app) run(args []string) int {
 		}
 		return a.report(up.InstallHooks(a.getenv, a.stdout))
 	case "restart":
-		update := len(args) == 2 && args[1] == "--update"
-		if len(args) > 1 && !update {
-			return a.report(fmt.Errorf("usage: sfy restart [--update]"))
+		update, headless, ok := restartFlags(args[1:])
+		if !ok {
+			return a.report(fmt.Errorf("usage: sfy restart [--update] [--headless]"))
 		}
-		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, version, update))
+		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, version, update, headless))
 	}
 	return cli.Run(args, a.getenv, a.stdin, a.stdout, a.stderr)
+}
+
+// restartFlags reads the flags of sfy restart in any order. It reports false for any other word and for a repeated flag.
+func restartFlags(args []string) (update, headless, ok bool) {
+	for _, arg := range args {
+		switch {
+		case arg == "--update" && !update:
+			update = true
+		case arg == "--headless" && !headless:
+			headless = true
+		default:
+			return false, false, false
+		}
+	}
+	return update, headless, true
 }
 
 func (a app) report(err error) int {

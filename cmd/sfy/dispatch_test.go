@@ -15,6 +15,27 @@ const (
 	headlessStart
 )
 
+func TestRestartFlags(t *testing.T) {
+	cases := []struct {
+		args                 []string
+		update, headless, ok bool
+	}{
+		{nil, false, false, true},
+		{[]string{"--update"}, true, false, true},
+		{[]string{"--headless"}, false, true, true},
+		{[]string{"--update", "--headless"}, true, true, true},
+		{[]string{"--headless", "--update"}, true, true, true},
+		{[]string{"--update", "--update"}, false, false, false},
+		{[]string{"x"}, false, false, false},
+	}
+	for _, tc := range cases {
+		update, headless, ok := restartFlags(tc.args)
+		if update != tc.update || headless != tc.headless || ok != tc.ok {
+			t.Errorf("restartFlags(%q) = %v %v %v, want %v %v %v", tc.args, update, headless, ok, tc.update, tc.headless, tc.ok)
+		}
+	}
+}
+
 func TestDispatch(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -37,6 +58,8 @@ func TestDispatch(t *testing.T) {
 		{"up takes only --headless", []string{"up", "--help"}, "", 2, noStart, "", "usage: sfy up [--headless]"},
 		{"up takes --headless alone", []string{"up", "--headless", "x"}, "", 2, noStart, "", "usage: sfy up [--headless]"},
 		{"bare --headless is no command", []string{"--headless"}, "", 2, noStart, "", "usage:"},
+		{"restart refuses another word", []string{"restart", "--help"}, "", 1, noStart, "", "usage: sfy restart [--update] [--headless]"},
+		{"restart refuses a repeated flag", []string{"restart", "--headless", "--headless"}, "", 1, noStart, "", "usage: sfy restart"},
 		{"agent sfy register prints usage", []string{"register"}, "lead", 1, noStart, "", "usage:"},
 		{"worker sfy register is refused", []string{"register"}, "worker-t1", 1, noStart, "", "may not run"},
 		{"worker sfy run is refused", []string{"run", "-i", "env", "--", "id"}, "worker-t1", 1, noStart, "", "may not run"},

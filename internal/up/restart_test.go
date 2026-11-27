@@ -253,7 +253,7 @@ func TestRestartRefusesWorkersAndReviewers(t *testing.T) {
 			return ""
 		}
 		var out, errOut strings.Builder
-		if err := Restart(nil, env, &out, &errOut, "dev", false); !errors.Is(err, ErrNotAllowed) {
+		if err := Restart(nil, env, &out, &errOut, "dev", false, false); !errors.Is(err, ErrNotAllowed) {
 			t.Errorf("agent %s: err = %v", agent, err)
 		}
 	}

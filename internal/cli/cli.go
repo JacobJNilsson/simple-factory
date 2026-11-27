@@ -55,8 +55,9 @@ const usage = `usage:
   sfy unstick <agent>  press Escape at a worker's or reviewer's permission prompt (lead only)
   sfy status
   sfy down             stop all agents and the sfy process (operator only)
-  sfy restart [--update]
-                       restart the sfy process and keep the agents running (--update upgrades sfy first)
+  sfy restart [--update] [--headless]
+                       restart the sfy process and keep the agents running (--update upgrades sfy first,
+                       --headless starts the new process detached and no lead)
   sfy hook <event>
   sfy hook note        print the delivered notes to stderr and exit 2 (a hook of the session's settings)
   sfy hook note-watch  print the SessionStart output that names the note file (a hook of the session's settings)

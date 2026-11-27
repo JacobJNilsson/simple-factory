@@ -30,8 +30,8 @@ type updater struct {
 	brew func(environ []string, args ...string) ([]byte, error)
 	// release downloads the newest GitHub release over the running binary and returns the binary's path.
 	release func(ctx context.Context, stdout io.Writer) (string, error)
-	// rerun runs sfy restart through the upgraded binary. An empty bin means the sfy that PATH names.
-	rerun func(bin string, environ []string, stdout, stderr io.Writer) error
+	// rerun runs sfy restart through the upgraded binary, with --headless when headless is set. An empty bin means the sfy that PATH names.
+	rerun func(bin string, headless bool, environ []string, stdout, stderr io.Writer) error
 }
 
 // systemUpdater uses the real brew, the real GitHub release and the real upgraded binary.
@@ -69,7 +69,7 @@ func (e *brewError) Unwrap() error { return e.err }
 
 // runNewBinary runs sfy restart through the upgraded binary, which bin names or, when bin is empty, PATH names.
 // The new binary reads and validates the config. The error is the text that it printed.
-func runNewBinary(bin string, environ []string, stdout, stderr io.Writer) error {
+func runNewBinary(bin string, headless bool, environ []string, stdout, stderr io.Writer) error {
 	path := bin
 	if path == "" {
 		var err error
@@ -78,7 +78,7 @@ func runNewBinary(bin string, environ []string, stdout, stderr io.Writer) error 
 		}
 	}
 	var errBuf bytes.Buffer
-	cmd := exec.CommandContext(context.Background(), path, "restart")
+	cmd := exec.CommandContext(context.Background(), path, restartArgs(headless)...)
 	cmd.Env = environ
 	cmd.Stdout = stdout
 	cmd.Stderr = &errBuf
@@ -93,10 +93,19 @@ func runNewBinary(bin string, environ []string, stdout, stderr io.Writer) error 
 	return nil
 }
 
+// restartArgs returns the arguments of the sfy restart that the upgraded binary runs.
+func restartArgs(headless bool) []string {
+	if headless {
+		return []string{"restart", "--headless"}
+	}
+	return []string{"restart"}
+}
+
 // updateAndRestart upgrades sfy before it reads the config, because a config written for the new version can fail the old one.
 // A Homebrew install upgrades through brew. Any other install downloads the newest release.
 // A failed upgrade stops before anything restarts. After the upgrade, the new binary restarts sfy and validates the config.
-func (u updater) updateAndRestart(environ []string, stdout, stderr io.Writer) error {
+// With headless set, the new binary restarts with --headless.
+func (u updater) updateAndRestart(environ []string, stdout, stderr io.Writer, headless bool) error {
 	bin := ""
 	if u.brewInstalled() {
 		if err := upgrade(options{environ: environ, brew: u.brew, out: stdout}); err != nil {
@@ -108,7 +117,7 @@ func (u updater) updateAndRestart(environ []string, stdout, stderr io.Writer) er
 			return err
 		}
 	}
-	return u.rerun(bin, environ, stdout, stderr)
+	return u.rerun(bin, headless, environ, stdout, stderr)
 }
 
 // brewRun runs one brew command and wraps a failure in a brewError that carries brew's output.

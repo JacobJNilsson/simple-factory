@@ -402,21 +402,23 @@ func factoryEnv(env func(string) string, getwd func() (string, error), note io.W
 // With update set, it upgrades through brew or from the newest GitHub release before it reads the config, and restarts only when that succeeds.
 // version is the running sfy version, which the release update compares with the newest tag.
 // The upgraded binary then reads the config, because a config written for the new version can fail the old one.
-func Restart(environ []string, env func(string) string, stdout, stderr io.Writer, version string, update bool) error {
-	return restartWith(systemUpdater(version), environ, env, stdout, stderr, update)
+// With headless set, the new sfy process runs detached and no lead starts, as sfy restart --headless says.
+func Restart(environ []string, env func(string) string, stdout, stderr io.Writer, version string, update, headless bool) error {
+	return restartWith(systemUpdater(version), environ, env, stdout, stderr, update, headless)
 }
 
-func restartWith(u updater, environ []string, env func(string) string, stdout, stderr io.Writer, update bool) error {
+func restartWith(u updater, environ []string, env func(string) string, stdout, stderr io.Writer, update, headless bool) error {
 	if !mayRestart(env("SFY_AGENT")) {
 		return ErrNotAllowed
 	}
 	if update {
-		return u.updateAndRestart(environ, stdout, stderr)
+		return u.updateAndRestart(environ, stdout, stderr, headless)
 	}
 	o, err := newOptions(environ, env, stdout, stderr)
 	if err != nil {
 		return err
 	}
+	o.headless = headless
 	warnOldNames(o.warn, o.home, env("HOME"))
 	warnSkipped(o.warn, o.home, env("HOME"))
 	return restart(o)
