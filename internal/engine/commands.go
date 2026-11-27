@@ -684,7 +684,16 @@ func (e *Engine) reportBlocked(req protocol.Request) (string, error) {
 		return "", err
 	}
 	note := fmt.Sprintf("Task %s is blocked: %s", t.ID, text(req, req.Args))
-	return "", e.message("lead", req.Caller.Agent, note)
+	if err := e.message("lead", req.Caller.Agent, note); err != nil {
+		return "", err
+	}
+	// The slot note names blocked workers only, because a reviewer holds no slot of its own.
+	if k, _ := e.kindOf(req.Caller.Agent); k == worker {
+		if s := e.sess.agent(req.Caller.Agent); s.blockedAt.IsZero() {
+			s.blockedAt = e.c.Now()
+		}
+	}
+	return "", nil
 }
 
 func (e *Engine) reportProgress(req protocol.Request) (string, error) {

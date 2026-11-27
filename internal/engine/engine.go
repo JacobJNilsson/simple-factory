@@ -127,6 +127,10 @@ type Engine struct {
 	cleanupWait map[string]int
 	// depNoted holds the "task>dependency" pairs for which sfy told the lead that the dependency is cancelled.
 	depNoted map[string]bool
+	// slotWait holds when sfy first saw each ready queued task without a free slot, in memory only.
+	slotWait map[string]time.Time
+	// slotNoted holds the queued tasks for which sfy told the lead that they wait for a slot.
+	slotNoted map[string]bool
 	// ck runs the check commands of tasks. Without it, a task with a check goes to review at once.
 	ck Checker
 	// checking holds the check that runs for each task, in memory only.
@@ -213,7 +217,7 @@ func (e *Engine) logf(format string, args ...any) {
 // New returns an Engine that works through the given store and interfaces.
 // ch gives notes to sessions without typing. A nil ch means that every note is typed.
 func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg config.Config, c Clock) *Engine {
-	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default()}
+	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, slotWait: map[string]time.Time{}, slotNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default()}
 	e.sess = &sessions{
 		l: l, cfg: cfg, proc: e.proc, logf: e.logf,
 		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },
@@ -443,11 +447,28 @@ func allowedBy(k kind) string {
 	return strings.Join(names, ", ")
 }
 
-// noteCommand records what a successful command means for the caller's session.
+// noteCommand records what a successful command means for the caller's session, and for a worker that the lead answers.
 // Only a worker or a reviewer has a report to track.
 func (e *Engine) noteCommand(req protocol.Request) {
-	if strings.HasPrefix(req.Command, "report ") {
+	switch {
+	case strings.HasPrefix(req.Command, "report "):
 		s := e.sess.agent(req.Caller.Agent)
 		s.reported, s.reminders = true, 0
+		if req.Command != "report blocked" {
+			s.blockedAt = time.Time{}
+		}
+	case req.Command == "send" && req.Caller.Agent == protocol.Lead && len(req.Args) > 0:
+		e.clearBlock(req.Args[0])
+	case req.Command == "task feedback" && len(req.Args) > 0:
+		if t, err := e.st.Task(req.Args[0]); err == nil {
+			e.clearBlock(e.workerOf(t))
+		}
+	}
+}
+
+// clearBlock forgets that a worker reported blocked. It keeps no state for a session that sfy does not know.
+func (e *Engine) clearBlock(name string) {
+	if s := e.sess.agents[name]; s != nil {
+		s.blockedAt = time.Time{}
 	}
 }
