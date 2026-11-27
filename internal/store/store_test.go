@@ -314,6 +314,18 @@ func TestRenderStatusNamesTheWorkerAndReviewerOfATaskInReview(t *testing.T) {
 	}
 }
 
+func TestRenderStatusNamesOnlyTheWorkerOfATaskThatWaitsForAPush(t *testing.T) {
+	tk := sample("t3", task.Review)
+	tk.Round = 2
+	tk.Pushing = true
+
+	out := store.RenderStatus([]task.Task{tk})
+
+	if !strings.Contains(out, "| worker-t3 |") || strings.Contains(out, "review-t3-2") {
+		t.Fatalf("want only the worker:\n%s", out)
+	}
+}
+
 func TestRenderStatusShowsTheModelsThatATaskSets(t *testing.T) {
 	tk := sample("t3", task.Working)
 	tk.Model, tk.ReviewerModel = "opus", "haiku"

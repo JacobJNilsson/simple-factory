@@ -196,6 +196,17 @@ func TestAPassedFirstReviewTellsTheWorkerToPushAndApprovesAfterTheReport(t *test
 	}
 }
 
+func TestStatusListsOnlyTheWorkerWhileTheWorkerPushes(t *testing.T) {
+	v := newEnv(t)
+	v.firstReview(t)
+
+	mustOK(t, v.run("review-t1-1", "t1", "verdict pass", "Looks right."))
+
+	if s := v.status(t); strings.Contains(s, "review-t1-1") {
+		t.Fatalf("status.md lists the reviewer:\n%s", s)
+	}
+}
+
 func TestAPassedReviewOnARepoWithNoRemoteApprovesWithoutAPush(t *testing.T) {
 	v := newEnv(t)
 	v.ws.localOnly = true
