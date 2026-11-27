@@ -4,21 +4,39 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
 
-// starts names the start that a case expects: none, a start with the lead, or a headless start.
+// starts names the start that a case expects: none, or a start with the mode of its flags.
 type starts int
 
 const (
 	noStart starts = iota
 	leadStart
 	headlessStart
+	newFactoryStart
+	headlessNewFactoryStart
 )
 
-func TestRestartFlags(t *testing.T) {
+// startOf returns the start that mode stands for.
+func startOf(mode up.Mode) starts {
+	switch {
+	case mode.Headless && mode.NewFactory:
+		return headlessNewFactoryStart
+	case mode.Headless:
+		return headlessStart
+	case mode.NewFactory:
+		return newFactoryStart
+	}
+	return leadStart
+}
+
+func TestFlagSet(t *testing.T) {
 	cases := []struct {
-		args                 []string
-		update, headless, ok bool
+		args             []string
+		update, headless bool
+		ok               bool
 	}{
 		{nil, false, false, true},
 		{[]string{"--update"}, true, false, true},
@@ -29,9 +47,9 @@ func TestRestartFlags(t *testing.T) {
 		{[]string{"x"}, false, false, false},
 	}
 	for _, tc := range cases {
-		update, headless, ok := restartFlags(tc.args)
-		if update != tc.update || headless != tc.headless || ok != tc.ok {
-			t.Errorf("restartFlags(%q) = %v %v %v, want %v %v %v", tc.args, update, headless, ok, tc.update, tc.headless, tc.ok)
+		set, ok := flagSet(tc.args, "--update", "--headless")
+		if set["--update"] != tc.update || set["--headless"] != tc.headless || ok != tc.ok {
+			t.Errorf("flagSet(%q) = %v %v, want %v %v %v", tc.args, set, ok, tc.update, tc.headless, tc.ok)
 		}
 	}
 }
@@ -57,6 +75,9 @@ func TestDispatch(t *testing.T) {
 		{"agent sfy up --headless prints usage", []string{"up", "--headless"}, "lead", 1, noStart, "", "usage:"},
 		{"up takes only --headless", []string{"up", "--help"}, "", 2, noStart, "", "usage: sfy up [--headless]"},
 		{"up takes --headless alone", []string{"up", "--headless", "x"}, "", 2, noStart, "", "usage: sfy up [--headless]"},
+		{"operator sfy up --new-factory makes a factory", []string{"up", "--new-factory"}, "", 0, newFactoryStart, "", ""},
+		{"up takes both flags in any order", []string{"up", "--new-factory", "--headless"}, "", 0, headlessNewFactoryStart, "", ""},
+		{"up refuses a repeated flag", []string{"up", "--new-factory", "--new-factory"}, "", 2, noStart, "", "usage: sfy up [--headless] [--new-factory]"},
 		{"bare --headless is no command", []string{"--headless"}, "", 2, noStart, "", "usage:"},
 		{"restart refuses another word", []string{"restart", "--help"}, "", 1, noStart, "", "usage: sfy restart [--update] [--headless]"},
 		{"restart refuses a repeated flag", []string{"restart", "--headless", "--headless"}, "", 1, noStart, "", "usage: sfy restart"},
@@ -93,11 +114,8 @@ func TestDispatch(t *testing.T) {
 				},
 				stdout: &out,
 				stderr: &errb,
-				start: func(headless bool) error {
-					started = leadStart
-					if headless {
-						started = headlessStart
-					}
+				start: func(mode up.Mode) error {
+					started = startOf(mode)
 					return nil
 				},
 			}

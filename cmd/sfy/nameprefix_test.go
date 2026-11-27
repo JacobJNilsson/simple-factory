@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/JacobJNilsson/simple-factory/internal/config"
+	"github.com/JacobJNilsson/simple-factory/internal/up"
 )
 
 // inEmptyFolder runs sfy with a name prefix in a working folder below a home folder that has no factory.
@@ -37,6 +40,72 @@ func inEmptyFolder(t *testing.T, args ...string) (code int, stdout, stderr strin
 	a := app{getenv: env, stdout: &out, stderr: &errb}
 	code = a.run(args)
 	return code, out.String(), errb.String()
+}
+
+// inFolderOfAnotherPrefix runs plain sfy in a working folder whose one factory has the name prefix ex-.
+// It returns the other factory folder and the factories that exist afterwards.
+func inFolderOfAnotherPrefix(t *testing.T, args ...string) (code int, stdout, stderr, other string, factories int) {
+	t.Helper()
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	work := filepath.Join(home, "web")
+	if err := os.Mkdir(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if other, err = config.CreateFactory(home, work, "ex-"); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(work); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(before) })
+	env := func(k string) string {
+		if k == "HOME" {
+			return home
+		}
+		return ""
+	}
+	var out, errb bytes.Buffer
+	a := app{getenv: env, stdout: &out, stderr: &errb}
+	a.start = func(mode up.Mode) error { return up.Command(nil, env, &out, &errb, mode) }
+	code = a.run(args)
+	entries, err := os.ReadDir(config.FactoriesDir(home))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code, out.String(), errb.String(), other, len(entries)
+}
+
+func TestUpAndRestartRefuseAFolderWithAFactoryOfAnotherNamePrefix(t *testing.T) {
+	for _, args := range [][]string{{"up"}, {"up", "--headless"}, {"restart"}, {"restart", "--headless"}} {
+		code, stdout, stderr, other, factories := inFolderOfAnotherPrefix(t, args...)
+
+		if code != 1 || stdout != "" {
+			t.Errorf("%v: code %d, stdout %q, want 1 and nothing", args, code, stdout)
+		}
+		for _, want := range []string{other, "SFY_NAME_PREFIX=ex-", "SFY_HOME", "sfy up --new-factory"} {
+			if !strings.Contains(stderr, want) {
+				t.Errorf("%v: stderr %q lacks %q", args, stderr, want)
+			}
+		}
+		if factories != 1 {
+			t.Errorf("%v: %d factories exist, want only the other one", args, factories)
+		}
+	}
+}
+
+func TestFactoryFolderCreateStillMakesAFactoryBesideAnotherNamePrefix(t *testing.T) {
+	code, stdout, stderr, other, factories := inFolderOfAnotherPrefix(t, "factory-folder", "--create")
+
+	if code != 0 || strings.TrimSpace(stdout) == other || factories != 2 {
+		t.Errorf("code %d, stdout %q, stderr %q, %d factories, want 0, a new folder and 2", code, stdout, stderr, factories)
+	}
 }
 
 func TestFactoryFolderCreateMakesAFactoryWhereNoneExists(t *testing.T) {

@@ -22,8 +22,8 @@ var version = "dev"
 func main() {
 	// The exit code is the process result, so main exits with it after run returns.
 	a := app{getenv: os.Getenv, stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr}
-	a.start = func(headless bool) error {
-		return up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr, headless)
+	a.start = func(mode up.Mode) error {
+		return up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr, mode)
 	}
 	os.Exit(a.run(os.Args[1:]))
 }
@@ -33,8 +33,8 @@ type app struct {
 	getenv         func(string) string
 	stdin          io.Reader
 	stdout, stderr io.Writer
-	// start starts the sfy process, and the lead unless headless is set.
-	start func(headless bool) error
+	// start starts the sfy process, and the lead unless the mode says headless.
+	start func(mode up.Mode) error
 }
 
 // handFlag is a flag that run parses by hand, outside the forms of package cli.
@@ -47,6 +47,7 @@ type handFlag struct {
 // handFlags lists every flag that run parses by hand, so a test checks that the usage names each one.
 var handFlags = []handFlag{
 	{command: "up", flag: "--headless"},
+	{command: "up", flag: "--new-factory"},
 	{command: "restart", flag: "--update"},
 	{command: "restart", flag: "--headless"},
 	{command: "factory-folder", flag: "--create", unlisted: true},
@@ -57,16 +58,20 @@ var noFactory = []string{"--version", "help", "--help", "run", "hooks"}
 
 func (a app) run(args []string) int {
 	if len(args) == 0 || args[0] == "up" {
-		headless := len(args) == 2 && args[1] == "--headless"
-		if len(args) > 1 && !headless {
-			return cli.Misuse(a.stderr, "usage: sfy up [--headless]")
+		var flags []string
+		if len(args) > 1 {
+			flags = args[1:]
+		}
+		set, ok := flagSet(flags, "--headless", "--new-factory")
+		if !ok {
+			return cli.Misuse(a.stderr, "usage: sfy up [--headless] [--new-factory]")
 		}
 		// An agent that runs sfy by accident must not start a second sfy. A registered agent counts as an agent.
 		if cli.Agent(a.getenv) != "" {
 			cli.PrintUsage(a.stderr)
 			return 1
 		}
-		return a.report(a.start(headless))
+		return a.report(a.start(up.Mode{Headless: set["--headless"], NewFactory: set["--new-factory"]}))
 	}
 	// The environment can be faked, so the allow rules of the settings are the real barrier. This check backs them up.
 	switch args[0] {
@@ -77,8 +82,9 @@ func (a app) run(args []string) int {
 	}
 	// Home falls back to the default factory when the lookup fails, so a command reports a failed lookup here.
 	// Only factory-folder --create makes a factory, so it skips the lookup like up does.
+	// sfy restart looks up its factory itself, so a failed lookup can name the factories of other name prefixes.
 	makesFactory := slices.Equal(args, []string{"factory-folder", "--create"})
-	if !slices.Contains(noFactory, args[0]) && !makesFactory {
+	if !slices.Contains(noFactory, args[0]) && !makesFactory && args[0] != "restart" {
 		if _, err := config.Lookup(a.getenv); err != nil {
 			return a.report(err)
 		}
@@ -136,28 +142,25 @@ func (a app) run(args []string) int {
 		}
 		return a.report(up.InstallHooks(a.getenv, a.stdout))
 	case "restart":
-		update, headless, ok := restartFlags(args[1:])
+		set, ok := flagSet(args[1:], "--update", "--headless")
 		if !ok {
 			return a.report(fmt.Errorf("usage: sfy restart [--update] [--headless]"))
 		}
-		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, version, update, headless))
+		return a.report(up.Restart(os.Environ(), cli.WithIdentity(a.getenv), a.stdout, a.stderr, version, set["--update"], set["--headless"]))
 	}
 	return cli.Run(args, a.getenv, a.stdin, a.stdout, a.stderr)
 }
 
-// restartFlags reads the flags of sfy restart in any order. It reports false for any other word and for a repeated flag.
-func restartFlags(args []string) (update, headless, ok bool) {
+// flagSet reads args as flags from names, in any order. It reports false for any other word and for a repeated flag.
+func flagSet(args []string, names ...string) (map[string]bool, bool) {
+	set := map[string]bool{}
 	for _, arg := range args {
-		switch {
-		case arg == "--update" && !update:
-			update = true
-		case arg == "--headless" && !headless:
-			headless = true
-		default:
-			return false, false, false
+		if !slices.Contains(names, arg) || set[arg] {
+			return nil, false
 		}
+		set[arg] = true
 	}
-	return update, headless, true
+	return set, true
 }
 
 func (a app) report(err error) int {
