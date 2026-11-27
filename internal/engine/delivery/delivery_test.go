@@ -786,10 +786,10 @@ func TestIdleForASessionThatDoesNotRunTypesNothing(t *testing.T) {
 func TestANoteToABusySessionTypesNothingAndIdleTypesIt(t *testing.T) {
 	r := newRig(t)
 
-	held, err := r.d.Note("lead", "sfy restarted.")
+	outcome, err := r.d.Note("lead", "sfy restarted.")
 
-	if err != nil || !held {
-		t.Fatalf("held %v, err %v", held, err)
+	if err != nil || outcome != delivery.Held {
+		t.Fatalf("outcome %v, err %v", outcome, err)
 	}
 	r.wantNothingTyped()
 	r.idle("lead")
@@ -800,10 +800,10 @@ func TestANoteToASessionThatWaitsIsTypedAtOnce(t *testing.T) {
 	r := newRig(t)
 	r.idle("lead")
 
-	held, err := r.d.Note("lead", "sfy restarted.")
+	outcome, err := r.d.Note("lead", "sfy restarted.")
 
-	if err != nil || held {
-		t.Fatalf("held %v, err %v", held, err)
+	if err != nil || outcome != delivery.Given {
+		t.Fatalf("outcome %v, err %v", outcome, err)
 	}
 	r.wantTyped("lead: sfy restarted.")
 }
@@ -812,10 +812,10 @@ func TestANoteGoesThroughTheChannelWhenItCan(t *testing.T) {
 	r := newRig(t)
 	r.ch.canDeliver = true
 
-	held, err := r.d.Note("lead", "sfy restarted.")
+	outcome, err := r.d.Note("lead", "sfy restarted.")
 
-	if err != nil || held || !slices.Equal(r.ch.delivered, []string{"lead: sfy restarted."}) {
-		t.Fatalf("held %v, err %v, delivered %q", held, err, r.ch.delivered)
+	if err != nil || outcome != delivery.Given || !slices.Equal(r.ch.delivered, []string{"lead: sfy restarted."}) {
+		t.Fatalf("outcome %v, err %v, delivered %q", outcome, err, r.ch.delivered)
 	}
 	r.wantNothingTyped()
 }
@@ -826,10 +826,10 @@ func TestANoteToARegisteredBusyLeadWaitsEvenWhenTheChannelCanDeliver(t *testing.
 	r.regist = true
 	r.d.Busy("lead")
 
-	held, err := r.d.Note("lead", "sfy restarted.")
+	outcome, err := r.d.Note("lead", "sfy restarted.")
 
-	if err != nil || !held || len(r.ch.delivered) != 0 {
-		t.Fatalf("held %v, err %v, delivered %q", held, err, r.ch.delivered)
+	if err != nil || outcome != delivery.Held || len(r.ch.delivered) != 0 {
+		t.Fatalf("outcome %v, err %v, delivered %q", outcome, err, r.ch.delivered)
 	}
 	r.wantNothingTyped()
 	r.idle("lead")
@@ -884,12 +884,12 @@ func TestANoteIsNotHeldForADeadSession(t *testing.T) {
 	r := newRig(t)
 	r.panes.dead = map[string]bool{"lead": true}
 
-	held, err := r.d.Note("lead", "sfy restarted.")
+	outcome, err := r.d.Note("lead", "sfy restarted.")
 	r.advance(10 * time.Minute)
 	r.tick("lead")
 
-	if err != nil || held {
-		t.Fatalf("held %v, err %v", held, err)
+	if err != nil || outcome != delivery.Skipped {
+		t.Fatalf("outcome %v, err %v", outcome, err)
 	}
 	r.wantNothingTyped()
 }

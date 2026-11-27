@@ -301,6 +301,8 @@ func TestRestartHeadlessStartsNoMissingLead(t *testing.T) {
 	r.o.headless = true
 	var got []string
 	r.o.spawn = fakeSpawn(r, &got)
+	// The new sfy process answers so when the lead's session is not alive.
+	r.callText = "No lead runs, so no note went out."
 
 	if err := restart(r.o); err != nil {
 		t.Fatal(err)
@@ -312,9 +314,10 @@ func TestRestartHeadlessStartsNoMissingLead(t *testing.T) {
 	if len(got) == 0 || len(r.m.starts) != 0 || len(r.m.stops) != 1 || r.m.stops[0] != serveSession {
 		t.Errorf("spawn %v, windows %v, stops %v", got, r.m.starts, r.m.stops)
 	}
-	want := "Stopped the sfy process.\nStarted the sfy process (headless, log in " + filepath.Join(r.o.home, "sfy.log") + ").\n"
-	if !strings.HasPrefix(r.out.String(), want) {
-		t.Errorf("output %q, want the prefix %q", r.out.String(), want)
+	want := "Stopped the sfy process.\nStarted the sfy process (headless, log in " + filepath.Join(r.o.home, "sfy.log") + ").\n" +
+		"No lead runs, so no note went out.\n"
+	if r.out.String() != want {
+		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }
 

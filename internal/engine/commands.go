@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/JacobJNilsson/simple-factory/internal/drop"
+	"github.com/JacobJNilsson/simple-factory/internal/engine/delivery"
 	"github.com/JacobJNilsson/simple-factory/internal/process"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/store"
@@ -1017,15 +1018,21 @@ func (e *Engine) restarted(req protocol.Request) (string, error) {
 	if strings.TrimSpace(req.Body) == "" {
 		return "", errors.New("restarted needs a note")
 	}
-	held, err := e.notes.Note("lead", req.Body)
-	if held {
+	outcome, err := e.notes.Note("lead", req.Body)
+	switch outcome {
+	case delivery.Held:
 		return restartHeld, err
+	case delivery.Skipped:
+		return restartSkipped, err
 	}
 	return "", err
 }
 
 // restartHeld is the answer to restarted when the note waits for the lead.
 const restartHeld = "The lead gets the note when it waits."
+
+// restartSkipped is the answer to restarted when no lead runs to take the note.
+const restartSkipped = "No lead runs, so no note went out."
 
 // reminder counts a turn that ended without a report and returns the reminder text.
 // After maxReminders it tells the lead once and returns no text.
