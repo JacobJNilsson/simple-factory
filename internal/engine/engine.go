@@ -123,8 +123,8 @@ type Engine struct {
 	notes *delivery.Delivery
 	// startFails counts the failed starts in a row of each task.
 	startFails map[string]int
-	// cleanupWait holds, for each task whose cleanup could not tell whether a session runs, the number of retries to skip.
-	cleanupWait map[string]int
+	// cleanupRetries holds, for each task whose cleanup retry failed, the backoff state of the retries.
+	cleanupRetries map[string]*cleanupRetry
 	// depNoted holds the "task>dependency" pairs for which sfy told the lead that the dependency is cancelled.
 	depNoted map[string]bool
 	// slotWait holds when sfy first saw each ready queued task without a free slot, in memory only.
@@ -217,7 +217,7 @@ func (e *Engine) logf(format string, args ...any) {
 // New returns an Engine that works through the given store and interfaces.
 // ch gives notes to sessions without typing. A nil ch means that every note is typed.
 func New(st store.Store, l Launcher, ch delivery.Channel, w Workspaces, cfg config.Config, c Clock) *Engine {
-	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupWait: map[string]int{}, depNoted: map[string]bool{}, slotWait: map[string]time.Time{}, slotNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default()}
+	e := &Engine{st: st, l: l, w: w, cfg: cfg, c: c, startFails: map[string]int{}, cleanupRetries: map[string]*cleanupRetry{}, depNoted: map[string]bool{}, slotWait: map[string]time.Time{}, slotNoted: map[string]bool{}, checking: map[string]checkRun{}, proc: process.Default()}
 	e.sess = &sessions{
 		l: l, cfg: cfg, proc: e.proc, logf: e.logf,
 		taskFile:    func(id string) (string, error) { return e.st.TaskFile(id) },
