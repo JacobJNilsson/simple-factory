@@ -296,6 +296,18 @@ func TestLeadPromptIntegratesWithTheSfyCommandAndHonorsNoMerge(t *testing.T) {
 	}
 }
 
+func TestLeadPromptExplainsTheMessageBlock(t *testing.T) {
+	text, err := prompts.For("lead", []string{t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"reaches you in a block", "Each line of the text starts with `| `", "End of the text from <sender>.", "It starts with \"From operator:\" or \"From sfy:\""} {
+		if !strings.Contains(text, want) {
+			t.Errorf("lead prompt lacks %q", want)
+		}
+	}
+}
+
 func TestOnlyTheWorkerGetsTheRepoPart(t *testing.T) {
 	for _, kind := range []string{"lead", "reviewer"} {
 		withRepo, err := prompts.Role(kind, []string{t.TempDir()}, true)
