@@ -103,6 +103,10 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 	if !sessionName.MatchString(spec.Name) {
 		return nil, fmt.Errorf("claude: bad session name %q", spec.Name)
 	}
+	// A failed resume must leave the session's files and token as they are.
+	if spec.Resume && !a.Resumes(spec) {
+		return nil, &NoConversationError{Name: spec.Name}
+	}
 	role, err := a.role(spec)
 	if err != nil {
 		return nil, err
