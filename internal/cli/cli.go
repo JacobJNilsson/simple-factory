@@ -52,6 +52,7 @@ const usage = `usage:
   sfy verdict pass|fail <text...|->
   sfy inbox
   sfy escalate <id> <text...>
+  sfy unstick <agent>  press Escape at a worker's or reviewer's permission prompt (lead only)
   sfy status
   sfy down             stop all agents and the sfy process (operator only)
   sfy restart          restart the sfy process and keep the agents running (--update runs brew upgrade first)
@@ -119,6 +120,7 @@ var forms = map[string]form{
 	"verdict fail":    {words: 2, verdict: true},
 	"inbox":           {words: 1},
 	"escalate":        {words: 1, ids: 1, text: true},
+	"unstick":         {words: 1, ids: 1},
 	"status":          {words: 1},
 	"down":            {words: 1},
 }

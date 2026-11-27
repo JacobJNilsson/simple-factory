@@ -41,6 +41,7 @@ func (l *launcher) Send(string, string) error   { return nil }
 func (l *launcher) Alive(string) (bool, error)  { return true, nil }
 func (l *launcher) Stop(string) error           { return nil }
 func (l *launcher) Notify(string, string) error { return nil }
+func (l *launcher) Escape(string) error         { return nil }
 func (l *launcher) TrustWarning(string) string  { return "" }
 
 type workspaces struct{}

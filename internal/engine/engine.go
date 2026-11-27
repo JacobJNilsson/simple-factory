@@ -61,6 +61,8 @@ type Launcher interface {
 	Alive(name string) (bool, error)
 	Stop(name string) error
 	Notify(name, text string) error
+	// Escape presses the Escape key in the session of name.
+	Escape(name string) error
 	// TrustWarning returns a warning when the provider would stop an agent at a trust prompt for dir.
 	TrustWarning(dir string) string
 }
@@ -273,6 +275,7 @@ var commands = map[string]command{
 	"task archive":    {(*Engine).taskArchive, []kind{operator, lead}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
 	"send":            {(*Engine).send, []kind{operator, lead}},
+	"unstick":         {(*Engine).unstick, []kind{lead}},
 	"report done":     {(*Engine).reportDone, []kind{worker}},
 	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},
 	"report progress": {(*Engine).reportProgress, []kind{worker}},

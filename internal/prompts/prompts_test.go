@@ -166,7 +166,7 @@ var allowed = map[string][]string{
 	"worker":   {"report done", "report blocked", "report progress", "report pushed", "inbox", "task list", "task show", "status"},
 	"reviewer": {"verdict pass", "verdict fail", "report blocked", "inbox", "task list", "task show", "status"},
 	"lead": {"task new", "task edit", "task queue", "task list", "task show", "task cancel", "task resume", "task feedback", "task complete", "task integrate", "task push", "task archive",
-		"send", "escalate", "inbox", "status", "restart"},
+		"send", "escalate", "unstick", "inbox", "status", "restart"},
 }
 
 var command = regexp.MustCompile("`sfy ([^`]*)`")
@@ -202,7 +202,7 @@ func TestEachPromptNamesItsRequiredCommands(t *testing.T) {
 	required := map[string][]string{
 		"worker":   {"report done", "report blocked", "report progress", "report pushed", "inbox"},
 		"reviewer": {"verdict pass", "verdict fail", "inbox"},
-		"lead":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "task integrate", "send", "escalate", "inbox", "restart"},
+		"lead":     {"task new", "task edit", "task queue", "task resume", "task feedback", "task complete", "task integrate", "send", "escalate", "unstick", "inbox", "restart"},
 	}
 	for kind, cmds := range required {
 		text, err := prompts.Role(kind, []string{t.TempDir()}, true)
