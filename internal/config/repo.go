@@ -48,7 +48,7 @@ func (s repoSettings) apply(c *Config) {
 // globalOnly lists the top-level settings that only ~/.sfy/config.toml accepts.
 var globalOnly = []string{
 	"review_rounds", "max_workers", "resend_minutes", "note_fallback_after", "check_timeout", "queue_wait_note", "provider", "multiplexer", "models", "allow",
-	"deny_read", "allow_write", "pass_env", "multiplexers", "session_settings", "session_rules",
+	"deny_read", "allow_write", "pass_env", "multiplexers", "session_settings", "session_rules", "wake",
 }
 
 // RepoFileError reports a .sfy.toml setting that sfy refuses. File names the file.

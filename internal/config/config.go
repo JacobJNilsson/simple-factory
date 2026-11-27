@@ -62,8 +62,19 @@ type Config struct {
 	SessionSettings map[string]SessionValues `toml:"session_settings"`
 	// SessionRules holds extra permission rules for each session kind.
 	SessionRules map[string]SessionRule `toml:"session_rules"`
+	// Wake says which closed sessions sfy resumes when a message arrives for them, and how often.
+	Wake Wake `toml:"wake"`
 	// agentModels holds the models keys that name a claude agent other than the worker and the reviewer. It is nil when there are none.
 	agentModels map[string]string
+}
+
+// Wake holds the wake setting of each session kind and the cap on wakes of one session.
+type Wake struct {
+	Lead     bool `toml:"lead"`
+	Worker   bool `toml:"worker"`
+	Reviewer bool `toml:"reviewer"`
+	// MaxPerHour is how many wakes of one session, failed ones included, sfy runs in the last hour.
+	MaxPerHour int `toml:"max_per_hour"`
 }
 
 // SessionRule holds the extra rules of one session kind.
@@ -178,6 +189,7 @@ func defaults(userTempDir func() (string, error)) Config {
 			"~/.netrc", "~/.docker", "~/.kube", "~/.claude.json",
 		},
 		AllowWrite: defaultAllowWrite(runtime.GOOS, userTempDir),
+		Wake:       Wake{Worker: true, Reviewer: true, MaxPerHour: 3},
 	}
 }
 
@@ -392,6 +404,8 @@ func checkValues(c Config) error {
 		return &SettingError{Setting: "check_timeout", Duration: true}
 	case c.QueueWaitNote < 0:
 		return &SettingError{Setting: "queue_wait_note", NonNegative: true}
+	case c.Wake.MaxPerHour < 1:
+		return &SettingError{Setting: "wake.max_per_hour"}
 	}
 	return nil
 }
