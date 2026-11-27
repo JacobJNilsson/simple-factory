@@ -142,7 +142,7 @@ func (e *Engine) relay(req protocol.Request) (string, error) {
 }
 
 // relayTask takes a task that another factory's sfy process passes on. The token must belong to that factory's lead.
-// The task starts in new with the source <factory>/lead, so this factory's lead prepares it. The answer is the id, then any warning.
+// The task starts in new with the source <factory>/lead, so this factory's lead prepares it. The answer is the id.
 func (e *Engine) relayTask(req protocol.Request) (string, error) {
 	if e.factories == nil {
 		return "", errors.New("this sfy process takes no tasks from other factories")
@@ -155,12 +155,9 @@ func (e *Engine) relayTask(req protocol.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	t, warning, err := e.createTask(t, from+"/"+protocol.Lead)
+	t, err = e.createTask(t, from+"/"+protocol.Lead)
 	if err != nil {
 		return "", err
-	}
-	if warning != "" {
-		return t.ID + "\n" + warning, nil
 	}
 	return t.ID, nil
 }

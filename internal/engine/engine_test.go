@@ -41,9 +41,6 @@ type fakeLauncher struct {
 	// escaped lists the sessions where Escape pressed the key, and escapeErr makes Escape fail.
 	escaped   []string
 	escapeErr error
-	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
-	warning    string
-	trustAsked []string
 }
 
 // fakeChannel is the provider's channel for notes.
@@ -127,11 +124,6 @@ func (f *fakeLauncher) Escape(name string) error {
 	}
 	f.escaped = append(f.escaped, name)
 	return nil
-}
-
-func (f *fakeLauncher) TrustWarning(dir string) string {
-	f.trustAsked = append(f.trustAsked, dir)
-	return f.warning
 }
 
 type fakeWorkspaces struct {
@@ -337,27 +329,7 @@ func TestTaskNewFromTheOperatorStartsNewAndMessagesLead(t *testing.T) {
 	v.statusShows(t, a.Text, "new")
 }
 
-func TestTaskNewWarnsInReplyAndNoteWhenRepoIsUntrusted(t *testing.T) {
-	v := newEnv(t)
-	v.l.warning = "untrusted"
-
-	a := v.run("", "", "task new", taskFile+"\n## Repo\n\nhttps://example.com/x.git\n")
-
-	mustOK(t, a)
-	id, warning, _ := strings.Cut(a.Text, "\n")
-	if id != "t1" || !strings.Contains(warning, "untrusted") {
-		t.Errorf("reply %q", a.Text)
-	}
-	if want := []string{"/folder/https://example.com/x.git"}; !reflect.DeepEqual(v.l.trustAsked, want) {
-		t.Errorf("asked %v, want %v", v.l.trustAsked, want)
-	}
-	msgs := v.inbox(t, "lead")
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "untrusted") {
-		t.Fatalf("lead inbox: %+v", msgs)
-	}
-}
-
-func TestTaskNewIsQuietWhenRepoIsTrustedOrAbsent(t *testing.T) {
+func TestTaskNewWithARepoRepliesOnlyTheIdAndGivesNoTrustWarning(t *testing.T) {
 	v := newEnv(t)
 
 	withRepo := v.run("", "", "task new", taskFile+"\n## Repo\n\n/some/repo\n")
@@ -365,11 +337,13 @@ func TestTaskNewIsQuietWhenRepoIsTrustedOrAbsent(t *testing.T) {
 
 	mustOK(t, withRepo)
 	mustOK(t, without)
-	if strings.ContainsAny(withRepo.Text, " \n") || strings.ContainsAny(without.Text, " \n") {
-		t.Errorf("replies %q and %q hold more than an id", withRepo.Text, without.Text)
+	if withRepo.Text != "t1" || without.Text != "t2" || withRepo.Warning != "" {
+		t.Errorf("replies %q and %q, warning %q", withRepo.Text, without.Text, withRepo.Warning)
 	}
-	if len(v.l.trustAsked) != 1 {
-		t.Errorf("a task without a repo must not ask: %v", v.l.trustAsked)
+	for _, m := range v.inbox(t, "lead") {
+		if strings.Contains(m.Body, "Warning") || strings.Contains(m.Body, "trust") {
+			t.Errorf("note to the lead names trust: %q", m.Body)
+		}
 	}
 }
 

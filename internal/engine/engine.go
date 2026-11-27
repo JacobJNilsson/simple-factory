@@ -66,8 +66,6 @@ type Launcher interface {
 	Notify(name, text string) error
 	// Escape presses the Escape key in the session of name.
 	Escape(name string) error
-	// TrustWarning returns a warning when the provider would stop an agent at a trust prompt for dir.
-	TrustWarning(dir string) string
 }
 
 // Registration tells whether an agent session registered itself as the lead, which sfy did not start.

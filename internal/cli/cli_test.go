@@ -148,7 +148,6 @@ func (quietLauncher) Alive(string) (bool, error)     { return true, nil }
 func (quietLauncher) Stop(string) error              { return nil }
 func (quietLauncher) Notify(string, string) error    { return nil }
 func (quietLauncher) Escape(string) error            { return nil }
-func (quietLauncher) TrustWarning(string) string     { return "" }
 
 type fixedClock struct{}
 
@@ -159,11 +158,6 @@ func liveServer(t *testing.T) func(string) string {
 	t.Helper()
 	return liveServerWith(t, quietLauncher{}, nil)
 }
-
-// warnLauncher is a quietLauncher whose trust check always warns.
-type warnLauncher struct{ quietLauncher }
-
-func (warnLauncher) TrustWarning(string) string { return "untrusted" }
 
 // repoWorkspaces names every repo as its own folder. It supports no other call.
 type repoWorkspaces struct{ engine.Workspaces }
@@ -347,15 +341,12 @@ func TestRunResumeIsRefusedForAWorker(t *testing.T) {
 	}
 }
 
-func TestTaskNewPrintsOnlyTheIdToStdoutAndTheWarningToStderr(t *testing.T) {
-	env := liveServerWith(t, warnLauncher{}, repoWorkspaces{})
+func TestTaskNewWithARepoPrintsOnlyTheId(t *testing.T) {
+	env := liveServerWith(t, quietLauncher{}, repoWorkspaces{})
 	var out, errb bytes.Buffer
 	body := "# Title\n\n## Description\n\nDo it.\n\n## Goal\n\nDone.\n\n## Repo\n\n/some/repo\n"
 	code := Run([]string{"task", "new", "-"}, env, strings.NewReader(body), &out, &errb)
-	if code != exitOK || out.String() != "t1\n" {
-		t.Fatalf("code %d, stdout %q", code, out.String())
-	}
-	if !strings.Contains(errb.String(), "untrusted") {
-		t.Errorf("stderr %q", errb.String())
+	if code != exitOK || out.String() != "t1\n" || errb.String() != "" {
+		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), errb.String())
 	}
 }

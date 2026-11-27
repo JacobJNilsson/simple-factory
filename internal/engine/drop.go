@@ -76,7 +76,7 @@ func (e *Engine) dropTask(path string, d drop.Drop) error {
 		return e.rejectDrop(path, d, "the task file is not valid: "+err.Error())
 	}
 	t.SourceID = d.ID
-	t, _, err = e.createTask(t, d.Sender())
+	t, err = e.createTask(t, d.Sender())
 	created := err == nil
 	if err != nil && t.ID != "" {
 		// A task that exists and only lacks its note counts as taken.
