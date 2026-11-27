@@ -59,6 +59,18 @@ func TestTheRestartNoteWaitsForABusyRegisteredLeadEvenWhenTheProviderCanDeliver(
 	}
 }
 
+func TestTheRestartNoteToALeadThatDoesNotRunSaysSo(t *testing.T) {
+	v := newEnv(t)
+	v.l.dead = map[string]bool{"lead": true}
+
+	a := v.run("", "", "restarted", restartNote)
+
+	mustOK(t, a)
+	if len(v.l.sent) != 0 || a.Text != "No lead runs, so no note went out." {
+		t.Fatalf("typed %q, text %q", v.l.sent, a.Text)
+	}
+}
+
 func TestAWorkerCannotSendTheRestartNote(t *testing.T) {
 	v := newEnv(t)
 	v.seed(t, task.Working, 0)

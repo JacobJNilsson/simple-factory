@@ -145,30 +145,42 @@ func (d *Delivery) Message(name, why string) error {
 	return d.ignoreGone(name, d.noteOrQueue(name, why))
 }
 
+// Outcome tells what Note did with a note.
+type Outcome int
+
+const (
+	// Given means that the channel delivered the note or sfy typed it.
+	Given Outcome = iota
+	// Held means that sfy holds the note until the session waits.
+	Held
+	// Skipped means that the session is not alive, so the note went nowhere.
+	Skipped
+)
+
 // Note tells a session a line of text. The channel delivers it when it can.
-// Otherwise sfy types it when the session waits, and holds it until the session waits. held reports the second case.
-func (d *Delivery) Note(name, text string) (held bool, err error) {
+// Otherwise sfy types it when the session waits, and holds it until the session waits. The outcome names the case.
+func (d *Delivery) Note(name, text string) (Outcome, error) {
 	if !d.reachable(name) {
-		return false, nil
+		return Skipped, nil
 	}
 	delivered, derr := d.deliver(name, text, "")
 	if derr != nil {
 		d.logf("delivery to %s failed, so sfy types the note: %v", name, derr)
 	}
 	if delivered {
-		return false, nil
+		return Given, nil
 	}
 	s := d.session(name)
 	if s.waiting {
 		s.waiting, s.hookSince = false, false
-		return false, d.typeNote(name, text)
+		return Given, d.typeNote(name, text)
 	}
 	s.held = append(s.held, text)
 	if s.heldAt.IsZero() {
 		s.heldAt = d.d.Now()
 	}
 	d.logf("note held for %s until it waits", name)
-	return true, nil
+	return Held, nil
 }
 
 // TurnEnded records that the turn of a session ended. A non-empty reminder goes to the session first.
