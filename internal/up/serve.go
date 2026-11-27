@@ -372,34 +372,30 @@ func factoryEnv(env func(string) string, getwd func() (string, error), note io.W
 	if env("SFY_HOME") != "" {
 		return env, nil
 	}
-	prefix, err := config.NamePrefix(env)
+	p, err := lookPlace(env, getwd)
 	if err != nil {
 		return nil, err
 	}
 	userHome := env("HOME")
-	cwd, err := getwd()
-	if err != nil {
-		return nil, err
-	}
 	state := config.DefaultHome(userHome)
 	switch {
-	case config.CanonicalPath(cwd) != config.CanonicalPath(userHome):
-		found, ok := config.FindFactory(userHome, cwd, prefix)
-		if !ok {
-			others := config.FactoriesAt(userHome, cwd)
-			if refuse && len(others) > 0 {
-				return nil, &otherPrefixError{prefix: prefix, others: others}
-			}
-			if found, err = config.CreateFactory(userHome, cwd, prefix); err != nil {
+	case !p.inHome:
+		if refuse {
+			if err := p.refusal(); err != nil {
 				return nil, err
 			}
-			if len(others) > 0 {
-				_, _ = fmt.Fprintf(note, "sfy: this folder has another factory at %s. This command made its own, %s.\n", others[0], found)
+		}
+		state = p.found
+		if state == "" {
+			if state, err = config.CreateFactory(userHome, p.cwd, p.prefix); err != nil {
+				return nil, err
+			}
+			if len(p.others) > 0 {
+				_, _ = fmt.Fprintf(note, "sfy: this folder has another factory at %s. This command made its own, %s.\n", p.others[0], state)
 			}
 		}
-		state = found
-	case prefix != "":
-		return nil, &config.NoFactoryError{Prefix: prefix}
+	case p.prefix != "":
+		return nil, &config.NoFactoryError{Prefix: p.prefix}
 	}
 	return func(key string) string {
 		if key == "SFY_HOME" {
