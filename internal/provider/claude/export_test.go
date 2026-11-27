@@ -3,9 +3,23 @@ package claude
 import (
 	"os/exec"
 	"slices"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 )
+
+// ErrConfigLocked and ConfigPath expose the trust write's lock error and config lookup to the tests.
+var (
+	ErrConfigLocked = errConfigLocked
+	ConfigPath      = configPath
+)
+
+// ShortenLockWait sets the wait for the config lock to d until the test ends.
+func ShortenLockWait(t interface{ Cleanup(func()) }, d time.Duration) {
+	old := lockWait
+	lockWait = d
+	t.Cleanup(func() { lockWait = old })
+}
 
 // NewForOS returns the adapter as if it ran on goos.
 func NewForOS(cfg config.Config, home, sfyBin, goos string, uid int) adapter {

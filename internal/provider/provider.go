@@ -22,6 +22,8 @@ type Provider interface {
 	// A failure is an *engine.PreflightError, and starting the session again cannot fix it.
 	Preflight(kind string) error
 	// TrustWarning returns a warning when the agent CLI would stop at a trust prompt for dir, or when sfy cannot tell.
-	// It returns an empty string for a trusted folder, and it never changes the CLI's config.
+	// It returns an empty string for a trusted folder. This method never changes the CLI's config.
 	TrustWarning(dir string) string
+	// Trust marks dir as trusted in the agent CLI, so a session there shows no trust dialog.
+	Trust(dir string) error
 }

@@ -70,6 +70,7 @@ type fakeProvider struct {
 
 func (p *fakeProvider) Preflight(string) error     { return p.preflight }
 func (p *fakeProvider) TrustWarning(string) string { return "" }
+func (p *fakeProvider) Trust(string) error         { return nil }
 
 // Deliver takes the text when deliverable is set, and fails with deliverErr when that is set.
 func (p *fakeProvider) Stuck(string) bool            { return false }
