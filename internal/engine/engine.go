@@ -37,8 +37,10 @@ type SessionSpec struct {
 	Lease string
 	// NoPush is true while the operator holds the push of the task. The session gets no push permission.
 	NoPush bool
-	// ResumePrompt is the first message when the provider resumes the lead's last conversation.
+	// ResumePrompt is the first message of any session whose recorded conversation the provider resumes.
 	ResumePrompt string
+	// Resume continues the recorded conversation of a worker or a reviewer. The start then fails rather than begin a new conversation.
+	Resume bool
 	// Fresh makes the provider start a new conversation, even when it recorded one.
 	Fresh bool
 	// TaskFile is the absolute path of the task's task.md. It is set for workers and reviewers and empty for the lead.

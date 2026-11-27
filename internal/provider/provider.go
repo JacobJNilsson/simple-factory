@@ -8,7 +8,7 @@ type Provider interface {
 	// Command prepares the session's files and returns the argv to run in the session's folder.
 	// The argv holds one element for each word, unquoted. The mux runner quotes them.
 	Command(spec engine.SessionSpec) ([]string, error)
-	// Resumes reports whether Command would resume the recorded conversation of the lead in spec.
+	// Resumes reports whether Command would resume the recorded conversation of the session in spec.
 	Resumes(spec engine.SessionSpec) bool
 	// Deliver gives text to the running session without typing into its input line.
 	// It returns false, with nothing delivered, when the provider has no such way or the running session has no delivery set up. The core then types the note.

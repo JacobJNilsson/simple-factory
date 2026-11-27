@@ -16,6 +16,13 @@ func (a adapter) conversationIDPath(name string) string {
 	return filepath.Join(a.home, "sessions", name, "conversation-id")
 }
 
+// NoConversationError reports a resume of a session that has no recorded conversation.
+type NoConversationError struct{ Name string }
+
+func (e *NoConversationError) Error() string {
+	return fmt.Sprintf("claude: %s has no recorded conversation", e.Name)
+}
+
 var conversationID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // recordedConversation returns the recorded id of the named session's conversation, or false when the file is missing or holds no id.
@@ -28,9 +35,14 @@ func (a adapter) recordedConversation(name string) (string, bool) {
 	return id, conversationID.MatchString(id)
 }
 
-// Resumes reports whether Command resumes the recorded conversation of the lead.
+// Resumes reports whether Command resumes the recorded conversation of the session.
+// The lead resumes unless the spec is fresh. A worker or a reviewer resumes only for a spec with Resume.
 func (a adapter) Resumes(spec engine.SessionSpec) bool {
-	if spec.Kind != "lead" || spec.Fresh {
+	wants := spec.Resume
+	if spec.Kind == "lead" {
+		wants = !spec.Fresh
+	}
+	if !wants {
 		return false
 	}
 	_, ok := a.recordedConversation(spec.Name)
