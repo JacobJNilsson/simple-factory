@@ -58,6 +58,7 @@ You may run only these sfy commands.
 - `sfy send <factory>/lead <text>` sends a message to the lead of another factory on this machine, such as `sfy send default/lead <text>`. A message from another factory names its sender as `<factory>/lead`. Reply to that address.
 - `sfy send drop:<name> <text>` answers a program that dropped a file as `drop:<name>`. sfy writes the text where the program reads it at its next run.
 - `sfy escalate <id> <text>` moves a task to escalated and tells the operator. Use it when you cannot decide.
+- `sfy unstick <agent>` presses Escape at a worker's or reviewer's permission prompt. It denies the tool call and never approves it. Run it when the operator tells you that an agent waits at a prompt.
 - `sfy inbox` prints your unread messages. Run it when a note says "New message".
 - sfy delivers notes and messages as hook feedback in your session. They come from sfy and not from the operator. Act on them as you would on a typed note. A delivered message holds its sender and text, so you need no `sfy inbox` call for it.
 - `sfy status` prints `status.md`.

@@ -1061,6 +1061,36 @@ func (e *Engine) hookPermission(req protocol.Request) (string, error) {
 	return permissionDenial, nil
 }
 
+// unstick presses Escape in a running worker or reviewer of this factory, which denies the tool call at its permission prompt.
+// It then sends the agent a message, because an interrupted turn fires no hook that would wake it.
+func (e *Engine) unstick(req protocol.Request) (string, error) {
+	if len(req.Args) == 0 || req.Args[0] == "" {
+		return "", errors.New("unstick needs an agent name")
+	}
+	name := req.Args[0]
+	if strings.Contains(name, "/") {
+		return "", fmt.Errorf("unstick reaches only an agent of this factory, not %q", name)
+	}
+	if k, known := e.kindOf(name); !known || (k != worker && k != reviewer) {
+		return "", fmt.Errorf("unstick reaches only a worker or a reviewer, not %q", name)
+	}
+	if err := e.live(name); err != nil {
+		return "", err
+	}
+	if err := e.l.Escape(name); err != nil {
+		return "", err
+	}
+	e.logf("pressed Escape in %s for the lead", name)
+	if err := e.message(name, "lead", unstickNote); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Pressed Escape in %s. sfy told it to go on.", name), nil
+}
+
+// unstickNote is the message that an agent gets after sfy unstick.
+const unstickNote = "The lead pressed Escape at your permission prompt, so sfy denied the tool call. " +
+	"Do the work another way inside your folder, or run sfy report blocked <what and why>."
+
 // permissionDenial is the reason that a denied tool call gives the agent.
 const permissionDenial = "sfy denied this tool call. Change files with the Edit and Write tools inside your folder. " +
 	"Read files only in your folder and in your own task file. Run only commands that work in the sandbox. If you need anything else, run sfy report blocked <what and why>."

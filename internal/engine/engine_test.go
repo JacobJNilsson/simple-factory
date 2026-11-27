@@ -32,6 +32,9 @@ type fakeLauncher struct {
 	started   []engine.SessionSpec
 	stopped   []string
 	notified  []string
+	// escaped lists the sessions where Escape pressed the key, and escapeErr makes Escape fail.
+	escaped   []string
+	escapeErr error
 	// warning is what TrustWarning returns, and trustAsked lists the folders it was asked about.
 	warning    string
 	trustAsked []string
@@ -100,6 +103,14 @@ func (f *fakeLauncher) Stop(name string) error {
 }
 func (f *fakeLauncher) Notify(name, text string) error {
 	f.notified = append(f.notified, name+": "+text)
+	return nil
+}
+
+func (f *fakeLauncher) Escape(name string) error {
+	if f.escapeErr != nil {
+		return f.escapeErr
+	}
+	f.escaped = append(f.escaped, name)
 	return nil
 }
 

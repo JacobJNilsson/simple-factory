@@ -59,6 +59,7 @@ func TestParse(t *testing.T) {
 		{"verdict stdin", []string{"verdict", "pass", "-"}, protocol.Request{Command: "verdict pass", Body: "IN"}},
 		{"inbox", []string{"inbox"}, protocol.Request{Command: "inbox"}},
 		{"escalate", []string{"escalate", "t1", "needs", "you"}, protocol.Request{Command: "escalate", Args: []string{"t1", "needs", "you"}}},
+		{"unstick", []string{"unstick", "worker-t1"}, protocol.Request{Command: "unstick", Args: []string{"worker-t1"}}},
 		{"status", []string{"status"}, protocol.Request{Command: "status"}},
 	}
 	for _, tt := range tests {
@@ -82,6 +83,16 @@ func TestParseCaller(t *testing.T) {
 	}
 	if got.Caller != (protocol.Caller{Agent: "worker-t1", Task: "t1"}) {
 		t.Fatalf("caller %+v", got.Caller)
+	}
+}
+
+func TestParseUnstickNeedsExactlyOneAgent(t *testing.T) {
+	for _, args := range [][]string{{"unstick"}, {"unstick", "worker-t1", "extra"}} {
+		_, err := parse(args, envOf(nil), strings.NewReader(""))
+		var ue *usageError
+		if !errors.As(err, &ue) {
+			t.Errorf("%v: err = %v, want a usage error", args, err)
+		}
 	}
 }
 
@@ -134,6 +145,7 @@ func (quietLauncher) Send(string, string) error      { return nil }
 func (quietLauncher) Alive(string) (bool, error)     { return true, nil }
 func (quietLauncher) Stop(string) error              { return nil }
 func (quietLauncher) Notify(string, string) error    { return nil }
+func (quietLauncher) Escape(string) error            { return nil }
 func (quietLauncher) TrustWarning(string) string     { return "" }
 
 type fixedClock struct{}
