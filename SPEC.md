@@ -38,7 +38,7 @@ sfy enforces the rule for workers and reviewers:
 - A hook reports a permission prompt to sfy, and the task's worker counts as blocked.
 - When a turn ends without a `sfy report`, sfy sends the agent a note: "Your turn ended without a report. If you need an answer, run sfy report blocked <question>." After two such turns in a row, sfy stops the note and tells the lead instead.
 
-sfy ships a default prompt for each kind of agent: lead, worker and reviewer. The prompt tells the agent which `sfy` commands it uses.
+sfy ships a default prompt for each kind of agent: lead, worker and reviewer. The prompt tells the agent which `sfy` commands it uses. The worker and reviewer prompts also name the shell command forms that the Claude Code sandbox runs without a question: a quoted variable or a literal path, `cd` and `rm` in separate calls, and no loop.
 
 The worker prompt has two parts. The common part holds the rules for every task: the task file, the workspace, tools, protected paths, the `sfy report` commands, checks, the summary, failed reviews and the report that ends each turn. A worker on a task with no repo delivers its result as files in the workspace and leaves them there. The repo part holds the rules for git: commits, the task branch, push forms, the push after a passed review and `sfy report pushed`. sfy appends the repo part after the common part only when the task file has a `## Repo` section. The common part never mentions git steps. The lead and reviewer prompts have no parts.
 
