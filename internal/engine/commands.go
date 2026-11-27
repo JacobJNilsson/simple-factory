@@ -107,6 +107,9 @@ func (e *Engine) createTask(t task.Task, source string) (task.Task, string, erro
 		if s := t.StatedSource(); s != "" {
 			note += fmt.Sprintf(" It comes from %s, a name that the sender stated and nothing checked.", s)
 		}
+		if s := t.FactorySource(); s != "" {
+			note += fmt.Sprintf(" It comes from %s, %s.", s, leadOf(s))
+		}
 		if warning != "" {
 			note += " " + warning
 		}
@@ -155,6 +158,9 @@ func (e *Engine) taskShow(req protocol.Request) (string, error) {
 	fmt.Fprintf(&b, "Round: %d\nProgress: %s\n", t.Round, t.Progress)
 	if s := t.StatedSource(); s != "" {
 		fmt.Fprintf(&b, "Source: %s, a name that the sender stated and nothing checked\n", s)
+	}
+	if s := t.FactorySource(); s != "" {
+		fmt.Fprintf(&b, "Source: %s, %s\n", s, leadOf(s))
 	}
 	if branch := e.w.BranchOf(t); branch != "" {
 		fmt.Fprintf(&b, "Branch: %s\n", branch)

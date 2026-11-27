@@ -2,10 +2,12 @@ package engine_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/JacobJNilsson/simple-factory/internal/identity"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // fakeMachine connects the engines of two factories, as the sfy processes on one machine reach each other through their sockets.
@@ -65,6 +67,126 @@ func relayTo(v env, agent, token string) protocol.Answer {
 		Command: protocol.RelayCommand, Caller: protocol.Caller{Factory: "a", Agent: agent, Token: token},
 		Args: []string{"lead"}, Body: "hello",
 	})
+}
+
+// taskNewAt runs sfy task new --factory in factory v, as the named session of v.
+func taskNewAt(v env, agent, token, factory, file string) protocol.Answer {
+	return v.e.Handle(protocol.Request{
+		Caller: protocol.Caller{Agent: agent, Token: token}, Command: "task new", Args: []string{"--factory", factory}, Body: file,
+	})
+}
+
+// relayTaskTo sends a task relay straight to factory v, as a process that claims to be factory a would.
+func relayTaskTo(v env, agent, token string) protocol.Answer {
+	return v.e.Handle(protocol.Request{
+		Command: protocol.RelayTaskCommand, Caller: protocol.Caller{Factory: "a", Agent: agent, Token: token}, Body: taskFile,
+	})
+}
+
+// noTasks fails the test when factory v holds a task.
+func noTasks(t *testing.T, v env) {
+	t.Helper()
+	tasks, err := v.st.Tasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("the factory holds %+v", tasks)
+	}
+}
+
+func TestTheLeadOfOneFactoryCreatesANewTaskInAnother(t *testing.T) {
+	a, b := twoFactories(t)
+
+	ans := taskNewAt(a, "lead", issue(t, a, "lead"), "b", taskFile)
+
+	mustOK(t, ans)
+	got := b.state(t, ans.Text)
+	if got.State != task.New || got.Source != "a/lead" {
+		t.Fatalf("b's task %s: state %s, source %q", got.ID, got.State, got.Source)
+	}
+	msgs := b.inbox(t, "lead")
+	if len(msgs) != 1 || !strings.Contains(msgs[0].Body, "New task "+got.ID) || !strings.Contains(msgs[0].Body, "a/lead, the lead of factory a") {
+		t.Fatalf("b's lead inbox: %+v", msgs)
+	}
+	noTasks(t, a)
+}
+
+func TestARelayedTaskWithATokenOfTheReceiverClaimedAsAnotherFactoryFails(t *testing.T) {
+	_, b := twoFactories(t)
+
+	mustFail(t, relayTaskTo(b, "lead", issue(t, b, "lead")), "no valid token")
+
+	noTasks(t, b)
+}
+
+func TestARelayedTaskWithNoTokenFails(t *testing.T) {
+	_, b := twoFactories(t)
+
+	mustFail(t, relayTaskTo(b, "lead", ""), "no session token")
+
+	noTasks(t, b)
+}
+
+func TestARelayedTaskWithAValidWorkerTokenOfTheSenderFails(t *testing.T) {
+	a, b := twoFactories(t)
+
+	mustFail(t, relayTaskTo(b, "", issue(t, a, "worker-t1")), "only the lead")
+
+	noTasks(t, b)
+}
+
+func TestAWorkerCannotCreateATaskInAnotherFactory(t *testing.T) {
+	a, b := twoFactories(t)
+
+	mustFail(t, taskNewAt(a, "worker-t1", issue(t, a, "worker-t1"), "b", taskFile), "not for a worker")
+
+	noTasks(t, b)
+}
+
+func TestTheOperatorCannotCreateATaskInAnotherFactory(t *testing.T) {
+	a, b := twoFactories(t)
+
+	mustFail(t, taskNewAt(a, "", "", "b", taskFile), "no session token")
+
+	noTasks(t, b)
+}
+
+func TestATaskForAFactoryThatDoesNotRunFails(t *testing.T) {
+	a, _ := twoFactories(t)
+
+	mustFail(t, taskNewAt(a, "lead", issue(t, a, "lead"), "c", taskFile), "factory c is not running")
+}
+
+func TestATaskForTheOwnFactoryFails(t *testing.T) {
+	a, _ := twoFactories(t)
+
+	mustFail(t, taskNewAt(a, "lead", issue(t, a, "lead"), "a", taskFile), "a is this factory. Run: sfy task new <file>")
+
+	noTasks(t, a)
+}
+
+func TestAnInvalidRelayedTaskFileCreatesNothing(t *testing.T) {
+	a, b := twoFactories(t)
+
+	mustFail(t, taskNewAt(a, "lead", issue(t, a, "lead"), "b", "# Title\n\n## Description\n\nDo it.\n"), "Goal")
+
+	noTasks(t, b)
+}
+
+func TestARelayedTaskShowsItsFactorySource(t *testing.T) {
+	a, b := twoFactories(t)
+	id := taskNewAt(a, "lead", issue(t, a, "lead"), "b", taskFile).Text
+
+	show := b.run("", "", "task show", "", id).Text
+	list := b.run("", "", "task list", "").Text
+
+	if !strings.Contains(show, "Source: a/lead, the lead of factory a\n") {
+		t.Fatalf("task show:\n%s", show)
+	}
+	if !strings.Contains(list, "Title (from a/lead)") {
+		t.Fatalf("task list:\n%s", list)
+	}
 }
 
 func TestTheLeadOfOneFactoryReachesTheLeadOfAnotherAsItsFactoryAndName(t *testing.T) {

@@ -288,7 +288,8 @@ var commands = map[string]command{
 	"hook busy":       {(*Engine).hookBusy, agents},
 	"restarted":       {(*Engine).restarted, []kind{operator, lead}},
 	// A relay comes from another factory's sfy process. It has no kind here, because relay checks the token against that factory.
-	protocol.RelayCommand: {(*Engine).relay, nil},
+	protocol.RelayCommand:     {(*Engine).relay, nil},
+	protocol.RelayTaskCommand: {(*Engine).relayTask, nil},
 }
 
 // Handle runs one command and returns its answer.
@@ -344,6 +345,13 @@ func (e *Engine) handleLocal(req protocol.Request, cmd command) (protocol.Answer
 	}
 	if factory, agent, ok := relayTarget(req); ok {
 		out, err := e.prepareRelay(req, factory, agent)
+		if err != nil {
+			return protocol.Answer{Error: err.Error()}, nil
+		}
+		return protocol.Answer{}, out
+	}
+	if factory, ok := taskRelayTarget(req); ok {
+		out, err := e.prepareTaskRelay(req, factory)
 		if err != nil {
 			return protocol.Answer{Error: err.Error()}, nil
 		}
