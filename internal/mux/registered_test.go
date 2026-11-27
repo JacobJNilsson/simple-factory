@@ -40,9 +40,11 @@ func TestRegisteredSendsTheLeadCallsToTheRecordedAddress(t *testing.T) {
 	_ = m.Show("lead")
 	_ = m.ShowLead("lead")
 	_, _ = m.Alive("lead")
+	_ = m.Escape("lead")
 	_ = m.Send("worker-t1", "hi")
+	_ = m.Escape("worker-t1")
 
-	want := []string{"send dev", "notify dev", "show dev", "showlead dev", "alive dev", "send worker-t1"}
+	want := []string{"send dev", "notify dev", "show dev", "showlead dev", "alive dev", "escape dev", "send worker-t1", "escape worker-t1"}
 	if !slices.Equal(a.calls, want) {
 		t.Fatalf("got %q, want %q", a.calls, want)
 	}

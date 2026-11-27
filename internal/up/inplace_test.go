@@ -248,6 +248,7 @@ func (l registeredLauncher) Alive(name string) (bool, error) {
 }
 func (l registeredLauncher) Stop(name string) error     { return l.m.Stop(name) }
 func (l registeredLauncher) ShowLead(name string) error { return l.m.ShowLead(name) }
+func (l registeredLauncher) Escape(name string) error   { return l.m.Escape(name) }
 
 func TestSendToLeadUsesTheRecordedAddress(t *testing.T) {
 	r, _ := inPlaceRig(t, "dev", nil)

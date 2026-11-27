@@ -68,6 +68,7 @@ func (m *fakeMux) Stop(name string) error {
 }
 func (m *fakeMux) Notify(string, string) error { return nil }
 func (m *fakeMux) Show(string) error           { return nil }
+func (m *fakeMux) Escape(string) error         { return nil }
 func (m *fakeMux) ShowLead(name string) error {
 	m.shownLead = append(m.shownLead, name)
 	if m.onShowLead != nil {

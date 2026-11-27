@@ -471,6 +471,7 @@ A template set lives under `[multiplexers.<name>]` in `config.toml`. Each templa
 | `notify` | no | Draws the operator's attention to session `{name}`, with `{text}` as the message. |
 | `show` | no | Makes session `{name}` visible to the operator. sfy runs it after each successful `start` of a worker or reviewer, and of the lead when `show_lead` is empty. A failure goes to `sfy.log` and does not fail the start. |
 | `show_lead` | no | Makes the lead's session `{name}` visible to the operator. sfy runs it after the lead starts, in place of `show`. On an in-place start, sfy runs it after it records the address and before it replaces its own process. An empty `show` with a `show_lead` hides workers and reviewers. |
+| `escape` | no | Presses the Escape key in session `{name}`, and no other key. `sfy unstick` runs it. Without it, `sfy unstick` fails. |
 | `whoami` | no | Prints the address of the terminal that it runs in on one line. The address must work as `{name}` in the other templates. sfy runs it in the operator's terminal, so the terminal tool's own variables are set. |
 
 A recorded address replaces `{name}` for the lead only. The `sfy up` row in the command table describes it.

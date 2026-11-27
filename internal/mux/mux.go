@@ -17,6 +17,8 @@ type Templates struct {
 	Start, Send, Alive, Stop, Notify, Show, ShowLead string
 	// Whoami prints the address of the terminal it runs in, as a value that the other templates accept as {name}.
 	Whoami string
+	// Escape presses the Escape key in session {name}, and nothing else.
+	Escape string
 }
 
 // Mux controls named sessions in a terminal multiplexer.
@@ -28,13 +30,18 @@ type Mux interface {
 	Notify(name, text string) error
 	Show(name string) error
 	ShowLead(name string) error
+	Escape(name string) error
 }
+
+// ErrNoEscape reports a template set without an escape template.
+var ErrNoEscape = errors.New("the template set has no escape template. Add an escape line to [multiplexers.<name>]")
 
 // FromMap builds a template set from a config table and rejects unknown keys.
 func FromMap(m map[string]string) (Templates, error) {
 	var t Templates
 	fields := map[string]*string{
 		"start": &t.Start, "send": &t.Send, "alive": &t.Alive, "stop": &t.Stop, "notify": &t.Notify, "show": &t.Show, "show_lead": &t.ShowLead, "whoami": &t.Whoami,
+		"escape": &t.Escape,
 	}
 	for key, value := range m {
 		field, ok := fields[key]
@@ -67,6 +74,7 @@ var tmuxSet = Templates{
 	Stop:  "tmux kill-session -t ={name}",
 	// The pane id selects the pane that runs the command, and the session name works as {name} in the other templates.
 	Whoami: `tmux display-message -p -t "$TMUX_PANE" '#{session_name}'`,
+	Escape: "tmux send-keys -t ={name}: Escape",
 }
 
 // A template that runs longer than this is killed and reported as an error.
@@ -151,6 +159,15 @@ func (r runner) ShowLead(name string) error {
 		return r.Show(name)
 	}
 	_, err := r.run(r.t.ShowLead, "show_lead", name, "", "", "")
+	return err
+}
+
+// Escape runs the escape template. A set without one fails with ErrNoEscape and runs nothing.
+func (r runner) Escape(name string) error {
+	if r.t.Escape == "" {
+		return ErrNoEscape
+	}
+	_, err := r.run(r.t.Escape, "escape", name, "", "", "")
 	return err
 }
 
@@ -245,6 +262,7 @@ func (p prefixed) Stop(name string) error          { return p.m.Stop(p.prefix + 
 func (p prefixed) Notify(name, text string) error  { return p.m.Notify(p.prefix+name, text) }
 func (p prefixed) Show(name string) error          { return p.m.Show(p.prefix + name) }
 func (p prefixed) ShowLead(name string) error      { return p.m.ShowLead(p.prefix + name) }
+func (p prefixed) Escape(name string) error        { return p.m.Escape(p.prefix + name) }
 
 // Whoamier is a Mux that can tell the address of the terminal that sfy runs in.
 type Whoamier interface {
@@ -313,6 +331,10 @@ func (r registered) Show(name string) error {
 func (r registered) ShowLead(name string) error {
 	target, _ := r.target(name)
 	return r.m.ShowLead(target)
+}
+func (r registered) Escape(name string) error {
+	target, _ := r.target(name)
+	return r.m.Escape(target)
 }
 func (r registered) Alive(name string) (bool, error) {
 	target, recorded := r.target(name)

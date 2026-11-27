@@ -139,6 +139,49 @@ func TestValueWithPlaceholderIsNotFilledTwice(t *testing.T) {
 	}
 }
 
+func TestFromMapAcceptsOptionalEscape(t *testing.T) {
+	got, err := FromMap(map[string]string{"start": "a", "send": "b", "alive": "c", "stop": "d", "escape": "e"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Escape != "e" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestEscapeFillsAndQuotesTheName(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Escape: "printf 'escape %s' {name} > " + shellQuote(out)})
+	if err := m.Escape("n 1'x"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "escape n 1'x" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestEscapeWithoutTemplateFailsAndRunsNothing(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out")
+	m := Runner(Templates{Start: "true", Send: "touch " + shellQuote(out), Alive: "true", Stop: "true"})
+	if err := m.Escape("n"); !errors.Is(err, ErrNoEscape) {
+		t.Fatalf("err = %v, want ErrNoEscape", err)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Fatal("Escape ran a template")
+	}
+}
+
+func TestTmuxSetPressesOnlyEscape(t *testing.T) {
+	set, _ := Builtin("tmux")
+	if set.Escape != "tmux send-keys -t ={name}: Escape" {
+		t.Fatalf("escape = %q", set.Escape)
+	}
+}
+
 func TestNotifyFillsTemplate(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	m := Runner(Templates{Start: "true", Send: "true", Alive: "true", Stop: "true", Notify: "printf '%s:%s' {name} {text} > " + shellQuote(out)})

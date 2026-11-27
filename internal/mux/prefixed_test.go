@@ -16,6 +16,7 @@ func (r *recordingMux) Stop(name string) error                 { r.record("stop"
 func (r *recordingMux) Notify(name, _ string) error            { r.record("notify", name); return nil }
 func (r *recordingMux) Show(name string) error                 { r.record("show", name); return nil }
 func (r *recordingMux) ShowLead(name string) error             { r.record("showlead", name); return nil }
+func (r *recordingMux) Escape(name string) error               { r.record("escape", name); return nil }
 
 func TestPrefixedPutsThePrefixInFrontOfEverySessionName(t *testing.T) {
 	r := &recordingMux{}
@@ -27,11 +28,12 @@ func TestPrefixedPutsThePrefixInFrontOfEverySessionName(t *testing.T) {
 	_ = m.Notify("sfy", "n")
 	_ = m.Show("worker-t1")
 	_ = m.ShowLead("lead")
+	_ = m.Escape("worker-t1")
 	_ = m.Stop("lead")
 
 	want := []string{
 		"start sfy-work-lead", "send sfy-work-lead", "alive sfy-work-worker-t1", "notify sfy-work-sfy",
-		"show sfy-work-worker-t1", "showlead sfy-work-lead", "stop sfy-work-lead",
+		"show sfy-work-worker-t1", "showlead sfy-work-lead", "escape sfy-work-worker-t1", "stop sfy-work-lead",
 	}
 	if !slices.Equal(r.calls, want) {
 		t.Fatalf("got %q, want %q", r.calls, want)
