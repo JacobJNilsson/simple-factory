@@ -62,6 +62,8 @@ headless = true
 
 The key is global, and it defaults to `false`. With it, `sfy up` starts `sfy serve` as a detached process. The process leads its own session, reads stdin from `/dev/null`, runs in the factory folder and gets the same environment as a windowed process. Its stdout and stderr go to `sfy.log` in the factory folder, so `tail -f ~/.sfy/sfy.log` shows what the window showed. The lead, the workers and the reviewers keep their windows. This works on Linux and macOS and needs no systemd or launchd.
 
+For one start without the setting, run `sfy up --headless`. It prepares the factory folder as `sfy up` does and starts the sfy process detached, with its log in `sfy.log`. It starts no lead, and it leaves a running lead and a registered lead alone. When the sfy process already answers, it prints "The sfy process already runs." and starts nothing. A plain `sfy restart` follows the config, so it moves such a process back into a window when the config does not say headless.
+
 - `sfy down` stops the agents and the sfy process, as without the setting.
 - To stop the sfy process alone, run `kill $(cat ~/.sfy/sfy.pid)`. The process handles `SIGTERM` by removing its socket and lock file. The agents keep running, and the next `sfy` starts the sfy process again.
 - `sfy restart` and `sfy restart --update` stop the old process, wait until it releases the socket and the lock, start the new process detached and wait until it answers. They print the new process as without the setting. A call that arrives in the short gap fails with "the sfy process does not run". The gap ends when the new process answers.

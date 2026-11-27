@@ -22,7 +22,9 @@ var version = "dev"
 func main() {
 	// The exit code is the process result, so main exits with it after run returns.
 	a := app{getenv: os.Getenv, stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr}
-	a.start = func() error { return up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr) }
+	a.start = func(headless bool) error {
+		return up.Command(os.Environ(), os.Getenv, os.Stdout, os.Stderr, headless)
+	}
 	os.Exit(a.run(os.Args[1:]))
 }
 
@@ -31,8 +33,8 @@ type app struct {
 	getenv         func(string) string
 	stdin          io.Reader
 	stdout, stderr io.Writer
-	// start starts the sfy process and the lead.
-	start func() error
+	// start starts the sfy process, and the lead unless headless is set.
+	start func(headless bool) error
 }
 
 // noFactory lists the commands that need no factory folder, so a failed factory lookup does not stop them.
@@ -40,15 +42,16 @@ var noFactory = []string{"--version", "help", "--help", "run", "hooks"}
 
 func (a app) run(args []string) int {
 	if len(args) == 0 || args[0] == "up" {
-		if len(args) > 1 {
-			return cli.Misuse(a.stderr, "up takes no arguments")
+		headless := len(args) == 2 && args[1] == "--headless"
+		if len(args) > 1 && !headless {
+			return cli.Misuse(a.stderr, "usage: sfy up [--headless]")
 		}
 		// An agent that runs sfy by accident must not start a second sfy. A registered agent counts as an agent.
 		if cli.Agent(a.getenv) != "" {
 			cli.PrintUsage(a.stderr)
 			return 1
 		}
-		return a.report(a.start())
+		return a.report(a.start(headless))
 	}
 	// The environment can be faked, so the allow rules of the settings are the real barrier. This check backs them up.
 	switch args[0] {

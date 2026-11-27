@@ -130,6 +130,8 @@ type options struct {
 	spawn func(dir string, env, argv []string, logPath string) (detached, error)
 	// move moves the factory folder from the old name of the lead to the new one. A nil move moves nothing.
 	move func() error
+	// headless starts the sfy process detached and starts no lead, whatever the config says. The --headless flag sets it.
+	headless bool
 }
 
 // moveToLead runs o.move. It runs before each check of whether the lead runs, because a lead that an older sfy started runs under the old name.
@@ -184,17 +186,39 @@ func run(o options) error {
 	return err
 }
 
+// runHeadless starts only the sfy process, detached, unless it answers already.
+// It never asks whether the lead runs, because that check can clear a registration whose terminal is gone.
+func runHeadless(o options) error {
+	if err := o.prepare(); err != nil {
+		return err
+	}
+	if o.answers() {
+		_, err := fmt.Fprintln(o.out, "The sfy process already runs.")
+		return err
+	}
+	if err := o.startServe(); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(o.out, "Started the sfy process (headless, log in %s).\n", filepath.Join(o.home, logName))
+	return err
+}
+
+// prepare creates the factory folder and notes.md, and moves the folder of a lead with an old name.
+func (o options) prepare() error {
+	if err := os.MkdirAll(o.home, 0o700); err != nil {
+		return err
+	}
+	if err := ensureNotes(filepath.Join(o.home, "notes.md")); err != nil {
+		return err
+	}
+	return o.moveToLead()
+}
+
 // ensure starts what is missing and returns what it started. It reports whether the lead ran before.
 // With inPlace set, a missing lead replaces this process when the set names this terminal.
 // Only the operator's own command may do that, so restart passes false.
 func (o options) ensure(inPlace bool) (started []string, leadAlive bool, err error) {
-	if err := os.MkdirAll(o.home, 0o700); err != nil {
-		return nil, false, err
-	}
-	if err := ensureNotes(filepath.Join(o.home, "notes.md")); err != nil {
-		return nil, false, err
-	}
-	if err := o.moveToLead(); err != nil {
+	if err := o.prepare(); err != nil {
 		return nil, false, err
 	}
 	serveStarted := false
@@ -327,9 +351,9 @@ func ensureNotes(path string) error {
 }
 
 // startServe starts the sfy process, unless it runs, and waits for the socket.
-// It runs in a multiplexer session, or detached when the config sets headless.
+// It runs in a multiplexer session, or detached when the config or the --headless flag sets headless.
 func (o options) startServe() error {
-	if o.config.Headless {
+	if o.config.Headless || o.headless {
 		return o.startHeadless()
 	}
 	alive, err := o.mux.Alive(serveSession)
