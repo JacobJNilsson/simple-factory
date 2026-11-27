@@ -147,15 +147,13 @@ func (a adapter) Command(spec engine.SessionSpec) ([]string, error) {
 		return nil, err
 	}
 	argv = append(argv, plugin...)
-	if spec.Kind == "lead" {
-		conversation, resumed, err := a.leadConversation(spec)
-		if err != nil {
-			return nil, err
-		}
-		argv = append(argv, conversation...)
-		if resumed && spec.ResumePrompt != "" {
-			prompt = spec.ResumePrompt
-		}
+	conversation, resumed, err := a.conversation(spec)
+	if err != nil {
+		return nil, err
+	}
+	argv = append(argv, conversation...)
+	if resumed && spec.ResumePrompt != "" {
+		prompt = spec.ResumePrompt
 	}
 	argv = append(argv, prompt)
 	// sfy run keeps the values out of argv, and the process becomes claude itself after the exec.

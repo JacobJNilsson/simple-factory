@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/JacobJNilsson/simple-factory/internal/engine"
 )
 
 const recordedID = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d"
@@ -122,25 +124,73 @@ func TestFreshSpecReplacesTheRecordedConversation(t *testing.T) {
 	}
 }
 
-func TestWorkersAndReviewersNeverResume(t *testing.T) {
+// sessionConversationFile is the id file of any session.
+func sessionConversationFile(home, name string) string {
+	return filepath.Join(home, "sessions", name, "conversation-id")
+}
+
+func TestWorkerAndReviewerStartsRecordANewConversation(t *testing.T) {
+	for _, spec := range []engine.SessionSpec{worker(), reviewerSpec()} {
+		t.Run(spec.Kind, func(t *testing.T) {
+			p, home := setup(t, bin)
+			argv := command(t, p, spec)
+
+			id := flagValue(t, argv, "--session-id")
+			if slices.Contains(argv, "--resume") {
+				t.Errorf("first start resumes: %v", argv)
+			}
+			b, err := os.ReadFile(sessionConversationFile(home, spec.Name))
+			if err != nil || strings.TrimSpace(string(b)) != id {
+				t.Errorf("recorded %q, %v, want %q", b, err, id)
+			}
+			if got := argv[len(argv)-1]; got != spec.Prompt {
+				t.Errorf("prompt %q, want %q", got, spec.Prompt)
+			}
+		})
+	}
+}
+
+func TestWorkerStartWithoutResumeReplacesTheRecordedConversation(t *testing.T) {
 	p, home := setup(t, bin)
-	if err := os.MkdirAll(filepath.Dir(conversationFile(home)), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(conversationFile(home), []byte(recordedID+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	writeConversation(t, sessionConversationFile(home, "worker-t1"))
 
 	spec := worker()
+	spec.ResumePrompt = "sfy woke this session."
 	if p.Resumes(spec) {
 		t.Error("worker resumes")
 	}
 	argv := command(t, p, spec)
 
-	for _, flag := range []string{"--resume", "--session-id"} {
-		if slices.Contains(argv, flag) {
-			t.Errorf("worker argv has %s: %v", flag, argv)
-		}
+	if id := flagValue(t, argv, "--session-id"); id == recordedID {
+		t.Error("new start reused the old id")
+	}
+	if slices.Contains(argv, "--resume") {
+		t.Errorf("worker argv resumes: %v", argv)
+	}
+}
+
+func TestTheLeadIDDoesNotLeakToAWorker(t *testing.T) {
+	p, home := setup(t, bin)
+	writeConversation(t, conversationFile(home))
+
+	argv := command(t, p, worker())
+
+	if id := flagValue(t, argv, "--session-id"); id == recordedID {
+		t.Error("worker took the lead's id")
+	}
+	b, _ := os.ReadFile(conversationFile(home))
+	if strings.TrimSpace(string(b)) != recordedID {
+		t.Errorf("lead id changed to %q", b)
+	}
+}
+
+func writeConversation(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(recordedID+"\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
