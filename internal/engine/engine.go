@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"sort"
@@ -142,7 +143,8 @@ type Engine struct {
 	proc process.Process
 }
 
-// SetLog makes the engine write one line to w for each note it types and for each unread agent it skips as not alive.
+// SetLog makes the engine write one line to w for each note it types, for each unread agent it skips as not alive,
+// and for each refused command and each accepted report or verdict.
 func (e *Engine) SetLog(w io.Writer) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -312,8 +314,49 @@ func (e *Engine) handleLocked(req protocol.Request) (protocol.Answer, *outgoing)
 	return e.handle(req)
 }
 
-// handle runs one command under the lock. It returns an outgoing message instead of an answer for a send to another factory.
+// handle runs one command under the lock and logs its answer. It returns an outgoing message instead of an answer for a send to another factory.
 func (e *Engine) handle(req protocol.Request) (protocol.Answer, *outgoing) {
+	ans, out := e.dispatch(req)
+	if out == nil {
+		e.logAnswer(req, ans)
+	}
+	return ans, out
+}
+
+// logClip is the most runes of a report text or an error that one log line holds.
+const logClip = 200
+
+// logAnswer writes one line for a refused command and for an accepted report or verdict. The line holds the name that the request claims.
+func (e *Engine) logAnswer(req protocol.Request, ans protocol.Answer) {
+	taskID := cmp.Or(req.Caller.Task, "-")
+	switch {
+	case !ans.OK:
+		e.logf("refused %q from %s on task %s: %q", req.Command, callerName(req.Caller), taskID, clip(ans.Error))
+	case strings.HasPrefix(req.Command, "report ") || strings.HasPrefix(req.Command, "verdict "):
+		e.logf("accepted %q from %s on task %s: %q", req.Command, callerName(req.Caller), taskID, clip(text(req, req.Args)))
+	}
+}
+
+// callerName names the caller of a request for the log. It never reads the token.
+func callerName(c protocol.Caller) string {
+	name := cmp.Or(c.Agent, "operator")
+	if c.Factory != "" {
+		name += " of factory " + c.Factory
+	}
+	return name
+}
+
+// clip cuts s to logClip runes and marks a cut with "...".
+func clip(s string) string {
+	r := []rune(s)
+	if len(r) <= logClip {
+		return s
+	}
+	return string(r[:logClip]) + "..."
+}
+
+// dispatch runs one command under the lock. It returns an outgoing message instead of an answer for a send to another factory.
+func (e *Engine) dispatch(req protocol.Request) (protocol.Answer, *outgoing) {
 	cmd, ok := commands[req.Command]
 	if !ok {
 		return protocol.Answer{Error: fmt.Sprintf("unknown command %q", req.Command)}, nil
