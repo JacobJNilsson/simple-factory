@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -235,6 +237,63 @@ func TestRunNotRunning(t *testing.T) {
 	code := Run([]string{"status"}, envOf(map[string]string{"SFY_HOME": home}), strings.NewReader(""), &out, &errb)
 	if code != exitNotRunning {
 		t.Fatalf("code %d, stderr %q", code, errb.String())
+	}
+}
+
+// noSocket returns an env with a temp SFY_HOME that holds no socket, a temp HOME, and the given variables.
+func noSocket(t *testing.T, vars map[string]string) func(string) string {
+	t.Helper()
+	home, err := os.MkdirTemp("", "fc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	m := map[string]string{"SFY_HOME": home, "HOME": t.TempDir()}
+	for k, v := range vars {
+		m[k] = v
+	}
+	return envOf(m)
+}
+
+func TestRunInASessionExplainsASocketItCannotReach(t *testing.T) {
+	env := noSocket(t, map[string]string{"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"})
+	var out, errb bytes.Buffer
+
+	code := Run([]string{"report", "blocked", "x"}, env, strings.NewReader(""), &out, &errb)
+
+	lines := strings.Split(strings.TrimRight(errb.String(), "\n"), "\n")
+	if code != exitNotRunning || len(lines) != 2 || !strings.HasPrefix(lines[0], "sfy:") || lines[1] != sandboxHint {
+		t.Fatalf("code %d, stderr %q", code, errb.String())
+	}
+}
+
+func TestRunOutsideASessionGivesNoSandboxHint(t *testing.T) {
+	var out, errb bytes.Buffer
+
+	Run([]string{"status"}, noSocket(t, nil), strings.NewReader(""), &out, &errb)
+
+	if strings.Contains(errb.String(), "outside the sandbox") {
+		t.Fatalf("stderr %q", errb.String())
+	}
+}
+
+func TestAHookGivesNoSandboxHint(t *testing.T) {
+	env := noSocket(t, map[string]string{"SFY_AGENT": "worker-t1", "SFY_TASK": "t1"})
+	var out, errb bytes.Buffer
+
+	Run([]string{"hook", "turn-ended"}, env, strings.NewReader("{}"), &out, &errb)
+
+	if strings.Contains(errb.String(), "outside the sandbox") {
+		t.Fatalf("stderr %q", errb.String())
+	}
+}
+
+func TestDialFailedIsFalseForAnAnswerError(t *testing.T) {
+	read := fmt.Errorf("read answer: %w", &net.OpError{Op: "read", Err: errors.New("reset")})
+	dial := &net.OpError{Op: "dial", Err: errors.New("operation not permitted")}
+
+	if dialFailed(read) || !dialFailed(dial) {
+		t.Fatalf("read %v, dial %v", dialFailed(read), dialFailed(dial))
 	}
 }
 
