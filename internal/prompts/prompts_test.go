@@ -34,6 +34,28 @@ func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
 	}
 }
 
+func TestEveryRolePromptSaysThatSfyMayWakeTheAgent(t *testing.T) {
+	for _, kind := range []string{"lead", "worker", "reviewer"} {
+		got, err := prompts.For(kind, []string{t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, "When sfy wakes you, your first message says so.") {
+			t.Errorf("%s prompt does not say that sfy may wake it", kind)
+		}
+	}
+}
+
+func TestTheLeadPromptSaysWhatToDoWhenAWakeFails(t *testing.T) {
+	got, err := prompts.For("lead", []string{t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "Sometimes sfy says that it could not wake one.") {
+		t.Error("the lead prompt does not name a failed wake")
+	}
+}
+
 func TestWorkerAndReviewerPromptsKeepBackticksOutOfSfyCommands(t *testing.T) {
 	for _, kind := range []string{"worker", "reviewer"} {
 		got, err := prompts.Role(kind, []string{t.TempDir()}, false)
