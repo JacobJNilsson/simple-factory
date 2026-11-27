@@ -37,10 +37,12 @@ type Config struct {
 	NoteFallbackAfter time.Duration `toml:"note_fallback_after"`
 	// CheckTimeout is how long a task's check command may run before sfy stops it and counts it as failed.
 	CheckTimeout time.Duration `toml:"check_timeout"`
-	Provider     string        `toml:"provider"`
-	Multiplexer  string        `toml:"multiplexer"`
-	Models       Models        `toml:"models"`
-	Allow        []string      `toml:"allow"`
+	// QueueWaitNote is how long a queued task may wait for a slot before sfy tells the lead. 0 turns the note off.
+	QueueWaitNote time.Duration `toml:"queue_wait_note"`
+	Provider      string        `toml:"provider"`
+	Multiplexer   string        `toml:"multiplexer"`
+	Models        Models        `toml:"models"`
+	Allow         []string      `toml:"allow"`
 	// NoMerge stops the lead from integrating approved branches. The operator merges them by hand.
 	// A .sfy.toml file sets it for one repo or for the repos below one folder.
 	NoMerge bool `toml:"no_merge"`
@@ -132,7 +134,12 @@ type SettingError struct {
 	Unknown bool
 	// Duration is true when the value must be a positive duration.
 	Duration bool
+	// NonNegative is true when the value must be a duration of 0 or more.
+	NonNegative bool
 }
+
+// DefaultQueueWaitNote is the default of queue_wait_note.
+const DefaultQueueWaitNote = 10 * time.Minute
 
 // DefaultNoteFallbackAfter is the default of note_fallback_after.
 // It covers a long tool call, because the hook delivers a note only between tool calls or at the end of the turn.
@@ -144,6 +151,9 @@ const DefaultCheckTimeout = 20 * time.Minute
 func (e *SettingError) Error() string {
 	if e.Unknown {
 		return fmt.Sprintf("config: unknown setting %s", e.Setting)
+	}
+	if e.NonNegative {
+		return fmt.Sprintf("config: %s must be a duration of 0 or more, such as 10m", e.Setting)
 	}
 	if e.Duration {
 		return fmt.Sprintf("config: %s must be a positive duration, such as 5m", e.Setting)
@@ -158,6 +168,7 @@ func defaults(userTempDir func() (string, error)) Config {
 		ResendMinutes:     5,
 		NoteFallbackAfter: DefaultNoteFallbackAfter,
 		CheckTimeout:      DefaultCheckTimeout,
+		QueueWaitNote:     DefaultQueueWaitNote,
 		Provider:          "claude",
 		Multiplexer:       "tmux",
 		Models:            Models{Lead: "opus", Worker: "sonnet", Reviewer: "sonnet"},
@@ -379,6 +390,8 @@ func checkValues(c Config) error {
 		return &SettingError{Setting: "note_fallback_after", Duration: true}
 	case c.CheckTimeout <= 0:
 		return &SettingError{Setting: "check_timeout", Duration: true}
+	case c.QueueWaitNote < 0:
+		return &SettingError{Setting: "queue_wait_note", NonNegative: true}
 	}
 	return nil
 }

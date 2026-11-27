@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/config"
 	"github.com/JacobJNilsson/simple-factory/internal/process"
@@ -47,6 +48,8 @@ type agentState struct {
 	reminders int
 	// probe holds what the counted alive checks know.
 	probe probeState
+	// blockedAt is when the worker reported blocked. It is zero when the worker did not, or when it reported again or got an answer since.
+	blockedAt time.Time
 }
 
 // sessionEvent is what a counted alive check tells that the lead has not heard yet.

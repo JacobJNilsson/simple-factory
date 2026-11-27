@@ -75,7 +75,7 @@ A task moves through these states:
 - A task that a program, the operator or the lead of another factory creates starts in `new`, and sfy tells the lead. The lead adds context, for example from its notes, and may replace the task file at any time before the task is approved or cancelled. It then queues the task, cancels it, or escalates it.
 - A task that the lead creates starts in `queued`.
 - A `queued` task with an `## After` list waits while any listed task is not `done`. `status.md`, `sfy task list` and `sfy task show` show it as `queued (after t6, t8)`, with the ids that are not yet done. Other `queued` tasks may start ahead of it. When a listed task is `cancelled`, the waiting task can never start. sfy tells the lead once, "Task <id> waits for <dep>, which is cancelled", and the task stays `queued` until the lead edits or cancels it.
-- sfy starts a worker for the oldest `queued` task that does not wait when fewer than `max_workers` workers run. The default for `max_workers` is 2. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
+- sfy starts a worker for the oldest `queued` task that does not wait when fewer than `max_workers` workers run. The default for `max_workers` is 2. A task in `working`, `review` or `feedback` holds its slot, also while its worker waits for an answer or for a push. When a queued task that waits for nothing else has waited `queue_wait_note` for a slot, sfy tells the lead once. The note names each active task whose worker reported blocked or that waits for a push, with how long it has waited. sfy sends no note while no active task waits. A blocked worker stops waiting when it reports again, when the lead sends it a message, or when the task gets feedback. sfy keeps these wait times in memory, so a restart starts them again. After three failed attempts in a row to start a task's worker, the task moves to `escalated`.
 - When a worker reports `done` on a task without `## Check`, the task moves to `review`, and sfy starts a reviewer.
 - On a task with `## Check`, sfy first runs the check command with `sh -c` in the task's workspace, in a sandbox that has the worker's path lists. `sfy report done` answers at once, and the task keeps its state while the check runs. `status.md`, `sfy task list` and `sfy task show` show the state as `working (check runs)`. A second `sfy report done` during the run fails.
 - When the check exits 0, the task moves to `review`, and sfy starts a reviewer. The reviewer's first message says that the check passed.
@@ -383,6 +383,7 @@ sfy builds a factory's settings from the layers of its definition, lowest first:
 | `max_workers` | 2 | Workers that run at once. |
 | `resend_minutes` | 5 | Minutes between notes for an unread message. |
 | `note_fallback_after` | `5m` | A Go duration. How long queued text may stay unread by the note hook before sfy types the note into an idle pane. |
+| `queue_wait_note` | `10m` | A Go duration. How long a queued task may wait for a slot before sfy tells the lead. `0` turns the note off. |
 | `check_timeout` | `20m` | A Go duration. How long a task's check may run before sfy stops it and counts it as failed. |
 | `provider` | `claude` | The agent provider adapter. |
 | `multiplexer` | `tmux` | The name of the template set to use. |

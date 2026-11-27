@@ -44,6 +44,7 @@ func TestLoadGivesSpecDefaultsForAnEmptyFolder(t *testing.T) {
 		ResendMinutes:     5,
 		NoteFallbackAfter: 5 * time.Minute,
 		CheckTimeout:      20 * time.Minute,
+		QueueWaitNote:     10 * time.Minute,
 		Provider:          "claude",
 		Multiplexer:       "tmux",
 		Models:            config.Models{Lead: "opus", Worker: "sonnet", Reviewer: "sonnet"},
@@ -271,6 +272,29 @@ func TestLoadFailsNamingACheckTimeoutThatIsNotPositive(t *testing.T) {
 	_, err := config.Load(writeConfig(t, "check_timeout = \"0s\"\n"))
 
 	assertSetting(t, err, "check_timeout")
+}
+
+func TestLoadReadsQueueWaitNoteAsADuration(t *testing.T) {
+	c, err := config.Load(writeConfig(t, "queue_wait_note = \"90s\"\n"))
+	if err != nil || c.QueueWaitNote != 90*time.Second {
+		t.Fatalf("got %v, %v", c.QueueWaitNote, err)
+	}
+}
+
+func TestLoadAcceptsAQueueWaitNoteOfZero(t *testing.T) {
+	c, err := config.Load(writeConfig(t, "queue_wait_note = \"0s\"\n"))
+	if err != nil || c.QueueWaitNote != 0 {
+		t.Fatalf("got %v, %v", c.QueueWaitNote, err)
+	}
+}
+
+func TestLoadFailsNamingANegativeQueueWaitNote(t *testing.T) {
+	_, err := config.Load(writeConfig(t, "queue_wait_note = \"-1m\"\n"))
+
+	var bad *config.SettingError
+	if !errors.As(err, &bad) || bad.Setting != "queue_wait_note" || !bad.NonNegative {
+		t.Fatalf("want a SettingError for a duration of 0 or more, got %v", err)
+	}
 }
 
 func TestLoadReadsHeadlessAndDefaultsToFalse(t *testing.T) {

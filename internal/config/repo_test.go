@@ -130,6 +130,7 @@ func TestARepoFileRefusesAGlobalOnlyKey(t *testing.T) {
 		{"max_workers = 3", "max_workers"},
 		{"multiplexer = \"tmux\"", "multiplexer"},
 		{"check_timeout = \"5m\"", "check_timeout"},
+		{"queue_wait_note = \"5m\"", "queue_wait_note"},
 		{"[multiplexers.x]\nstart = \"y\"", "multiplexers.x"},
 	} {
 		home := t.TempDir()

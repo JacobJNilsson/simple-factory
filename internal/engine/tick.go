@@ -3,6 +3,8 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
@@ -34,6 +36,7 @@ func (e *Engine) startQueued() error {
 		}
 	}
 	errs := []error{e.noteCancelledDeps(tasks)}
+	started := map[string]bool{}
 	for _, t := range tasks {
 		if running >= e.cfg.MaxWorkers {
 			break
@@ -45,9 +48,109 @@ func (e *Engine) startQueued() error {
 			errs = append(errs, err)
 			continue
 		}
+		started[t.ID] = true
 		running++
 	}
+	errs = append(errs, e.noteSlotWaits(tasks, started, running >= e.cfg.MaxWorkers))
 	return errors.Join(errs...)
+}
+
+// noteSlotWaits tells the lead once when a ready queued task has waited queue_wait_note for a slot while an active task waits.
+// full reports whether every slot is taken. A task that starts, or a free slot, ends the wait, so a later wait gets its own note.
+func (e *Engine) noteSlotWaits(tasks []task.Task, started map[string]bool, full bool) error {
+	ready := map[string]bool{}
+	if full {
+		for _, t := range tasks {
+			if t.State == task.Queued && len(t.WaitingOn(tasks)) == 0 && !started[t.ID] {
+				ready[t.ID] = true
+			}
+		}
+	}
+	now := e.c.Now()
+	for id := range ready {
+		if _, ok := e.slotWait[id]; !ok {
+			e.slotWait[id] = now
+		}
+	}
+	for id := range e.slotWait {
+		if !ready[id] {
+			delete(e.slotWait, id)
+			delete(e.slotNoted, id)
+		}
+	}
+	if e.cfg.QueueWaitNote == 0 {
+		return nil
+	}
+	var errs []error
+	for _, t := range tasks {
+		since, ok := e.slotWait[t.ID]
+		if !ok || e.slotNoted[t.ID] || now.Sub(since) < e.cfg.QueueWaitNote {
+			continue
+		}
+		holders := e.waitingTasks(tasks)
+		if len(holders) == 0 {
+			continue
+		}
+		if err := e.message("lead", "sfy", slotWaitNote(t.ID, now.Sub(since), holders, now)); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		e.slotNoted[t.ID] = true
+	}
+	return errors.Join(errs...)
+}
+
+// slotHolder is an active task that holds a slot while it waits.
+type slotHolder struct {
+	id string
+	// pushing is true for a task that waits for its worker to push, and false for a worker that reported blocked.
+	pushing bool
+	since   time.Time
+}
+
+// waitingTasks returns the active tasks that hold a slot while they wait for a push or for an answer to a blocked worker.
+// A push wait counts from the task's last save, which askPush makes. An edit of the task by the lead starts the count again.
+func (e *Engine) waitingTasks(tasks []task.Task) []slotHolder {
+	var out []slotHolder
+	for _, t := range tasks {
+		if !t.State.Active() {
+			continue
+		}
+		if t.State == task.Review && t.Pushing {
+			out = append(out, slotHolder{id: t.ID, pushing: true, since: t.Updated})
+			continue
+		}
+		if s := e.sess.agents[e.workerOf(t)]; s != nil && !s.blockedAt.IsZero() {
+			out = append(out, slotHolder{id: t.ID, since: s.blockedAt})
+		}
+	}
+	return out
+}
+
+// slotWaitNote builds the note that tells the lead which waiting tasks keep a queued task from a slot.
+func slotWaitNote(queued string, waited time.Duration, holders []slotHolder, now time.Time) string {
+	parts := []string{fmt.Sprintf("Task %s has waited %s for a worker slot.", queued, minutes(waited))}
+	for _, h := range holders {
+		if h.pushing {
+			parts = append(parts, fmt.Sprintf("Task %s holds a slot and has waited %s for its worker to push.", h.id, minutes(now.Sub(h.since))))
+		} else {
+			parts = append(parts, fmt.Sprintf("Task %s holds a slot and has waited %s since its worker reported blocked.", h.id, minutes(now.Sub(h.since))))
+		}
+	}
+	parts = append(parts, "Answer, escalate or cancel one of these tasks to free a slot.")
+	return strings.Join(parts, " ")
+}
+
+// minutes writes a duration in whole minutes, rounded down.
+func minutes(d time.Duration) string {
+	switch n := int(d / time.Minute); n {
+	case 0:
+		return "less than a minute"
+	case 1:
+		return "1 minute"
+	default:
+		return fmt.Sprintf("%d minutes", n)
+	}
 }
 
 // noteCancelledDeps tells the lead once for each queued task that waits for a cancelled task.

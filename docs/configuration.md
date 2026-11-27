@@ -295,6 +295,16 @@ sfy delivers notes to a Claude Code session through a hook on the session's note
 note_fallback_after = "10m"
 ```
 
+## Notes about queued tasks
+
+A task in `working`, `review` or `feedback` holds its worker slot, also while its worker waits for an answer or for a push. When a queued task has waited `queue_wait_note` for a slot, sfy tells the lead once. The note names each active task whose worker reported blocked or that waits for a push, with how long it has waited. sfy sends no note while every slot holds running work.
+
+`queue_wait_note` in `~/.sfy/config.toml` sets the wait. The value is a Go duration. The default is `10m`, and `0` turns the note off. A per-repo `.sfy.toml` file refuses the key.
+
+```toml
+queue_wait_note = "30m"
+```
+
 ## Run the task's check before review
 
 A task may have a `## Check` section with one command line. When the worker reports done, sfy runs that command in the task's workspace. A pass starts the review. A failure goes back to the worker as a message, with the command, the error and the last 8 KiB of the output, and no reviewer starts. A failed check counts as a review round.
