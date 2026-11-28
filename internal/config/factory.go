@@ -220,16 +220,30 @@ func FindFactory(userHome, dir, prefix string) (string, bool) {
 	userHome = CanonicalPath(userHome)
 	for d := CanonicalPath(dir); ; d = filepath.Dir(d) {
 		if d != userHome {
-			for _, state := range known[d] {
-				if NamePrefixOf(state) == prefix {
-					return state, true
-				}
+			if state, ok := withPrefix(known[d], prefix); ok {
+				return state, true
 			}
 		}
 		if d == filepath.Dir(d) {
 			return "", false
 		}
 	}
+}
+
+// ExactFactory returns the first factory folder with the name prefix whose working folder is dir itself.
+// Unlike FindFactory, it ignores the factories of the folders above dir.
+func ExactFactory(userHome, dir, prefix string) (string, bool) {
+	return withPrefix(registered(userHome)[CanonicalPath(dir)], prefix)
+}
+
+// withPrefix returns the first of the factory folders states that records the name prefix.
+func withPrefix(states []string, prefix string) (string, bool) {
+	for _, state := range states {
+		if NamePrefixOf(state) == prefix {
+			return state, true
+		}
+	}
+	return "", false
 }
 
 // CreateFactory makes the factory folder of a new factory for the working folder dir and records dir in it.
