@@ -19,9 +19,12 @@ const folderFile = "folder"
 // namePrefixFile is the file in a factory folder that records its name prefix. A factory folder without it has an empty name prefix.
 const namePrefixFile = "name-prefix"
 
+// LabelFile is the file in a factory folder that holds its display label. The label never addresses the factory.
+const LabelFile = "label"
+
 // StateNames are the names that sfy owns in a factory folder. A factory repo's install must not write them.
 var StateNames = []string{
-	namePrefixFile, "tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "lead-prompt.md", "main-prompt.md", "definition.toml",
+	namePrefixFile, LabelFile, "tasks", "work", "repos", "sessions", "inbox", "next-id", "status.md", "lead-prompt.md", "main-prompt.md", "definition.toml",
 	"sfy.log", "sfy.sock", "sfy.lock", "sfy.pid", "drop",
 }
 
@@ -161,8 +164,11 @@ func CanonicalPath(dir string) string {
 }
 
 // WorkFolder returns the working folder that a factory folder records, or an empty string when it records none.
-func WorkFolder(home string) string {
-	b, err := os.ReadFile(filepath.Join(home, folderFile))
+func WorkFolder(home string) string { return recorded(home, folderFile) }
+
+// recorded returns the trimmed text of the file name in the factory folder home, or an empty string when it cannot read the file.
+func recorded(home, name string) string {
+	b, err := os.ReadFile(filepath.Join(home, name))
 	if err != nil {
 		return ""
 	}
@@ -205,13 +211,7 @@ func FactoriesAt(userHome, dir string) []string {
 }
 
 // NamePrefixOf returns the name prefix that the factory folder home records, or an empty string when it records none.
-func NamePrefixOf(home string) string {
-	b, err := os.ReadFile(filepath.Join(home, namePrefixFile))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
-}
+func NamePrefixOf(home string) string { return recorded(home, namePrefixFile) }
 
 // FindFactory returns the first factory folder with the name prefix of the nearest working folder at or above dir that has one.
 // The user's home folder is never a working folder.
@@ -282,8 +282,14 @@ func Describe(home string, env func(string) string) (name, folder string) {
 	return filepath.Base(filepath.Clean(home)), home
 }
 
-// Header returns the line that names the factory and its folder.
+// LabelOf returns the display label that the factory folder home records, or an empty string when it records none.
+func LabelOf(home string) string { return recorded(home, LabelFile) }
+
+// Header returns the line that names the factory, its label when it has one, and its folder.
 func Header(home string, env func(string) string) string {
 	name, folder := Describe(home, env)
+	if label := LabelOf(home); label != "" {
+		return fmt.Sprintf("Factory: %s, shown as %s (%s)", name, label, folder)
+	}
 	return fmt.Sprintf("Factory: %s (%s)", name, folder)
 }

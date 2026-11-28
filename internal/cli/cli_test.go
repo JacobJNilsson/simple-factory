@@ -201,6 +201,20 @@ func TestRunPrintsAnswerText(t *testing.T) {
 	}
 }
 
+func TestStatusShowsTheLabelInTheHeader(t *testing.T) {
+	env := liveServer(t)
+	if err := os.WriteFile(filepath.Join(env("SFY_HOME"), "label"), []byte("Client work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+
+	code := Run([]string{"status"}, env, strings.NewReader(""), &out, &errb)
+
+	if code != exitOK || !strings.Contains(out.String(), ", shown as Client work (") {
+		t.Errorf("code %d, stdout %q, stderr %q, want the label in the header", code, out.String(), errb.String())
+	}
+}
+
 func TestRunPrintsTheWarningOfAnAnswerOnStderr(t *testing.T) {
 	env := liveServer(t)
 	var out, errb bytes.Buffer
