@@ -22,6 +22,10 @@ var defaults embed.FS
 // A file prompts/worker-repo.md in a layer replaces its default.
 const WorkerRepoPart = "worker-repo"
 
+// LeadMemoryPart is the kind of the lead prompt part that says what the lead keeps as its memory and reads at each start.
+// A file prompts/lead-memory.md in a layer replaces its default.
+const LeadMemoryPart = "lead-memory"
+
 // DefaultBase is the base source that Sources names when no layer has a <kind>.md file.
 const DefaultBase = "default"
 
@@ -35,18 +39,33 @@ type Addition struct {
 	Removed bool
 }
 
-// Role returns the prompt for a session of kind. A worker on a task with a repo gets the
-// worker prompt followed by the repo part. Any other session gets the prompt of its kind only.
+// Role returns the prompt for a session of kind. The lead gets its prompt followed by the memory part.
+// A worker on a task with a repo gets the worker prompt followed by the repo part. Any other session gets the prompt of its kind only.
 func Role(kind string, layers []string, hasRepo bool) (string, error) {
 	base, err := For(kind, layers)
-	if err != nil || kind != "worker" || !hasRepo {
-		return base, err
+	if err != nil {
+		return "", err
 	}
-	part, err := For(WorkerRepoPart, layers)
+	name := partName(kind, hasRepo)
+	if name == "" {
+		return base, nil
+	}
+	part, err := For(name, layers)
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimRight(base, "\n") + "\n\n" + part, nil
+}
+
+// partName returns the kind of the part that Role appends to the prompt of kind, or an empty string for none.
+func partName(kind string, hasRepo bool) string {
+	switch {
+	case kind == lead:
+		return LeadMemoryPart
+	case kind == "worker" && hasRepo:
+		return WorkerRepoPart
+	}
+	return ""
 }
 
 // For returns the prompt of a name: "lead", or the prompt name of an agent such as "worker", "reviewer" or WorkerRepoPart.

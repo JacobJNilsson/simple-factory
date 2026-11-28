@@ -29,7 +29,7 @@ Run `sfy down` from a terminal outside the agent sessions. It stops the workers 
 
 Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process. When the lead still runs, the lead gets the note "sfy restarted." When the lead's session ended, `sfy` starts it again. The new sfy process tells the lead about each task whose worker or reviewer is gone.
 
-If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Every worker and reviewer start records a new conversation. sfy resumes it only to wake a closed session, as the section Wake a closed session describes.
+If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to follow the start rules of its memory section, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Every worker and reviewer start records a new conversation. sfy resumes it only to wake a closed session, as the section Wake a closed session describes.
 
 ## Old names of the lead
 
@@ -83,7 +83,9 @@ From then on the agent's own `sfy` commands run as `lead`, and the operator-only
 
 ## Prompts
 
-sfy reads prompts from every layer of a factory: its factory folder and each `.sfy/` folder on the walk, as the section Override a factory from a folder describes. A file `prompts/<kind>.md` replaces the default prompt of a kind of agent, and the file of the nearest layer wins. The kinds are `lead`, `worker`, `reviewer` and `worker-repo`.
+sfy reads prompts from every layer of a factory: its factory folder and each `.sfy/` folder on the walk, as the section Override a factory from a folder describes. A file `prompts/<kind>.md` replaces the default prompt of a kind of agent, and the file of the nearest layer wins. The kinds are `lead`, `lead-memory`, `worker`, `reviewer` and `worker-repo`.
+
+The lead's prompt ends with the `lead-memory` part. The default part tells the lead to keep `notes.md` and to read it with `status.md` at each start. A factory whose lead keeps its memory elsewhere puts its own rules in `prompts/lead-memory.md`. The lead's first messages then point at those rules, and `sfy up` creates no `notes.md`.
 
 To add lines without a copy of the whole prompt, put files that end in `.md` in `prompts/<kind>.d/` of any layer. sfy merges the folders by file name. A file of a nearer layer replaces the file with the same name in a farther layer, and an empty file removes it. sfy appends the result in name order, each after a blank line, to the default or to the replacing prompt. A missing folder adds nothing, and files without `.md` are skipped. `sfy restart` tells the lead when an addition to its prompt changed.
 

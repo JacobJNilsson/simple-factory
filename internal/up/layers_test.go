@@ -37,7 +37,7 @@ func TestRecordLeadPromptJoinsTheMachineAndTheFactoryAdditions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(string(b), "\n\nmachine addition\n\nfactory addition") {
-		t.Fatalf("lead-prompt.md ends with %q", b[max(0, len(b)-80):])
+	if !strings.Contains(string(b), "\n\nmachine addition\n\nfactory addition\n\n## Your memory") {
+		t.Fatalf("lead-prompt.md lacks the additions before the memory part: %q", b)
 	}
 }

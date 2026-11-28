@@ -168,9 +168,7 @@ func TestUpStartsServeAndLead(t *testing.T) {
 		t.Fatalf("lead starts: %v", r.l.specs)
 	}
 	m := r.l.specs[0]
-	if m.Name != "lead" || m.Kind != "lead" || m.Dir != r.o.home || m.Model != "opus" ||
-		!strings.Contains(m.Prompt, "notes.md") || !strings.Contains(m.Prompt, "status.md") ||
-		!strings.Contains(m.Prompt, r.o.home) {
+	if m.Name != "lead" || m.Kind != "lead" || m.Dir != r.o.home || m.Model != "opus" || !strings.Contains(m.Prompt, r.o.home) {
 		t.Errorf("lead spec: %+v", m)
 	}
 	info, err := os.Stat(filepath.Join(r.o.home, "notes.md"))
@@ -191,9 +189,40 @@ func TestUpReportsANewConversationAndGivesTheResumeNote(t *testing.T) {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 	note := r.l.specs[0].ResumePrompt
-	if !strings.Contains(note, "sfy started again") || !strings.Contains(note, "notes.md") ||
-		!strings.Contains(note, "status.md") || !strings.Contains(note, r.o.home) {
+	if !strings.Contains(note, "sfy started again") || !strings.Contains(note, r.o.home) {
 		t.Errorf("resume prompt %q", note)
+	}
+}
+
+// The first messages of the lead name no file, so a layer that replaces the lead-memory part decides what the lead reads.
+func TestNoFirstMessageOfTheLeadNamesAFile(t *testing.T) {
+	home := "/factories/web"
+	for name, text := range map[string]string{
+		"start":  leadPrompt(home),
+		"resume": resumePrompt(home),
+		"wake":   leadWakePrompt(home),
+	} {
+		if !strings.Contains(text, home) || !strings.Contains(text, "memory section") {
+			t.Errorf("%s message %q does not name the folder and the memory section", name, text)
+		}
+		for _, file := range []string{"notes.md", "status.md"} {
+			if strings.Contains(text, file) {
+				t.Errorf("%s message %q names %s", name, text, file)
+			}
+		}
+	}
+}
+
+func TestUpCreatesNoNotesFileWhenALayerReplacesTheLeadMemoryPart(t *testing.T) {
+	r := newRig(t)
+	writeTestFile(t, filepath.Join(r.o.home, "prompts", "lead-memory.md"), "Keep your memory in the canvas.\n")
+
+	if err := run(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(r.o.home, "notes.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("notes.md exists or fails to stat: %v", err)
 	}
 }
 

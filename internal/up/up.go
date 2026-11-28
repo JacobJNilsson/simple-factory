@@ -39,19 +39,22 @@ func (e *leadFailedError) Unwrap() error { return e.err }
 // serveSession is the multiplexer session that runs the sfy process.
 const serveSession = "sfy"
 
+// startRules points the lead at the lead-memory part, so a layer that replaces the part also decides what the lead reads at a start.
+const startRules = "Follow the start rules of your prompt's memory section."
+
 // leadPrompt names the folder, so the lead needs no command to find it.
 func leadPrompt(home string) string {
-	return "Your factory folder is " + home + ". Read notes.md and status.md there with the Read tool. Then wait for the operator."
+	return "Your factory folder is " + home + ". " + startRules + " Then wait for the operator."
 }
 
 // resumePrompt is the first message of a resumed lead. Its conversation already holds the full prompt.
 func resumePrompt(home string) string {
-	return "sfy started again. Read notes.md and status.md in " + home + " with the Read tool."
+	return "sfy started again. Your factory folder is " + home + ". " + startRules
 }
 
 // leadWakePrompt is the first message of a lead that sfy woke for a message.
 func leadWakePrompt(home string) string {
-	return "sfy woke you, because a message arrived. Read notes.md and status.md in " + home + " with the Read tool. Then run sfy inbox."
+	return "sfy woke you, because a message arrived. Your factory folder is " + home + ". " + startRules + " Then run sfy inbox."
 }
 
 // leadSpec returns the spec of the lead, with resume as the first message of a resumed conversation.
@@ -78,7 +81,7 @@ func leadPromptPath(home string) string { return filepath.Join(home, "lead-promp
 // recordLeadPrompt saves the lead's prompt that a build uses now, and reports whether it differs from the saved one.
 // A missing file counts as a change, because the lead may predate the file.
 func recordLeadPrompt(home string, layers []string) (changed bool, err error) {
-	text, err := prompts.For(protocol.Lead, layers)
+	text, err := prompts.Role(protocol.Lead, layers, false)
 	if err != nil {
 		return false, err
 	}
@@ -221,7 +224,7 @@ func (o options) prepare() error {
 	if err := os.MkdirAll(o.home, 0o700); err != nil {
 		return err
 	}
-	if err := ensureNotes(filepath.Join(o.home, "notes.md")); err != nil {
+	if err := ensureNotes(o.home, o.layers); err != nil {
 		return err
 	}
 	return o.moveToLead()
@@ -351,9 +354,14 @@ func report(out io.Writer, started []string) error {
 	return reportList(out, "Started", started)
 }
 
-// ensureNotes creates an empty notes.md that only the operator's user can read.
-func ensureNotes(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+// ensureNotes creates an empty notes.md in home that only the operator's user can read.
+// It creates nothing when a layer replaces the lead-memory part, because only the default part names notes.md.
+func ensureNotes(home string, layers []string) error {
+	base, _, err := prompts.Sources(prompts.LeadMemoryPart, layers)
+	if err != nil || base != prompts.DefaultBase {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Join(home, "notes.md"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		return nil
 	}

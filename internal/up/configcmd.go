@@ -22,7 +22,7 @@ import (
 )
 
 // promptKinds are the kinds that sfy config lists prompt files for, in the order it prints them.
-var promptKinds = []string{"lead", "worker", prompts.WorkerRepoPart, "reviewer"}
+var promptKinds = []string{"lead", prompts.LeadMemoryPart, "worker", prompts.WorkerRepoPart, "reviewer"}
 
 // hiddenValue stands in for the value of a session_settings env variable, which may hold a token.
 const hiddenValue = "<set>"

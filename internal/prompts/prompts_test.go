@@ -36,7 +36,7 @@ func TestEveryRolePromptSaysThatSfyDeliversNotesAsHookFeedback(t *testing.T) {
 
 func TestEveryRolePromptSaysThatSfyMayWakeTheAgent(t *testing.T) {
 	for _, kind := range []string{"lead", "worker", "reviewer"} {
-		got, err := prompts.For(kind, []string{t.TempDir()})
+		got, err := prompts.Role(kind, []string{t.TempDir()}, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -344,13 +344,66 @@ func TestLeadPromptExplainsTheMessageBlock(t *testing.T) {
 	}
 }
 
+// A layer that replaces the lead-memory part must leave no rule in the base prompt that names the default part's file or heading.
+func TestTheDefaultLeadBasePromptNamesNoMemoryFileOrSection(t *testing.T) {
+	base, err := prompts.For("lead", []string{t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, unwanted := range []string{"notes.md", "Your memory"} {
+		if strings.Contains(base, unwanted) {
+			t.Errorf("the lead base prompt names %q", unwanted)
+		}
+	}
+}
+
+func TestRoleAppendsTheDefaultMemoryPartToTheLeadPrompt(t *testing.T) {
+	layers := []string{t.TempDir()}
+	base, err := prompts.For("lead", layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	memory, err := prompts.For(prompts.LeadMemoryPart, layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := prompts.Role("lead", layers, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got != strings.TrimRight(base, "\n")+"\n\n"+memory {
+		t.Errorf("lead role %q", got)
+	}
+	if !strings.Contains(memory, "## Your memory") || !strings.Contains(memory, "read `notes.md` and `status.md`") {
+		t.Errorf("the default memory part lacks the notes rules: %q", memory)
+	}
+}
+
+func TestALayerReplacesTheLeadMemoryPart(t *testing.T) {
+	home := t.TempDir()
+	writePrompt(t, home, "lead.md", "base")
+	writePrompt(t, home, "lead-memory.md", "canvas")
+
+	got, err := prompts.Role("lead", []string{home}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got != "base\n\ncanvas" {
+		t.Errorf("lead role %q", got)
+	}
+}
+
 func TestOnlyTheWorkerGetsTheRepoPart(t *testing.T) {
 	for _, kind := range []string{"lead", "reviewer"} {
 		withRepo, err := prompts.Role(kind, []string{t.TempDir()}, true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		plain, _ := prompts.For(kind, []string{t.TempDir()})
+		plain, _ := prompts.Role(kind, []string{t.TempDir()}, false)
 		if withRepo != plain {
 			t.Errorf("%s prompt changes with a repo", kind)
 		}

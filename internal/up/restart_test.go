@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/prompts"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
 	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
@@ -152,7 +153,11 @@ func TestRestartNotesAChangedPrompt(t *testing.T) {
 	if !reflect.DeepEqual(r.calls, want) {
 		t.Fatalf("requests = %q, want %q", r.calls, want)
 	}
-	if b, _ := os.ReadFile(path); string(b) != "A new prompt.\n" {
+	memory, err := prompts.For(prompts.LeadMemoryPart, r.o.layers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != "A new prompt.\n\n"+memory {
 		t.Errorf("%s holds %q", path, b)
 	}
 }
@@ -174,7 +179,7 @@ func TestRestartNotesAChangedPromptAddition(t *testing.T) {
 	if !reflect.DeepEqual(r.calls, want) {
 		t.Fatalf("requests = %q, want %q", r.calls, want)
 	}
-	if b, _ := os.ReadFile(path); !strings.HasSuffix(string(b), "\n\nExtra rule.\n") {
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), "\n\nExtra rule.\n") {
 		t.Errorf("%s lacks the addition", path)
 	}
 }
