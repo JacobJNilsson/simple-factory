@@ -28,7 +28,7 @@ func TestDownPrintsWhatItStopped(t *testing.T) {
 
 	code := Run([]string{"down"}, env, strings.NewReader(""), &out, &errb)
 
-	if code != exitOK || out.String() != "Stopped lead and the sfy process.\n" {
+	if code != exitOK || out.String() != "Stopped the sfy process. Left the lead running. sfy down stops only the sfy process, the workers and the reviewers.\n" {
 		t.Fatalf("code %d, stdout %q, stderr %q", code, out.String(), errb.String())
 	}
 }

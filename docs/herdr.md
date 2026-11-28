@@ -61,7 +61,7 @@ exit 1
 ## Notes on the example
 
 - sfy runs `show_lead` for the lead and `show` for workers and reviewers. With `show = ""`, a worker gets no Show.
-- With `whoami`, `sfy` run in a Herdr terminal turns that terminal into the lead. sfy records the address in `sessions/lead/address` and uses it as `{name}` for the lead. The `alive`, `send`, `stop` and `show_lead` templates above accept the address. `sfy down` runs `hc kill` on it, which ends the terminal.
+- With `whoami`, `sfy` run in a Herdr terminal turns that terminal into the lead. sfy records the address in `sessions/lead/address` and uses it as `{name}` for the lead. The `alive`, `send`, `stop` and `show_lead` templates above accept the address. `stop` runs `hc kill` on it, which ends the terminal. `sfy down` never runs `stop` for the lead.
 - To show every agent, put the `show_lead` script in `show` and remove `show_lead`.
 - `escape` uses `hc keys`, whose help names `esc` as a key. Its behavior at a permission prompt is untested.
 - A test loads this example and runs its templates against stub commands, so the file stays valid. See `herdrSet` in `internal/mux/mux_test.go`.

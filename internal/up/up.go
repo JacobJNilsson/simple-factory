@@ -160,7 +160,7 @@ func leadGone(home string) func() (bool, error) {
 
 // run starts what is missing: notes.md, the sfy process and the lead.
 // A lead that is missing runs in this terminal when the set can name it.
-// When the lead already runs, run shows it again, so the operator gets it where they started sfy.
+// When the lead already runs, run shows it again. When run also started the sfy process, the lead gets the note that sfy restarted.
 func run(o options) error {
 	started, leadAlive, err := o.ensure(true)
 	if err != nil {
@@ -169,20 +169,33 @@ func run(o options) error {
 	if !leadAlive {
 		return report(o.out, started)
 	}
-	if len(started) > 0 {
+	// With the lead alive, ensure can only have started the sfy process, as after sfy down.
+	serveStarted := len(started) > 0
+	if serveStarted {
 		if err := reportList(o.out, "Started", started); err != nil {
 			return err
 		}
 	}
+	if err := o.showRunningLead(); err != nil {
+		return err
+	}
+	if !serveStarted {
+		return nil
+	}
+	return o.noteLead(nil)
+}
+
+// showRunningLead shows the lead that runs, so the operator gets it where they started sfy.
+func (o options) showRunningLead() error {
 	// The operator already works in the terminal of a registered agent, and showing it would move that terminal.
 	if (registration.Folder{Home: o.home}).Registered() {
-		_, err = fmt.Fprintln(o.out, "The registered lead already runs.")
+		_, err := fmt.Fprintln(o.out, "The registered lead already runs.")
 		return err
 	}
 	if err := o.launcher.ShowLead(leadSession); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(o.out, "The lead already runs and was shown.")
+	_, err := fmt.Fprintln(o.out, "The lead already runs and was shown.")
 	return err
 }
 

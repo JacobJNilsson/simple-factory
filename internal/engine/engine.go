@@ -71,8 +71,6 @@ type Launcher interface {
 // Registration tells whether an agent session registered itself as the lead, which sfy did not start.
 type Registration interface {
 	Registered() bool
-	// Clear forgets the registration and the recorded address.
-	Clear() error
 }
 
 // Workspaces creates and removes the folder of a task.

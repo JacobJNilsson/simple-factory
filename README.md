@@ -102,7 +102,7 @@ sfy keeps its state in `~/.sfy`:
 | Command | What it does |
 |---|---|
 | `sfy` or `sfy up` | Starts sfy and the lead. |
-| `sfy down` | Stops all agents and the sfy process. |
+| `sfy down` | Stops the sfy process, the workers and the reviewers. The lead keeps running. |
 | `sfy restart` | Restarts the sfy process and keeps the agents running. |
 | `sfy status` | Prints `status.md`. |
 | `sfy task list` | Lists the tasks. |

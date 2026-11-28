@@ -8,23 +8,55 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
-func TestDownStopsLeadAndEverySessionThatRuns(t *testing.T) {
+// sfy down stops the sfy process and each worker and reviewer that runs. It never stops the lead and keeps the lead's registration.
+
+func TestDownStopsEveryWorkerAndReviewerThatRunsAndNeverTheLead(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		registered bool
+	}{
+		{name: "lead that sfy started", registered: false},
+		{name: "registered lead", registered: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := newEnv(t)
+			v.seed(t, task.Review, 2)
+			v.l.dead = map[string]bool{"review-t1-1": true}
+			reg := &fakeRegistration{registered: tc.registered}
+			v.e.SetRegistration(reg)
+
+			a := v.run("", "", "down", "")
+
+			mustOK(t, a)
+			if want := []string{"worker-t1", "review-t1-2"}; !slices.Equal(v.l.stopped, want) {
+				t.Fatalf("stopped %v, want %v", v.l.stopped, want)
+			}
+			if reg.registered != tc.registered {
+				t.Errorf("registered %v, want %v", reg.registered, tc.registered)
+			}
+			want := "Stopped worker-t1, review-t1-2 and the sfy process. Left the lead running. sfy down stops only the sfy process, the workers and the reviewers."
+			if a.Text != want {
+				t.Fatalf("text %q", a.Text)
+			}
+			if !v.e.Stopping() {
+				t.Fatal("the engine does not report that it stops")
+			}
+		})
+	}
+}
+
+func TestDownWithOnlyTheLeadRunningStopsNoSession(t *testing.T) {
 	v := newEnv(t)
-	v.seed(t, task.Review, 2)
-	v.l.dead = map[string]bool{"review-t1-1": true}
 
 	a := v.run("", "", "down", "")
 
 	mustOK(t, a)
-	want := []string{"lead", "worker-t1", "review-t1-2"}
-	if !slices.Equal(v.l.stopped, want) {
-		t.Fatalf("stopped %v, want %v", v.l.stopped, want)
+	if len(v.l.stopped) != 0 {
+		t.Fatalf("stopped %v", v.l.stopped)
 	}
-	if a.Text != "Stopped lead, worker-t1, review-t1-2 and the sfy process." {
+	want := "Stopped the sfy process. Left the lead running. sfy down stops only the sfy process, the workers and the reviewers."
+	if a.Text != want {
 		t.Fatalf("text %q", a.Text)
-	}
-	if !v.e.Stopping() {
-		t.Fatal("the engine does not report that it stops")
 	}
 }
 
@@ -66,6 +98,7 @@ func TestDownWithNothingRunningStillEnds(t *testing.T) {
 
 func TestDownFailsAndKeepsRunningWhenAStopFails(t *testing.T) {
 	v := newEnv(t)
+	v.seed(t, task.Working, 1)
 	v.l.stopErr = errors.New("stop failed")
 
 	mustFail(t, v.run("", "", "down", ""), "stop failed")

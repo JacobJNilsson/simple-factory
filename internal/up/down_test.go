@@ -10,8 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JacobJNilsson/simple-factory/internal/agentproc"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 	"github.com/JacobJNilsson/simple-factory/internal/server"
+	"github.com/JacobJNilsson/simple-factory/internal/store"
+	"github.com/JacobJNilsson/simple-factory/internal/task"
 )
 
 // multiplexerConfig returns a config whose stop template creates <prefix>-<name> in home.
@@ -27,7 +31,10 @@ stop = "touch %[1]s/%[2]s-{name}"
 `, home, stopPrefix)
 }
 
-func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
+// downFactory returns a factory folder with a working task t1 and a lead that runs in place at the address dev.
+// The process record names the test process, so the lead counts as running.
+func downFactory(t *testing.T) string {
+	t.Helper()
 	parent, err := os.MkdirTemp("", "fu")
 	if err != nil {
 		t.Fatal(err)
@@ -38,10 +45,77 @@ func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
 	if err := os.Mkdir(home, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	configPath := filepath.Join(home, "config.toml")
-	if err := os.WriteFile(configPath, []byte(multiplexerConfig(home, "stopped")), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(multiplexerConfig(home, "stopped")), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	working := task.Task{ID: "t1", Title: "Work", Description: "d", Goal: "g", State: task.Working, Round: 1, Dir: parent}
+	if err := store.Files(home).Create(working); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(leadAddressPath(home)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(leadAddressPath(home), []byte("dev\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	self, err := agentproc.Self()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agentproc.Write(registration.PidPath(home), self); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
+func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
+	home := downFactory(t)
+	done := serveFactory(t, home)
+	// The operator changes the config after the sfy process started.
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(multiplexerConfig(home, "changed")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ans, err := server.Call(socket(home), protocol.Request{Command: "down"})
+
+	if err != nil || !ans.OK || !strings.Contains(ans.Text, "Stopped worker-t1") {
+		t.Fatalf("answer %+v, %v", ans, err)
+	}
+	waitExited(t, done)
+	if _, err := os.Stat(filepath.Join(home, "stopped-sfy-work-worker-t1")); err != nil {
+		t.Errorf("the start-time stop template did not run with the prefixed name: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "changed-sfy-work-worker-t1")); err == nil {
+		t.Error("the changed config's stop template ran")
+	}
+	if _, err := os.Lstat(socket(home)); err == nil {
+		t.Error("the socket stays")
+	}
+}
+
+func TestDownLeavesALeadInPlaceRunningWithItsRecords(t *testing.T) {
+	home := downFactory(t)
+	done := serveFactory(t, home)
+
+	ans, err := server.Call(socket(home), protocol.Request{Command: "down"})
+
+	if err != nil || !ans.OK {
+		t.Fatalf("answer %+v, %v", ans, err)
+	}
+	waitExited(t, done)
+	if _, err := os.Stat(filepath.Join(home, "stopped-dev")); err == nil {
+		t.Error("down ran stop for the lead's address")
+	}
+	for _, path := range []string{leadAddressPath(home), registration.PidPath(home)} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("down removed the lead's record: %v", err)
+		}
+	}
+}
+
+// serveFactory runs the sfy process of home and waits until it answers. The channel gets its result.
+func serveFactory(t *testing.T, home string) <-chan error {
+	t.Helper()
 	env := func(k string) string {
 		if k == "SFY_HOME" {
 			return home
@@ -51,16 +125,11 @@ func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- Serve(context.Background(), env, io.Discard) }()
 	waitAnswering(t, socket(home))
-	// The operator changes the config after the sfy process started.
-	if err := os.WriteFile(configPath, []byte(multiplexerConfig(home, "changed")), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	return done
+}
 
-	ans, err := server.Call(socket(home), protocol.Request{Command: "down"})
-
-	if err != nil || !ans.OK || !strings.Contains(ans.Text, "Stopped lead") {
-		t.Fatalf("answer %+v, %v", ans, err)
-	}
+func waitExited(t *testing.T, done <-chan error) {
+	t.Helper()
 	select {
 	case err := <-done:
 		if err != nil {
@@ -68,15 +137,6 @@ func TestDownStopsSessionsWithTheTemplatesLoadedAtStart(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the sfy process did not exit")
-	}
-	if _, err := os.Stat(filepath.Join(home, "stopped-sfy-work-lead")); err != nil {
-		t.Errorf("the start-time stop template did not run with the prefixed name: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(home, "changed-sfy-work-lead")); err == nil {
-		t.Error("the changed config's stop template ran")
-	}
-	if _, err := os.Lstat(socket(home)); err == nil {
-		t.Error("the socket stays")
 	}
 }
 
