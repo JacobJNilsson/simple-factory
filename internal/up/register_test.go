@@ -127,6 +127,22 @@ func TestRegisterPrintsThePromptWithAdditions(t *testing.T) {
 	}
 }
 
+func TestRegisterPrintsTheLayersMemoryPartAndCreatesNoNotesFile(t *testing.T) {
+	r := registerRig(t)
+	writeTestFile(t, filepath.Join(r.o.home, "prompts", "lead-memory.md"), "Keep your memory in the canvas.\n")
+
+	if err := register(r.o); err != nil {
+		t.Fatal(err)
+	}
+
+	if out := r.out.String(); !strings.Contains(out, "Keep your memory in the canvas.") || strings.Contains(out, "notes.md") {
+		t.Errorf("output %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(r.o.home, "notes.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("notes.md exists or fails to stat: %v", err)
+	}
+}
+
 func TestRegisterWorksAgainAfterTheRegistrationWasCleared(t *testing.T) {
 	r := registerRig(t)
 	if err := register(r.o); err != nil {

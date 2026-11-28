@@ -62,7 +62,7 @@ func register(o options) error {
 	if err := os.MkdirAll(o.home, 0o700); err != nil {
 		return err
 	}
-	if err := ensureNotes(filepath.Join(o.home, "notes.md")); err != nil {
+	if err := ensureNotes(o.home, o.layers); err != nil {
 		return err
 	}
 	if !o.answers() {
@@ -79,7 +79,7 @@ func register(o options) error {
 	if err := o.record(address, registration.Record{ID: id, Dir: dir}); err != nil {
 		return err
 	}
-	text, err := prompts.For(protocol.Lead, o.layers)
+	text, err := prompts.Role(protocol.Lead, o.layers, false)
 	if err != nil {
 		return err
 	}

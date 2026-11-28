@@ -91,7 +91,7 @@ To choose the model of a task, add a `## Model` section with one line, the model
 sfy keeps its state in `~/.sfy`:
 
 - `tasks/` holds one folder for each task.
-- `notes.md` holds the lead's notes.
+- `notes.md` holds the lead's notes. A factory whose `prompts/lead-memory.md` gives the lead another memory has no `notes.md`.
 - `status.md` holds the current state of all tasks.
 - `sessions/<name>/note.md` holds the notes and messages that sfy delivers to a Claude Code session, until the session's hook reads them.
 - `drop/` holds the files that programs drop for the lead, as the section Send from a program describes.
