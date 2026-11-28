@@ -307,6 +307,7 @@ var commands = map[string]command{
 	"task archive":    {(*Engine).taskArchive, []kind{operator, lead}},
 	"down":            {(*Engine).downCommand, []kind{operator}},
 	"send":            {(*Engine).send, []kind{operator, lead}},
+	"lead command":    {(*Engine).leadCommand, []kind{operator}},
 	"unstick":         {(*Engine).unstick, []kind{lead}},
 	"report done":     {(*Engine).reportDone, []kind{worker}},
 	"report blocked":  {(*Engine).reportBlocked, []kind{worker, reviewer}},

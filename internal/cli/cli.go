@@ -62,6 +62,10 @@ const usage = `usage:
   sfy inbox
   sfy escalate <id> <text...>
   sfy unstick <agent>  press Escape at a worker's or reviewer's permission prompt (lead only)
+  sfy lead command [--cancel] <text...>
+                       type one slash command, such as /effort high, into the lead when it waits for input,
+                       or hold it until then (operator only). --cancel drops the held commands.
+                       sfy refuses /clear, /reset, /new, /exit, /quit and /logout.
   sfy status
   sfy down             stop the sfy process, the workers and the reviewers, and keep the lead running (operator only)
   sfy restart [--update] [--headless]
@@ -143,6 +147,7 @@ var forms = map[string]form{
 	"inbox":           {words: 1},
 	"escalate":        {words: 1, ids: 1, text: true},
 	"unstick":         {words: 1, ids: 1},
+	"lead command":    {words: 2, text: true, flags: []string{"--cancel"}},
 	"status":          {words: 1},
 	"down":            {words: 1},
 }
