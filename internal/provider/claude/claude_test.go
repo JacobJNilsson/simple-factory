@@ -1062,14 +1062,21 @@ func TestLeadSettingsKeepTheFieldOrderAndNoSuggestionKey(t *testing.T) {
 	}
 }
 
-func TestWorkerAndReviewerTurnOffPromptSuggestions(t *testing.T) {
+// A /fast in the lead's session writes fastMode to the user's settings, so workers and reviewers set it to false themselves.
+func TestWorkerAndReviewerTurnOffPromptSuggestionsAndFastMode(t *testing.T) {
 	for _, kind := range []string{"worker", "reviewer"} {
-		if got := extraSettings(t, kind, config.Config{})["promptSuggestionEnabled"]; got != false {
-			t.Errorf("%s: promptSuggestionEnabled = %v, want false", kind, got)
+		got := extraSettings(t, kind, config.Config{})
+		for _, key := range []string{"promptSuggestionEnabled", "fastMode"} {
+			if got[key] != false {
+				t.Errorf("%s: %s = %v, want false", kind, key, got[key])
+			}
 		}
 	}
-	if _, ok := extraSettings(t, "lead", config.Config{})["promptSuggestionEnabled"]; ok {
-		t.Error("main got promptSuggestionEnabled")
+	lead := extraSettings(t, "lead", config.Config{})
+	for _, key := range []string{"promptSuggestionEnabled", "fastMode"} {
+		if _, ok := lead[key]; ok {
+			t.Errorf("main got %s", key)
+		}
 	}
 }
 

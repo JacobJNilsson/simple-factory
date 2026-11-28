@@ -267,13 +267,13 @@ func (a adapter) writeSettings(spec engine.SessionSpec) (string, error) {
 }
 
 // extraSettings returns the extra top-level keys for a session kind, from the session_settings table of key.
-// Workers and reviewers turn off prompt suggestions by default, and a config table can override that.
+// Workers and reviewers get prompt suggestions and fast mode off unless the table sets them, because a /fast in the lead sets fastMode user-wide.
 func (a adapter) extraSettings(kind, key string) config.SessionValues {
 	configured := a.cfg.SessionSettings[key]
 	if kind == "lead" {
 		return configured
 	}
-	extra := config.SessionValues{"promptSuggestionEnabled": false}
+	extra := config.SessionValues{"promptSuggestionEnabled": false, "fastMode": false}
 	for k, v := range configured {
 		extra[k] = v
 	}
