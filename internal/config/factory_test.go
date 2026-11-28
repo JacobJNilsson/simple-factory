@@ -302,6 +302,48 @@ func TestHeaderNamesTheFactoryAndItsFolder(t *testing.T) {
 	}
 }
 
+func TestHeaderShowsTheLabelBesideTheName(t *testing.T) {
+	home := userHome(t)
+	dir := mkdir(t, home, "work")
+	state, _ := config.CreateFactory(home, dir, "")
+	if err := os.WriteFile(filepath.Join(state, "label"), []byte("Client work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := func(k string) string { return map[string]string{"HOME": home}[k] }
+
+	if got, want := config.Header(state, env), "Factory: work, shown as Client work ("+dir+")"; got != want {
+		t.Errorf("header %q, want %q", got, want)
+	}
+}
+
+func TestLabelOfReadsTheTrimmedLabelFile(t *testing.T) {
+	cases := []struct {
+		name    string
+		content *string
+		want    string
+	}{
+		{"missing file", nil, ""},
+		{"empty file", ptr(""), ""},
+		{"set file", ptr("  Client work\n"), "Client work"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			if tc.content != nil {
+				if err := os.WriteFile(filepath.Join(home, "label"), []byte(*tc.content), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if got := config.LabelOf(home); got != tc.want {
+				t.Errorf("LabelOf = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
+
 func TestFactoryHomeFindsAFactoryByTheNameThatDescribeGives(t *testing.T) {
 	home := userHome(t)
 	web := mkdir(t, config.FactoriesDir(home), "web")
