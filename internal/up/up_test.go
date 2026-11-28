@@ -14,6 +14,7 @@ import (
 	"github.com/JacobJNilsson/simple-factory/internal/engine"
 	"github.com/JacobJNilsson/simple-factory/internal/envrun/envruntest"
 	"github.com/JacobJNilsson/simple-factory/internal/protocol"
+	"github.com/JacobJNilsson/simple-factory/internal/registration"
 )
 
 // fakeMux is one multiplexer for both the sfy process and the agent sessions.
@@ -227,16 +228,62 @@ func TestSecondUpStartsNothing(t *testing.T) {
 	if !reflect.DeepEqual(r.m.shownLead, []string{"lead"}) {
 		t.Errorf("shown %v, want the lead once", r.m.shownLead)
 	}
+	if len(r.calls) != 0 {
+		t.Errorf("requests %q, want no note while the sfy process runs", r.calls)
+	}
 }
 
-func TestUpWithServeStartedAndLeadRunningNamesBoth(t *testing.T) {
+// After sfy down the lead still runs, so the next sfy up starts only the sfy process and tells the lead.
+func TestUpWithServeStartedAndLeadRunningNotesTheLead(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		registered bool
+		want       string
+	}{
+		{name: "lead that sfy started", registered: false, want: "Started the sfy process.\nThe lead already runs and was shown.\nTold the lead.\n"},
+		{name: "registered lead", registered: true, want: "Started the sfy process.\nThe registered lead already runs.\nTold the lead.\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRig(t)
+			r.m.alive["lead"] = true
+			if _, err := recordLeadPrompt(r.o.home, r.o.layers); err != nil {
+				t.Fatal(err)
+			}
+			if tc.registered {
+				if err := registration.Write(r.o.home, registration.Record{ID: "s-main"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if err := run(r.o); err != nil {
+				t.Fatal(err)
+			}
+
+			if len(r.l.specs) != 0 || len(r.l.commands) != 0 {
+				t.Errorf("up started a lead: %v %v", r.l.specs, r.l.commands)
+			}
+			if want := []protocol.Request{noteRequest("sfy restarted.")}; !reflect.DeepEqual(r.calls, want) {
+				t.Errorf("requests %q, want %q", r.calls, want)
+			}
+			if r.out.String() != tc.want {
+				t.Errorf("output %q, want %q", r.out.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestUpWithServeStartedAndLeadGoneStartsTheLeadWithoutANote(t *testing.T) {
 	r := newRig(t)
-	r.m.alive["lead"] = true
+	r.l.resumes = true
+
 	if err := run(r.o); err != nil {
 		t.Fatal(err)
 	}
-	want := "Started the sfy process.\nThe lead already runs and was shown.\n"
-	if r.out.String() != want {
+
+	if len(r.l.specs) != 1 || len(r.calls) != 0 {
+		t.Errorf("lead starts %v, requests %q, want one start and no note", r.l.specs, r.calls)
+	}
+	if want := "Started the sfy process and the lead (resumed conversation).\n"; r.out.String() != want {
 		t.Errorf("output %q, want %q", r.out.String(), want)
 	}
 }

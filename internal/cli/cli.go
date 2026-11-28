@@ -59,7 +59,7 @@ const usage = `usage:
   sfy escalate <id> <text...>
   sfy unstick <agent>  press Escape at a worker's or reviewer's permission prompt (lead only)
   sfy status
-  sfy down             stop all agents and the sfy process (operator only)
+  sfy down             stop the sfy process, the workers and the reviewers, and keep the lead running (operator only)
   sfy restart [--update] [--headless]
                        restart the sfy process and keep the agents running (--update upgrades sfy first,
                        --headless starts the new process detached and no lead)

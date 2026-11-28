@@ -25,9 +25,9 @@ The new sfy process gets the environment of the shell that ran `sfy restart`, in
 
 ## Stop and start
 
-Run `sfy down` from a terminal outside the agent sessions. It stops the lead, the workers and the reviewers, then stops the sfy process. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it. It does not stop a registered lead, because sfy did not start it. It clears the registration and says so.
+Run `sfy down` from a terminal outside the agent sessions. It stops the workers and the reviewers, then stops the sfy process. It never stops the lead, whether sfy started it, it runs in your terminal, or you registered it. The lead's records stay, so the next `sfy` finds the lead. It uses the terminal tool settings that the sfy process loaded at start, so a later change to `~/.sfy/config.toml` does not matter. Tasks stay on disk in their current state. Without a sfy process, `sfy down` prints "sfy is not running." Agents cannot run it.
 
-Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process and the lead. It tells the lead about each task whose worker or reviewer is gone.
+Run `sfy` or `sfy up` from any terminal. Both do the same, and `sfy up` pairs with `sfy down`. A later `sfy` starts the sfy process. When the lead still runs, the lead gets the note "sfy restarted." When the lead's session ended, `sfy` starts it again. The new sfy process tells the lead about each task whose worker or reviewer is gone.
 
 If the lead's session ended, sfy resumes the lead's last Claude conversation. It records the conversation id in `sessions/lead/conversation-id` in the factory folder. The resumed agent gets a short note to read `notes.md` and `status.md`, and keeps its settings and system prompt. If the conversation cannot resume, sfy starts a new one, and the output says which happened. If the lead's session still runs, `sfy` runs the `show_lead` template again, so the lead appears in your terminal. Every worker and reviewer start records a new conversation. sfy resumes it only to wake a closed session, as the section Wake a closed session describes.
 
@@ -49,7 +49,7 @@ A config file that sets both names of one key fails to load. A `lead.d` file win
 
 To upgrade a running factory, install the new release and run `sfy restart` in each factory, one at a time. The first start moves `sessions/main/`, `inbox/main/` and `main-prompt.md` to their new names, and leaves a link with each old name. When the lead still runs in its old terminal, `<prefix>main`, sfy records that terminal in `sessions/lead/address` and keeps using it. The lead keeps its conversation, and its old `SFY_AGENT=main` still works. When that terminal ends, the next start runs the lead as `<prefix>lead`.
 
-To roll back, first check whether the lead runs as `<prefix>lead`. If it does, stop it with `sfy down`, because an older sfy would not find it and would start a second lead. Then install the older release and run `sfy restart`, or a plain `sfy` after `sfy down`. SPEC.md, section Old names of the lead, gives the full rules.
+To roll back, first check whether the lead runs as `<prefix>lead`. If it does, end the lead's conversation first, because an older sfy would not find it and would start a second lead. `sfy down` does not stop the lead. Then install the older release and run `sfy restart`, or a plain `sfy` after `sfy down`. SPEC.md, section Old names of the lead, gives the full rules.
 
 ## Run headless
 
@@ -64,7 +64,7 @@ The key is global, and it defaults to `false`. With it, `sfy up` starts `sfy ser
 
 For one start without the setting, run `sfy up --headless`. It prepares the factory folder as `sfy up` does and starts the sfy process detached, with its log in `sfy.log`. It starts no lead, and it leaves a running lead and a registered lead alone. When the sfy process already answers, it prints "The sfy process already runs." and starts nothing. A plain `sfy restart` follows the config, so it moves such a process back into a window when the config does not say headless, and it starts a missing lead. Run `sfy restart --headless` to keep the process detached. It starts the new process detached, starts no lead, and leaves a registered lead alone. A running lead still gets the note "sfy restarted." It also works with `--update`, in any order.
 
-- `sfy down` stops the agents and the sfy process, as without the setting.
+- `sfy down` stops the workers, the reviewers and the sfy process, as without the setting.
 - To stop the sfy process alone, run `kill $(cat ~/.sfy/sfy.pid)`. The process handles `SIGTERM` by removing its socket and lock file. The agents keep running, and the next `sfy` starts the sfy process again.
 - `sfy restart` and `sfy restart --update` stop the old process, wait until it releases the socket and the lock, start the new process detached and wait until it answers. They print the new process as without the setting. A call that arrives in the short gap fails with "the sfy process does not run". The gap ends when the new process answers.
 - When the running process sits in a window and the config now says headless, `sfy restart` ends the window with the old process and starts the new one detached. Remove the setting to move it back into a window the same way.
@@ -406,8 +406,8 @@ Every template can use `{home}`, the absolute path of the factory folder of the 
 
 The `whoami` template prints the address of the terminal that it runs in. With it, `sfy` and `sfy up` start the lead in the terminal where you run them, and do not open a new session. The tmux set has a `whoami` template. A set without one starts the lead through the `start` template. If `whoami` fails or prints nothing, sfy does the same.
 
-In that case sfy records the address in `sessions/lead/address` in the factory folder. It also records the pid and the start time of the lead's process in `sessions/lead/pid`. It then uses the address as `{name}` for the lead in the `send`, `notify`, `alive`, `stop`, `show` and `show_lead` templates. When `alive` reports the address gone, or the lead's process has ended, sfy removes the record, so the next `sfy` runs the lead in place again. Your shell stays in the terminal after the lead exits, so sfy checks the process and not only the terminal. `sfy down` runs `stop` on the address, so it ends that terminal or session.
+In that case sfy records the address in `sessions/lead/address` in the factory folder. It also records the pid and the start time of the lead's process in `sessions/lead/pid`. It then uses the address as `{name}` for the lead in the `send`, `notify`, `alive`, `stop`, `show` and `show_lead` templates. When `alive` reports the address gone, or the lead's process has ended, sfy removes the record, so the next `sfy` runs the lead in place again. Your shell stays in the terminal after the lead exits, so sfy checks the process and not only the terminal. `sfy down` leaves the lead and its record alone.
 
-A lead that you made with `sfy register` has no process record, so sfy asks only its terminal. When that agent exits and its terminal stays, run `sfy down`. It clears the registration, and the next `sfy` starts a lead.
+A lead that you made with `sfy register` has no process record, so sfy asks only its terminal. When that agent exits and its terminal stays, sfy still counts the lead as running. `sfy down` keeps the registration.
 
 The `alive` template decides alone for workers, reviewers and a lead that started through `start`. Exit 0 means the agent's command still runs, not only its terminal. A set that keeps a pane after its command exits, such as tmux with `remain-on-exit on`, needs an `alive` template that checks the command.
