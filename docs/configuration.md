@@ -240,7 +240,7 @@ allowedDomains = ["example.com"]
 
 An unknown kind is a config error.
 
-Worker and reviewer files set `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. To turn them back on, set `promptSuggestionEnabled = true` in `[session_settings.worker]` or `[session_settings.reviewer]`. The lead keeps Claude Code's default.
+Worker and reviewer files set `"promptSuggestionEnabled": false` by default, which turns off Claude Code's prompt suggestions. To turn them back on, set `promptSuggestionEnabled = true` in `[session_settings.worker]` or `[session_settings.reviewer]`. They also set `"fastMode": false` by default. Claude Code saves a `/fast on` in the lead's session to the user's settings, and this default keeps it from workers and reviewers. To allow fast mode, set `fastMode = true` in the same tables. The lead keeps Claude Code's defaults.
 
 ## Per-repo config
 
