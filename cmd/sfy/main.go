@@ -3,11 +3,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/JacobJNilsson/simple-factory/internal/cli"
@@ -54,7 +56,7 @@ var handFlags = []handFlag{
 }
 
 // noFactory lists the commands that need no factory folder, so a failed factory lookup does not stop them.
-var noFactory = []string{"--version", "help", "--help", "run", "hooks"}
+var noFactory = []string{"--version", "help", "--help", "run", "hooks", "factories"}
 
 func (a app) run(args []string) int {
 	if len(args) == 0 || args[0] == "up" {
@@ -75,7 +77,7 @@ func (a app) run(args []string) int {
 	}
 	// The environment can be faked, so the allow rules of the settings are the real barrier. This check backs them up.
 	switch args[0] {
-	case "run", "serve", "register", "restart", "config", "factory-folder":
+	case "run", "serve", "register", "restart", "config", "factory-folder", "label", "factories":
 		if cli.Restricted(a.getenv) {
 			return a.report(cli.ErrRestricted)
 		}
@@ -90,7 +92,7 @@ func (a app) run(args []string) int {
 		}
 	}
 	switch args[0] {
-	case "--version", "help", "--help", "serve", "config":
+	case "--version", "help", "--help", "serve", "config", "factories":
 		if len(args) > 1 {
 			return cli.Misuse(a.stderr, fmt.Sprintf("%s takes no arguments", args[0]))
 		}
@@ -113,6 +115,15 @@ func (a app) run(args []string) int {
 		return a.report(up.Serve(ctx, a.getenv, a.stderr))
 	case "config":
 		return a.report(up.ShowConfig(a.getenv, a.stdout, a.stderr))
+	case "factories":
+		return a.report(up.Factories(a.getenv, a.stdout))
+	case "label":
+		err := up.Label(a.getenv, a.stdout, strings.Join(args[1:], " "))
+		var invalid *up.InvalidLabelError
+		if errors.As(err, &invalid) {
+			return cli.Misuse(a.stderr, err.Error())
+		}
+		return a.report(err)
 	case "factory-folder":
 		create := len(args) == 2 && args[1] == "--create"
 		if len(args) > 1 && !create {

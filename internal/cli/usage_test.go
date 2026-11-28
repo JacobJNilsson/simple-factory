@@ -19,6 +19,8 @@ func TestUsageNamesEveryFlag(t *testing.T) {
 		"sfy restart [--update] [--headless]",
 		"sfy task new [--factory <factory>] <file|->",
 		"sfy task list [--archived]",
+		"sfy label [<text>]",
+		"sfy factories",
 	} {
 		if !strings.Contains(text, line) {
 			t.Errorf("the usage lacks %q", line)

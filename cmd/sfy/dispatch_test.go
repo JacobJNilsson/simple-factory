@@ -54,6 +54,21 @@ func TestFlagSet(t *testing.T) {
 	}
 }
 
+func TestWorkersAndReviewersMayNotRunTheLabelCommands(t *testing.T) {
+	for _, agent := range []string{"worker-t1", "review-t1-1"} {
+		for _, args := range [][]string{{"label", "x"}, {"factories"}} {
+			var errb bytes.Buffer
+			a := app{getenv: func(k string) string { return map[string]string{"SFY_AGENT": agent}[k] }, stdout: &bytes.Buffer{}, stderr: &errb}
+
+			code := a.run(args)
+
+			if code != 1 || !strings.Contains(errb.String(), "may not run") {
+				t.Errorf("%s sfy %v: code %d, stderr %q, want 1 and a refusal", agent, args, code, errb.String())
+			}
+		}
+	}
+}
+
 func TestDispatch(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -90,6 +105,8 @@ func TestDispatch(t *testing.T) {
 		{"worker sfy config is refused", []string{"config"}, "worker-t1", 1, noStart, "", "may not run"},
 		{"worker sfy factory-folder is refused", []string{"factory-folder"}, "worker-t1", 1, noStart, "", "may not run"},
 		{"reviewer sfy factory-folder --create is refused", []string{"factory-folder", "--create"}, "review-t1-1", 1, noStart, "", "may not run"},
+		{"label refuses a control character", []string{"label", "a\tb"}, "", 2, noStart, "", "label"},
+		{"factories takes no arguments", []string{"factories", "x"}, "", 2, noStart, "", "usage:"},
 		{"factory-folder takes only --create", []string{"factory-folder", "x"}, "", 1, noStart, "", "usage: sfy factory-folder"},
 		{"config takes no arguments", []string{"config", "x"}, "", 2, noStart, "", "usage:"},
 		{"worker sfy hook with a free event is refused", []string{"hook", "x"}, "worker-t1", 1, noStart, "", "may not run"},
