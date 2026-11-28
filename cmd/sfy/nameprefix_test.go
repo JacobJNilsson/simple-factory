@@ -139,6 +139,22 @@ func TestFactoryFolderWithoutCreateFailsWhereNoFactoryExists(t *testing.T) {
 	}
 }
 
+func TestFactoryFolderCheckExitsWithFourAndPrintsNothingWhereNoFactoryExists(t *testing.T) {
+	code, stdout, stderr := inEmptyFolder(t, "factory-folder", "--check")
+
+	if code != 4 || stdout != "" || stderr != "" {
+		t.Errorf("code %d, stdout %q, stderr %q, want 4 and nothing", code, stdout, stderr)
+	}
+}
+
+func TestFactoryFolderCheckWithoutANamePrefixCountsTheDefaultFactoryAsNone(t *testing.T) {
+	code, stdout, stderr, _, factories := inFolderOfAnotherPrefix(t, "factory-folder", "--check")
+
+	if code != 4 || stdout != "" || stderr != "" || factories != 1 {
+		t.Errorf("code %d, stdout %q, stderr %q, %d factories, want 4, nothing and 1", code, stdout, stderr, factories)
+	}
+}
+
 func TestACommandFailsOnABadNamePrefixButHelpAndVersionDoNot(t *testing.T) {
 	env := func(k string) string {
 		if k == "SFY_NAME_PREFIX" {
