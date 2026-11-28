@@ -407,7 +407,7 @@ A process change reaches a running task at its next agent. `sfy restart` refuses
 
 sfy runs each agent in a multiplexer. It ships a set for tmux. Any other terminal tool plugs in through a template set under `[multiplexers.<name>]` in `~/.sfy/config.toml`. `docs/herdr.md` and `docs/rex.md` hold example sets. SPEC.md lists every template.
 
-The optional `escape` template presses the Escape key in session `{name}`, and nothing else. `sfy unstick` runs it. The tmux set has one. A set without it makes `sfy unstick` fail with an error that names the missing line.
+The optional `escape` template presses the Escape key in session `{name}`, and nothing else. `sfy unstick` and `sfy lead interrupt` run it. The tmux set has one. A set without it makes both commands fail with an error that names the missing line.
 
 The `show_lead` template makes the lead's session visible. sfy runs `show` for workers and reviewers. An empty `show` hides them. Without `show_lead`, the lead uses `show`. When sfy starts the lead in place, it runs `show_lead` after it records the address and before it hands the terminal to the lead, so a template set can arrange the terminal around it, for example to open side panes. A failed `show_lead` prints a warning and the lead still starts.
 

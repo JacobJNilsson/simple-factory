@@ -66,6 +66,7 @@ const usage = `usage:
                        type one slash command, such as /effort high, into the lead when it waits for input,
                        or hold it until then (operator only). --cancel drops the held commands.
                        sfy refuses /clear, /reset, /new, /exit, /quit and /logout.
+  sfy lead interrupt   press Escape once in the lead while it runs a turn (operator only)
   sfy status
   sfy down             stop the sfy process, the workers and the reviewers, and keep the lead running (operator only)
   sfy restart [--update] [--headless]
@@ -148,6 +149,7 @@ var forms = map[string]form{
 	"escalate":        {words: 1, ids: 1, text: true},
 	"unstick":         {words: 1, ids: 1},
 	"lead command":    {words: 2, text: true, flags: []string{"--cancel"}},
+	"lead interrupt":  {words: 2},
 	"status":          {words: 1},
 	"down":            {words: 1},
 }

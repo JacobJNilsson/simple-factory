@@ -275,6 +275,16 @@ func (d *Delivery) Busy(name string) {
 	s.waiting, s.hookSince, s.busy = false, false, true
 }
 
+// RunsTurn reports whether a hook reported that a turn of the session started, and nothing reported its end since.
+// A typed command leaves it false, because no hook reports a turn for it.
+func (d *Delivery) RunsTurn(name string) bool { return d.session(name).busy }
+
+// Interrupted records that sfy stopped the turn of a session. No hook reports such a stop, so the state stays unknown until the next hook.
+func (d *Delivery) Interrupted(name string) {
+	s := d.session(name)
+	s.waiting, s.hookSince, s.busy = false, false, false
+}
+
 // Prompted records that a session waits at a permission prompt. The session stays busy.
 func (d *Delivery) Prompted(name string) { d.session(name).hookSince = true }
 

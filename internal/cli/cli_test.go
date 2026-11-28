@@ -65,6 +65,7 @@ func TestParse(t *testing.T) {
 		{"status", []string{"status"}, protocol.Request{Command: "status"}},
 		{"lead command", []string{"lead", "command", "/effort", "high"}, protocol.Request{Command: "lead command", Args: []string{"/effort", "high"}}},
 		{"lead command cancel", []string{"lead", "command", "--cancel"}, protocol.Request{Command: "lead command", Args: []string{"--cancel"}}},
+		{"lead interrupt", []string{"lead", "interrupt"}, protocol.Request{Command: "lead interrupt"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
