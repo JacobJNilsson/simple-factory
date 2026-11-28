@@ -110,6 +110,7 @@ sfy keeps its state in `~/.sfy`:
 | `sfy send lead <text>` | Sends a message to the lead. The operator may send only to `lead`. The lead may send to any agent, and to `<factory>/lead`, the lead of another factory on the machine. That message names its sender as `<factory>/lead`. |
 | `sfy task new --factory <factory> <file>` | Lets the lead create a task in another factory on the machine. The task starts in `new` there with the source `<factory>/lead`, and the command prints that factory's task id. |
 | `sfy lead command <text>` | Types a slash command, such as `/effort high`, into the lead when it waits for input. While the lead runs a turn, sfy holds the command until the turn ends. `sfy lead command --cancel` drops the held commands. sfy refuses `/clear`, `/reset`, `/new`, `/exit`, `/quit` and `/logout`. |
+| `sfy lead interrupt` | Presses Escape once in the lead while it runs a turn, which stops the turn. |
 | `sfy help` | Lists every command. |
 
 ## Send from a program

@@ -38,6 +38,23 @@ func (e *Engine) leadCommand(req protocol.Request) (string, error) {
 	return fmt.Sprintf("Typed %s.", line), err
 }
 
+// leadInterrupt presses Escape once in the lead's pane, and only while a hook reports a turn.
+// A second Escape at an empty prompt opens Claude Code's rewind menu.
+func (e *Engine) leadInterrupt(protocol.Request) (string, error) {
+	if e.sess.isGone(protocol.Lead) {
+		return "", errors.New("no lead runs, so sfy pressed nothing")
+	}
+	if !e.notes.RunsTurn(protocol.Lead) {
+		return "", errors.New("the lead runs no turn as far as sfy knows, so sfy pressed nothing")
+	}
+	if err := e.l.Escape(protocol.Lead); err != nil {
+		return "", err
+	}
+	e.notes.Interrupted(protocol.Lead)
+	e.logf("pressed Escape in the lead for the operator")
+	return "Pressed Escape in the lead.", nil
+}
+
 // checkLeadCommand fails unless line is one line of text that starts with "/" and names no denied command.
 func checkLeadCommand(line string) error {
 	if !strings.HasPrefix(line, "/") || strings.ContainsFunc(line, unicode.IsControl) {
