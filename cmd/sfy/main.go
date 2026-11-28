@@ -53,7 +53,11 @@ var handFlags = []handFlag{
 	{command: "restart", flag: "--update"},
 	{command: "restart", flag: "--headless"},
 	{command: "factory-folder", flag: "--create", unlisted: true},
+	{command: "factory-folder", flag: "--check", unlisted: true},
 }
+
+// folderModes maps the arguments of sfy factory-folder to its mode.
+var folderModes = map[string]up.FolderMode{"": up.FindFolder, "--create": up.CreateFolder, "--check": up.CheckFolder}
 
 // noFactory lists the commands that need no factory folder, so a failed factory lookup does not stop them.
 var noFactory = []string{"--version", "help", "--help", "run", "hooks", "factories"}
@@ -83,10 +87,10 @@ func (a app) run(args []string) int {
 		}
 	}
 	// Home falls back to the default factory when the lookup fails, so a command reports a failed lookup here.
-	// Only factory-folder --create makes a factory, so it skips the lookup like up does.
+	// Only factory-folder --create makes a factory, so it skips the lookup like up does. factory-folder --check reports a failed lookup itself.
 	// sfy restart looks up its factory itself, so a failed lookup can name the factories of other name prefixes.
-	makesFactory := slices.Equal(args, []string{"factory-folder", "--create"})
-	if !slices.Contains(noFactory, args[0]) && !makesFactory && args[0] != "restart" {
+	ownLookup := slices.Equal(args, []string{"factory-folder", "--create"}) || slices.Equal(args, []string{"factory-folder", "--check"})
+	if !slices.Contains(noFactory, args[0]) && !ownLookup && args[0] != "restart" {
 		if _, err := config.Lookup(a.getenv); err != nil {
 			return a.report(err)
 		}
@@ -125,11 +129,15 @@ func (a app) run(args []string) int {
 		}
 		return a.report(err)
 	case "factory-folder":
-		create := len(args) == 2 && args[1] == "--create"
-		if len(args) > 1 && !create {
-			return a.report(fmt.Errorf("usage: sfy factory-folder [--create]"))
+		mode, ok := folderModes[strings.Join(args[1:], " ")]
+		if !ok {
+			return a.report(fmt.Errorf("usage: sfy factory-folder [--create | --check]"))
 		}
-		return a.report(up.FactoryFolder(a.getenv, a.stdout, a.stderr, create))
+		err := up.FactoryFolder(a.getenv, a.stdout, a.stderr, mode)
+		if errors.Is(err, up.ErrNoFactory) {
+			return cli.ExitNoFactory
+		}
+		return a.report(err)
 	case "run":
 		// On success the process becomes the command, so run returns only on an error.
 		return a.report(envrun.Run(args[1:]))

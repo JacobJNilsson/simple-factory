@@ -27,6 +27,10 @@ const (
 	exitNotRunning = 3
 )
 
+// ExitNoFactory is the exit code of sfy factory-folder --check when the folder has no factory.
+// A program that starts a factory tells that answer apart from a failure by this code alone.
+const ExitNoFactory = 4
+
 const usage = `usage:
   sfy                  start sfy (operator only)
   sfy up [--headless] [--new-factory]
