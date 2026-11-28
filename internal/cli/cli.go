@@ -35,6 +35,9 @@ const usage = `usage:
   sfy register         make the running agent session the lead (not for started agents)
   sfy hooks install    add sfy's hooks to the user's Claude Code settings (operator only)
   sfy config           print the factory's merged settings and prompt files, with the file behind each
+  sfy label [<text>]   show the factory as <text> in sfy status and sfy factories, with no text remove the label
+                       (operator and lead). A label is for display only and never addresses a factory.
+  sfy factories        list each factory's name, label and working folder (operator and lead)
   sfy help
   sfy task new [--factory <factory>] <file|->
   sfy task list [--archived]
