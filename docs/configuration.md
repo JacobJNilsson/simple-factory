@@ -134,6 +134,9 @@ For example, the factory `acme` has the working folder `~/Developer/acme`. It re
 3. `~/.sfy/`.
 4. `~/Developer/.sfy/`, when it exists.
 5. `~/Developer/acme/.sfy/`, when it exists.
+6. `~/.sfy/factories/acme/local/`, its local layer, when it exists.
+
+The local layer is the nearest layer of one factory. It wins over `~/.sfy` and over every folder override, and it needs no file in the working folder. A program that starts a factory can put that factory's own settings there. sfy skips it under the same rules as a folder override.
 
 A file in `~/Developer/acme/.sfy/config.toml` that sets `max_workers = 3` changes only the factories whose working folder lies there or below:
 

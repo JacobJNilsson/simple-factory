@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -141,13 +142,16 @@ func envTokenLines(home string, alive func(name string) (bool, error)) ([]string
 }
 
 // writeLayers writes the layers, lowest first, each with its role, and then each skipped override with its reason.
-// The first folder is the factory folder, and the others are overrides.
+// The first folder is the factory folder, its local folder is the local layer, and the others are overrides.
 func writeLayers(out *strings.Builder, layers []string, skipped []config.Override) {
 	out.WriteString("# Layers, lowest first:\n# - built-in defaults\n")
 	for i, dir := range layers {
 		role := "override"
-		if i == 0 {
+		switch {
+		case i == 0:
 			role = "factory folder"
+		case dir == filepath.Join(layers[0], config.LocalLayer):
+			role = "local layer"
 		}
 		fmt.Fprintf(out, "# - %s (%s)\n", dir, role)
 	}

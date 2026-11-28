@@ -207,10 +207,12 @@ func TestShowConfigListsTheLayersWithTheirRolesAndEachSkippedOverrideWithItsReas
 	if err := os.Chmod(bad, 0o770); err != nil {
 		t.Fatal(err)
 	}
+	local := filepath.Join(home, config.LocalLayer)
+	writeTestFile(t, filepath.Join(local, "config.toml"), "review_rounds = 4\n")
 
 	got := showConfig(t, env)
 
-	want := "# Layers, lowest first:\n# - built-in defaults\n# - " + home + " (factory folder)\n# - " + config.DefaultHome(userHome) + " (override)\n# - " + good + " (override)\n" +
+	want := "# Layers, lowest first:\n# - built-in defaults\n# - " + home + " (factory folder)\n# - " + config.DefaultHome(userHome) + " (override)\n# - " + good + " (override)\n# - " + local + " (local layer)\n" +
 		"# Skipped overrides, which sfy does not read:\n# - " + bad + ": mode 0770 lets group or others write\n"
 	if !strings.Contains(got, want) || !strings.Contains(got, "max_workers = 5 # "+filepath.Join(good, "config.toml")+"\n") {
 		t.Errorf("output lacks the layers or the override setting:\n%s", got)

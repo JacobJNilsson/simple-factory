@@ -225,7 +225,7 @@ func TestLoadFactoryOfTheDefaultFolderReadsOneFile(t *testing.T) {
 func TestFactoryFilesOfTheDefaultFactoryLeaveOutStateDefinitionAndFactories(t *testing.T) {
 	home := userHome(t)
 	def := mkdir(t, home, ".sfy")
-	for _, name := range []string{"tasks", "prompts", "factories", "checks"} {
+	for _, name := range []string{"tasks", "prompts", "local", "factories", "checks"} {
 		mkdir(t, def, name)
 	}
 	for _, name := range []string{"config.toml", "notes.md", "sfy.log", "knowledge.md"} {
