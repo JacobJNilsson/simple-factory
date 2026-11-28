@@ -108,6 +108,7 @@ func TestDispatch(t *testing.T) {
 		{"label refuses a control character", []string{"label", "a\tb"}, "", 2, noStart, "", "label"},
 		{"factories takes no arguments", []string{"factories", "x"}, "", 2, noStart, "", "usage:"},
 		{"factory-folder takes only --create", []string{"factory-folder", "x"}, "", 1, noStart, "", "usage: sfy factory-folder"},
+		{"factory-folder --exact needs --create or --check", []string{"factory-folder", "--exact"}, "", 1, noStart, "", "usage: sfy factory-folder"},
 		{"config takes no arguments", []string{"config", "x"}, "", 2, noStart, "", "usage:"},
 		{"worker sfy hook with a free event is refused", []string{"hook", "x"}, "worker-t1", 1, noStart, "", "may not run"},
 		{"register takes no arguments", []string{"register", "x"}, "", 2, noStart, "", "usage:"},

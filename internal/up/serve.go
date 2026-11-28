@@ -376,6 +376,11 @@ func factoryEnv(env func(string) string, getwd func() (string, error), note io.W
 	if err != nil {
 		return nil, err
 	}
+	return placeEnv(env, p, note, refuse)
+}
+
+// placeEnv returns env with SFY_HOME set to the factory that p finds, as factoryEnv says, and creates it where p finds none.
+func placeEnv(env func(string) string, p place, note io.Writer, refuse bool) (func(string) string, error) {
 	userHome := env("HOME")
 	state := config.DefaultHome(userHome)
 	switch {
@@ -387,9 +392,11 @@ func factoryEnv(env func(string) string, getwd func() (string, error), note io.W
 		}
 		state = p.found
 		if state == "" {
-			if state, err = config.CreateFactory(userHome, p.cwd, p.prefix); err != nil {
+			made, err := config.CreateFactory(userHome, p.cwd, p.prefix)
+			if err != nil {
 				return nil, err
 			}
+			state = made
 			if len(p.others) > 0 {
 				_, _ = fmt.Fprintf(note, "sfy: this folder has another factory at %s. This command made its own, %s.\n", p.others[0], state)
 			}

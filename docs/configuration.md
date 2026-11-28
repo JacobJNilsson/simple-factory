@@ -125,6 +125,8 @@ A wrapper command can ask for the factory folder with `sfy factory-folder`, or w
 
 A program that must know whether a folder already has a factory runs `sfy factory-folder --check`. It prints the factory folder and exits 0 when a factory exists, also from a sub-folder of the working folder. It prints nothing and exits 4 when the folder has no factory with the name prefix. The default factory `~/.sfy` counts as none. Any other failure exits 1 with the error on stderr.
 
+To give a sub-folder of a working folder its own factory, run `sfy factory-folder --create --exact` in the sub-folder. It ignores the factories of the folders above, so it creates a factory for the sub-folder even when the parent's factory has the same name prefix. On stdout it prints the factory folder and nothing else. A later run returns the same factory. After that, a command in the sub-folder finds the new factory, and a command in the parent folder still finds the parent's factory. `sfy factory-folder --check --exact` exits 0 only when a factory is registered for exactly the current folder, and 4 otherwise.
+
 ## Override a factory from a folder
 
 A factory reads its definition from layers, lowest first: the built-in defaults of sfy, its factory folder, and the folder overrides on a walk. A folder override is a `.sfy/` folder with the shape of a factory folder: `config.toml`, `config.d/`, `prompts/` and `skills/`. The walk starts at the working folder and goes up through its parents to your home folder, and each folder adds its `.sfy/`. The nearest override wins, key by key. `~/.sfy` is the `.sfy/` of the home folder, so it is the farthest override. It reaches every factory, and it keeps the settings of the machine, such as the terminal template sets.
