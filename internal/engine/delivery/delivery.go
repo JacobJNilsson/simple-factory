@@ -87,6 +87,8 @@ type session struct {
 	held []string
 	// heldAt is when the oldest held note arrived. It is zero when nothing is held.
 	heldAt time.Time
+	// commands lists the slash commands that wait until the session waits for input, oldest first.
+	commands []string
 }
 
 // restartGrace gives the hook a fresh grace period when the session starts to wait with queued messages.
@@ -183,7 +185,48 @@ func (d *Delivery) Note(name, text string) (Outcome, error) {
 	return Held, nil
 }
 
-// TurnEnded records that the turn of a session ended. A non-empty reminder goes to the session first.
+// Command types a slash command into a session that waits for input, and holds it until the next turn end or idle report otherwise.
+// It never uses the channel, because only typed text runs as a command.
+func (d *Delivery) Command(name, text string) (Outcome, error) {
+	if !d.reachable(name) {
+		return Skipped, nil
+	}
+	s := d.session(name)
+	if s.waiting && s.hookedAt.IsZero() && len(s.held) == 0 {
+		return Given, d.typeCommand(name, s, text)
+	}
+	s.commands = append(s.commands, text)
+	d.logf("command held for %s until it waits", name)
+	return Held, nil
+}
+
+// CancelCommands drops the held commands of a session and returns how many it dropped.
+func (d *Delivery) CancelCommands(name string) int {
+	s := d.session(name)
+	n := len(s.commands)
+	s.commands = nil
+	return n
+}
+
+// typeCommand types one command, and the session then counts as busy until its next hook, because nobody has checked which hooks a built-in command fires.
+// The tick types and resends nothing in that state.
+func (d *Delivery) typeCommand(name string, s *session, text string) error {
+	s.waiting, s.hookSince = false, true
+	d.logf("command typed to %s: %s", name, text)
+	return d.d.Panes.Send(name, text)
+}
+
+// typeHeldCommand types the oldest held command and reports whether one waited.
+func (d *Delivery) typeHeldCommand(name string, s *session) (bool, error) {
+	if len(s.commands) == 0 {
+		return false, nil
+	}
+	text := s.commands[0]
+	s.commands = s.commands[1:]
+	return true, d.typeCommand(name, s, text)
+}
+
+// TurnEnded records the end of a turn and gives the session one held command, or else a non-empty reminder, before anything else.
 // Only a session that Runs hears anything, because a stale session of a finished task may still send hooks.
 func (d *Delivery) TurnEnded(name, reminder string) error {
 	s := d.session(name)
@@ -191,6 +234,9 @@ func (d *Delivery) TurnEnded(name, reminder string) error {
 	s.waiting, s.hookSince, s.busy = true, true, false
 	if !d.d.Runs(name) {
 		return nil
+	}
+	if typed, err := d.typeHeldCommand(name, s); typed {
+		return err
 	}
 	errs := []error{d.typeHeld(name)}
 	if reminder != "" {
@@ -200,12 +246,15 @@ func (d *Delivery) TurnEnded(name, reminder string) error {
 	return errors.Join(append(errs, d.noteUnreadAfterWait(name, s, "turn ended"))...)
 }
 
-// Idle records that a session waits for input and no turn just ended.
+// Idle records that a session waits for input and no turn just ended. A held command goes to the session as TurnEnded gives it.
 func (d *Delivery) Idle(name string) error {
 	s := d.session(name)
 	s.waiting, s.hookSince, s.busy = true, true, false
 	if !d.d.Runs(name) {
 		return nil
+	}
+	if typed, err := d.typeHeldCommand(name, s); typed {
+		return err
 	}
 	return errors.Join(d.typeHeld(name), d.noteUnreadAfterWait(name, s, "idle"))
 }
