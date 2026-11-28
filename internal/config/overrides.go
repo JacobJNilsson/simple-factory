@@ -13,7 +13,11 @@ import (
 // OverrideDir is the name of a folder override: a folder with the shape of a factory definition.
 const OverrideDir = ".sfy"
 
-// Override is a .sfy folder that the walk of a factory found. Skip is empty for an override that sfy reads, and holds the reason for one that it skips.
+// LocalLayer is the folder in a factory folder that holds the factory's nearest layer.
+// It lets a program set the settings of one factory over the machine's settings without a write into the working folder.
+const LocalLayer = "local"
+
+// Override is a .sfy folder that the walk of a factory found, or the local layer of the factory folder. Skip is empty for an override that sfy reads, and holds the reason for one that it skips.
 type Override struct {
 	Dir  string
 	Skip string
@@ -22,16 +26,21 @@ type Override struct {
 // Overrides returns the folder overrides of the factory with the factory folder home, farthest first.
 // The home folder's .sfy, which is ~/.sfy, comes first. Then come the .sfy folders from the home folder down to the working folder that home records.
 // A working folder outside the home folder adds its own .sfy and no parent. A factory with no working folder has ~/.sfy only.
-// A folder without a .sfy folder adds nothing. An override that the user does not own or that group or others can write comes back with Skip set.
+// The local layer of home comes last. A missing folder adds nothing.
+// An override that the user does not own or that group or others can write comes back with Skip set.
 func Overrides(home, userHome string) ([]Override, error) {
 	return overrides(home, userHome, os.Geteuid())
 }
 
 // overrides is Overrides for a user id, so a test can name an owner that it cannot create.
 func overrides(home, userHome string, uid int) ([]Override, error) {
-	var out []Override
+	var dirs []string
 	for _, folder := range walkFolders(WorkFolder(home), userHome) {
-		dir := filepath.Join(folder, OverrideDir)
+		dirs = append(dirs, filepath.Join(folder, OverrideDir))
+	}
+	dirs = append(dirs, filepath.Join(home, LocalLayer))
+	var out []Override
+	for _, dir := range dirs {
 		st, err := os.Stat(dir)
 		if errors.Is(err, fs.ErrNotExist) || (err == nil && !st.IsDir()) {
 			continue
@@ -97,7 +106,7 @@ func Skipped(home, userHome string) ([]Override, error) {
 }
 
 // Layers returns the folders that hold a factory's definition, lowest first:
-// the factory folder, then the overrides that sfy reads, farthest first. The built-in defaults sit below the list and are not folders.
+// the factory folder, then the overrides that sfy reads, farthest first, and the local layer last. The built-in defaults sit below the list and are not folders.
 // Each folder comes once, so the default factory, whose folder is ~/.sfy, gets one folder.
 func Layers(home, userHome string) ([]string, error) {
 	found, err := Overrides(home, userHome)

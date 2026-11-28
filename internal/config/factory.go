@@ -29,7 +29,7 @@ var StateNames = []string{
 }
 
 // definitionNames are the names in a factory folder that say how sfy behaves.
-var definitionNames = []string{"config.toml", "config.d", "prompts", skillsName}
+var definitionNames = []string{"config.toml", "config.d", "prompts", skillsName, LocalLayer}
 
 // skillsName is the folder in a layer that holds the skills of the factory's sessions.
 const skillsName = "skills"
